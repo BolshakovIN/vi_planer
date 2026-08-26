@@ -1,14 +1,25 @@
 {
   "name": "vi-planer",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -k -n web,api -c cyan,magenta \"vite\" \"tsx watch server/index.ts\"",
+    "dev:web": "vite",
+    "dev:api": "tsx watch server/index.ts",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "start": "tsx server/index.ts",
+    "preview": "npm run build && npm start"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "express": "^4.21.2"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.10",
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "vite": "^6.2.2"
   }

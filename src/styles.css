@@ -79,6 +79,37 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
+}
+
+.sync-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+
+.sync-badge[data-status="saved"] {
+  color: #15803d;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.sync-badge[data-status="loading"] {
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.sync-badge[data-status="offline"],
+.sync-badge[data-status="error"] {
+  color: #b45309;
+  border-color: #fde68a;
+  background: #fffbeb;
 }
 
 .btn {

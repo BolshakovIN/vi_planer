@@ -1,7 +1,9 @@
 import { defineConfig } from "vite";
 
+const base = process.env.VITE_BASE_PATH ?? "./";
+
 export default defineConfig({
-  base: "./",
+  base,
   build: {
     outDir: "dist",
     emptyOutDir: true,
@@ -22,5 +24,11 @@ export default defineConfig({
   },
   server: {
     allowedHosts: true,
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:3000",
+        changeOrigin: true,
+      },
+    },
   },
 });

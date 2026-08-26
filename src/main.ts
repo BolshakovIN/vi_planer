@@ -25,7 +25,13 @@ import {
   reorderVisiblePriority,
 } from "./model";
 import { SEED } from "./seed";
-const STORAGE_KEY = "vi-planer-v3";
+import {
+  loadState,
+  saveState,
+  getSyncStatus,
+  onSyncStatusChange,
+  syncStatusLabel,
+} from "./storage";
 
 type Tab = "portfolio" | "teams" | "timeline" | "capacity" | "queuesTest";
 type SortKey = "priority" | "wsjf" | "estimate" | "eta";
@@ -58,35 +64,7 @@ const ui: UiState = {
   ganttWeeks: 16,
 };
 
-function loadState(): AppState {
-  try {
-    const raw =
-      localStorage.getItem(STORAGE_KEY) ??
-      localStorage.getItem("vi-planer-v2") ??
-      localStorage.getItem("vi-planer-v1");
-    if (!raw) return structuredClone(SEED);
-    const normalized = normalizeState(JSON.parse(raw));
-    if (!normalized) return structuredClone(SEED);
-    return {
-      ...normalized,
-      items: ensureUniquePriorities(normalized.items),
-    };
-  } catch {
-    return structuredClone(SEED);
-  }
-}
-
-function saveState(state: AppState) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-let state = loadState();
-{
-  const before = state.items.map((i) => i.manualRank).join(",");
-  state = { ...state, items: ensureUniquePriorities(state.items) };
-  const after = state.items.map((i) => i.manualRank).join(",");
-  if (before !== after) saveState(state);
-}
+let state: AppState = structuredClone(SEED);
 function teamById(id: string) {
   return state.teams.find((t) => t.id === id);
 }
@@ -1176,6 +1154,7 @@ function render() {
           </p>
         </div>
         <div class="top-actions">
+          <span class="sync-badge" id="syncStatus" data-status="${getSyncStatus()}">${syncStatusLabel(getSyncStatus())}</span>
           <button class="btn" id="exportBtn">Экспорт JSON</button>
           <button class="btn" id="importBtn">Импорт JSON</button>
           <button class="btn" id="resetBtn">Сбросить демо</button>
@@ -1734,4 +1713,19 @@ function bind() {
   });
 }
 
-render();
+async function bootstrap() {
+  state = await loadState();
+  const before = state.items.map((i) => i.manualRank).join(",");
+  state = { ...state, items: ensureUniquePriorities(state.items) };
+  const after = state.items.map((i) => i.manualRank).join(",");
+  if (before !== after) saveState(state);
+  onSyncStatusChange((status) => {
+    const el = document.querySelector<HTMLElement>("#syncStatus");
+    if (!el) return;
+    el.dataset.status = status;
+    el.textContent = syncStatusLabel(status);
+  });
+  render();
+}
+
+bootstrap();

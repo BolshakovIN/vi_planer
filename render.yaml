@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: vi-planer
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /data
+    disk:
+      name: vi-planer-data
+      mountPath: /data
+      sizeGB: 1
