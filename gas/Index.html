@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <base target="_top">
+  <title>VI Planer — сквозной приоритет и ETA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet" />
+  <style>:root{--bg: #f3f5f8;--surface: #ffffff;--surface-2: #f8fafc;--ink: #0f172a;--muted: #64748b;--line: #e2e8f0;--accent: #1d4ed8;--accent-soft: #eff6ff;--good: #047857;--good-soft: #ecfdf5;--warn: #b45309;--warn-soft: #fffbeb;--bad: #b91c1c;--bad-soft: #fef2f2;--product: #5b21b6;--product-soft: #f5f3ff;--project: #0369a1;--project-soft: #f0f9ff;--radius: 12px;--shadow: 0 1px 2px rgba(15, 23, 42, .04);font-family:IBM Plex Sans,system-ui,sans-serif;color:var(--ink);background:var(--bg)}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--bg)}button,input,select,textarea{font:inherit}#app{min-height:100vh}.app-shell{max-width:1280px;margin:0 auto;padding:20px 20px 48px}.topbar{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:flex-start;margin-bottom:20px}.topbar h1{margin:0 0 6px;font-size:24px;font-weight:700;letter-spacing:-.02em}.topbar .subtitle{margin:0;color:var(--muted);font-size:14px;max-width:640px;line-height:1.45}.top-actions{display:flex;flex-wrap:wrap;gap:8px}.btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer}.btn:hover{background:var(--surface-2)}.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}.btn-primary:hover{filter:brightness(1.05)}.btn-ghost{background:transparent}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}@media(max-width:900px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}.metric{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)}.metric .label{font-size:12px;color:var(--muted);margin-bottom:6px}.metric .value{font-size:22px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}.metric .hint{margin-top:4px;font-size:12px;color:var(--muted)}.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}.tab{border:1px solid transparent;background:transparent;color:var(--muted);border-radius:999px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer}.tab.active{background:var(--surface);border-color:var(--line);color:var(--ink);box-shadow:var(--shadow)}.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}.panel-header{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}.panel-header h2{margin:0;font-size:15px;font-weight:700}.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.filters select,.filters input,.field input,.field select,.field textarea{border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:#fff;font-size:13px}table{width:100%;border-collapse:separate;border-spacing:0}th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top;font-size:13px}th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--surface-2);font-weight:600;white-space:nowrap}th.sortable{cursor:pointer;-webkit-user-select:none;user-select:none}th.sortable:hover{color:var(--ink)}th.sortable.sorted{color:var(--accent)}.teams-stack{display:flex;flex-direction:column;gap:4px}.team-chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap}.muted-inline{color:var(--muted);font-size:11px}.team-assign-list{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface-2)}.team-assign-row{display:grid;grid-template-columns:minmax(140px,1.2fr) 110px 150px;gap:10px;align-items:end;font-size:13px}.team-assign-check{display:flex;align-items:center;gap:8px;cursor:pointer;padding-bottom:6px}.team-assign-field{display:flex;flex-direction:column;gap:4px}.team-assign-field input{width:100%;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:13px;background:#fff}.team-assign-field input:disabled{opacity:.45}.modal-wide{width:min(720px,100%)}@media(max-width:640px){.team-assign-row{grid-template-columns:1fr}}.gantt-track-multi{height:34px}.gantt-track-multi .gantt-bar{top:6px;height:22px;opacity:.92;font-size:9px}.gantt-track-multi .gantt-bar.gantt-bot{outline:2px solid rgba(15,23,42,.35);outline-offset:0;z-index:1}tr:last-child td{border-bottom:none}tr.clickable{cursor:pointer}tr.clickable:hover td{background:#f8fbff}.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}.badge-product{background:var(--product-soft);color:var(--product)}.badge-project{background:var(--project-soft);color:var(--project)}.badge-status-idea{background:#f1f5f9;color:#475569}.badge-status-ready{background:var(--accent-soft);color:var(--accent)}.badge-status-in_progress{background:var(--good-soft);color:var(--good)}.badge-status-blocked{background:var(--bad-soft);color:var(--bad)}.badge-status-done{background:#f1f5f9;color:#64748b}.mono{font-family:IBM Plex Mono,ui-monospace,monospace;font-variant-numeric:tabular-nums}.title-cell .name{font-weight:600;margin-bottom:2px}.title-cell .meta{color:var(--muted);font-size:12px}.prio-cell{width:64px;text-align:center;vertical-align:middle!important}.prio-edit{display:flex;flex-direction:column;align-items:center;gap:4px}.prio-input,.prio-num{display:inline-flex;align-items:center;justify-content:center;min-width:40px;height:40px;padding:0 8px;border-radius:10px;background:var(--accent-soft);color:var(--accent);font-family:IBM Plex Mono,ui-monospace,monospace;font-size:18px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;border:2px solid transparent;text-align:center;box-sizing:border-box;width:52px;-moz-appearance:textfield;-webkit-appearance:textfield;appearance:textfield}.prio-input::-webkit-outer-spin-button,.prio-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}.prio-input:hover,.prio-input:focus{border-color:var(--accent);outline:none;background:#fff}.prio-input.prio-dup,#f_rank.prio-dup{border-color:var(--bad);color:var(--bad);background:var(--bad-soft)}.prio-hint{font-size:11px;line-height:1.25;color:var(--bad);max-width:160px;text-align:center;font-weight:600}#f_rank_hint{max-width:none;text-align:left;margin-top:6px}.prio-mini{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;margin-right:6px;border-radius:6px;background:var(--accent-soft);color:var(--accent);font-family:IBM Plex Mono,ui-monospace,monospace;font-size:12px;font-weight:700;vertical-align:middle}.wsjf{font-weight:700;color:var(--accent)}.eta-good{color:var(--good);font-weight:600}.eta-late{color:var(--warn);font-weight:600}.eta-final{display:inline-block;color:var(--accent);font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}.eta-final-line{margin-top:10px;padding-top:8px;border-top:1px solid #bfdbfe;font-size:14px;color:var(--ink)}.team-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}.layout-split{display:grid;grid-template-columns:1.4fr 1fr;gap:14px}@media(max-width:980px){.layout-split{grid-template-columns:1fr}}.team-card{border-bottom:1px solid var(--line);padding:14px 16px}.team-card:last-child{border-bottom:none}.team-card-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}.team-card h3{margin:0 0 4px;font-size:14px}.bar{height:8px;background:#eef2f7;border-radius:999px;overflow:hidden;margin:8px 0 6px}.bar>span{display:block;height:100%;border-radius:999px}.queue-item{display:grid;grid-template-columns:28px 1fr auto;gap:8px;align-items:center;padding:8px 0;border-top:1px dashed var(--line);font-size:13px}.queue-item:first-of-type{border-top:none}.rank{width:24px;height:24px;border-radius:8px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted)}.timeline{padding:12px 16px 20px;overflow-x:auto}.gantt-layout{display:grid;grid-template-columns:240px 1fr;gap:12px;min-width:720px;align-items:stretch}.gantt-labels-col,.gantt-tracks-col{display:flex;flex-direction:column;gap:8px}.gantt-tracks-col{position:relative}.gantt-dep-layer{position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2;overflow:visible}.gantt-dep-meta{color:var(--accent)!important;font-weight:600}.gantt-row{display:grid;grid-template-columns:220px 1fr;gap:12px;align-items:center;margin-bottom:8px;min-width:720px}.gantt-label{font-size:12px;min-height:34px;display:flex;flex-direction:column;justify-content:center}.gantt-label .name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gantt-track{position:relative;height:34px;background:repeating-linear-gradient(90deg,#f8fafc 0,#f8fafc calc(6.25% - 1px),#e2e8f0 calc(6.25% - 1px),#e2e8f0 6.25%);border-radius:8px;border:1px solid var(--line);z-index:1}.gantt-bar{position:absolute;top:4px;height:20px;border-radius:6px;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;padding:0 8px;white-space:nowrap;overflow:hidden}.callout{background:var(--accent-soft);border:1px solid #bfdbfe;border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;font-size:13px;line-height:1.5;color:#1e3a8a}.callout strong{font-weight:700}.modal-backdrop{position:fixed;top:0;right:0;bottom:0;left:0;background:#0f172a66;display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}.modal{background:#fff;border-radius:16px;width:min(640px,100%);max-height:90vh;overflow:auto;border:1px solid var(--line)}.modal-head{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line)}.modal-head h3{margin:0;font-size:16px}.modal-body{padding:16px 18px 20px;display:grid;gap:12px}.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:640px){.grid-2{grid-template-columns:1fr}}.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600}.field input,.field select,.field textarea{width:100%}.field textarea{min-height:72px;resize:vertical}.modal-foot{display:flex;justify-content:space-between;gap:8px;padding:0 18px 18px}.score-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.score-box{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center}.score-box .k{font-size:11px;color:var(--muted);margin-bottom:4px}.score-box .v{font-size:18px;font-weight:700}.empty{padding:28px;text-align:center;color:var(--muted);font-size:14px}.footer-note{margin-top:16px;color:var(--muted);font-size:12px;line-height:1.45}.capacity-row{display:flex;align-items:center;gap:10px;font-size:13px}.capacity-row input[type=range]{flex:1}.insight-list{margin:0;padding-left:18px;color:#1e3a8a}.insight-list li{margin-bottom:6px}
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>(function(){"use strict";function x(a){const t=a.businessValue+a.timeCriticality+a.riskReduction;return Math.round(t/Math.max(a.jobSize,.5)*100)/100}function E(a){return a.assignments.reduce((t,n)=>t+n.estimatePw,0)}function gt(a,t){return a.assignments.some(n=>n.teamId===t)}function J(a,t){const n=new Date(a+"T12:00:00");return n.setDate(n.getDate()+t),n.toISOString().slice(0,10)}function _(a,t){return J(a,t*7)}function kt(a){return a.reduce((t,n)=>n.endDate!==t.endDate?n.endDate>t.endDate?n:t:n.estimatePw!==t.estimatePw?n.estimatePw>t.estimatePw?n:t:n.durationWeeks>t.durationWeeks?n:t)}function S(a){const[t,n,s]=a.split("-");return`${s}.${n}.${t}`}function N(a=new Date){const t=new Date(a),n=t.getDay(),s=n===0?-6:1-n;return t.setDate(t.getDate()+s),t.toISOString().slice(0,10)}function q(a){return!a||!/^\d{4}-\d{2}-\d{2}/.test(a)?N():N(new Date(a.slice(0,10)+"T12:00:00"))}function bt(a,t){const n=new Date(q(a)+"T12:00:00").getTime(),s=new Date(q(t)+"T12:00:00").getTime();return Math.max(0,Math.round((s-n)/(168*3600*1e3)))}function O(a){return[...a].sort((t,n)=>{const s=t.manualRank,r=n.manualRank;if(s!=null&&r!=null&&s!==r)return s-r;if(s!=null&&r==null)return-1;if(s==null&&r!=null)return 1;const e=x(n)-x(t);return e!==0?e:E(t)-E(n)})}function K(a,t,n){return a.find(s=>s.id!==n&&s.manualRank!=null&&s.manualRank===t)}function U(a,t,n){const s=O(a),r=s.findIndex(l=>l.id===t);if(r<0)return a;const e=[...s],[o]=e.splice(r,1),i=Math.max(0,Math.min(e.length,Math.round(n)-1));e.splice(i,0,o);const f=new Map(e.map((l,c)=>[l.id,c+1]));return a.map(l=>{const c=f.get(l.id);return c==null||l.manualRank===c?l:{...l,manualRank:c}})}function A(a){let t=0;for(const n of a)n.manualRank!=null&&n.manualRank>t&&(t=n.manualRank);return t+1}function C(a){const t=[...a].sort((o,i)=>{const f=x(i)-x(o);return f!==0?f:E(o)-E(i)}),n=new Set,s=new Map;for(const o of t){const i=o.manualRank;i!=null&&Number.isFinite(i)&&i>=1&&!n.has(i)&&(n.add(i),s.set(o.id,i))}let r=1;const e=()=>{for(;n.has(r);)r+=1;const o=r;return n.add(o),r+=1,o};return a.map(o=>{const i=s.get(o.id)??e();return o.manualRank===i?o:{...o,manualRank:i}})}function st(a){const t=a.items.filter(l=>l.status!=="done"),n=O(t),s=new Map;for(const l of a.teams)s.set(l.id,[]);for(const l of n)for(const c of l.assignments){const v=s.get(c.teamId)??[];v.push({item:l,estimatePw:c.estimatePw,workStartDate:q(c.workStartDate||a.startDate)}),s.set(c.teamId,v)}const r=[],e={},o=52;for(const l of a.teams){const c=s.get(l.id)??[],v=Array.from({length:o},(k,h)=>({week:h,weekStart:_(a.startDate,h),usedPw:0,capacityPw:l.capacityPw,items:[]}));let y=0;c.forEach((k,h)=>{const D=bt(a.startDate,k.workStartDate);let $=Math.max(y,D);for(;$<o&&v[$].usedPw>=l.capacityPw-.001;)$+=1;let d=k.estimatePw,p=$,g=_(a.startDate,$);const w=_(a.startDate,$);for(;d>.001&&p<o;){const P=v[p],L=Math.max(0,P.capacityPw-P.usedPw);if(L<=.001){p+=1;continue}const W=Math.min(L,d),at=_(a.startDate,p),nt=W/P.capacityPw*7,Mt=P.usedPw/P.capacityPw*7;g=J(at,Mt+nt),P.usedPw+=W,P.items.push(k.item.id),d-=W,d>.001&&(p+=1)}const b=l.capacityPw>0?Math.round(k.estimatePw/l.capacityPw*100)/100:k.estimatePw;r.push({item:k.item,teamId:l.id,estimatePw:k.estimatePw,wsjf:x(k.item),effectiveRank:h+1,plannedStartDate:k.workStartDate,startWeek:$,endWeek:p,startDate:w,endDate:g,waitWeeks:$,delayedByQueue:$>D,durationWeeks:b}),y=p,v[y]&&v[y].usedPw>=l.capacityPw-.001?y=p+1:y=p}),e[l.id]=v}const i=new Map;for(const l of r){const c=i.get(l.item.id)??[];c.push(l),i.set(l.item.id,c)}const f=[];for(const l of n){const c=i.get(l.id)??[];if(!c.length)continue;const v=kt(c),y=c.reduce((k,h)=>h.startWeek<k.startWeek?h:k);f.push({item:l,slices:[...c].sort((k,h)=>k.endDate===h.endDate?h.estimatePw-k.estimatePw:k.endDate<h.endDate?1:-1),wsjf:x(l),totalEstimatePw:E(l),startWeek:y.startWeek,endWeek:v.endWeek,startDate:y.startDate,endDate:v.endDate,waitWeeks:y.waitWeeks,bottleneckTeamId:v.teamId})}return r.sort((l,c)=>l.startWeek!==c.startWeek?l.startWeek-c.startWeek:c.wsjf-l.wsjf),{slices:r,rollups:f,load:e}}function Q(a){return`${a}_${Math.random().toString(36).slice(2,9)}`}function it(a){if(!a||typeof a!="object")return null;const t=a;if(!Array.isArray(t.teams)||!Array.isArray(t.items))return null;const n=q(String(t.startDate??N())),s=t.items.map(r=>{const e=r;let o=[];return Array.isArray(e.assignments)&&e.assignments.length?o=e.assignments.filter(i=>i&&typeof i.teamId=="string").map(i=>({teamId:i.teamId,estimatePw:Math.max(.5,Number(i.estimatePw)||1),workStartDate:q(String(i.workStartDate||e.workStartDate||n))})):typeof e.teamId=="string"&&(o=[{teamId:e.teamId,estimatePw:Math.max(.5,Number(e.estimatePw)||1),workStartDate:n}]),!o.length&&Array.isArray(t.teams)&&t.teams[0]&&(o=[{teamId:t.teams[0].id,estimatePw:4,workStartDate:n}]),{id:String(e.id??Q("item")),title:String(e.title??"Без названия"),type:e.type==="project"?"project":"product",backlog:String(e.backlog??"Backlog"),assignments:o,status:["idea","ready","in_progress","blocked","done"].includes(String(e.status))?e.status:"idea",owner:String(e.owner??"—"),businessValue:Number(e.businessValue)||5,timeCriticality:Number(e.timeCriticality)||5,riskReduction:Number(e.riskReduction)||5,jobSize:Number(e.jobSize)||5,notes:e.notes!=null?String(e.notes):void 0,manualRank:e.manualRank==null||e.manualRank===""?null:Number(e.manualRank)}});return{version:3,startDate:n,teams:t.teams,items:C(s)}}const j=N(),G=_(j,1),z=_(j,2),ot=_(j,3),Y=_(j,4),X=_(j,6),rt=_(j,8),lt={version:3,startDate:j,teams:[{id:"platform",name:"Platform",capacityPw:4,color:"#2563eb"},{id:"mobile",name:"Mobile",capacityPw:3,color:"#7c3aed"},{id:"data",name:"Data & Analytics",capacityPw:2.5,color:"#0d9488"},{id:"crm",name:"CRM / Sales Tech",capacityPw:3.5,color:"#c2410c"}],items:[{id:"p2",title:"Мобильный чекаут v2",type:"product",backlog:"Product backlog · Mobile",assignments:[{teamId:"mobile",estimatePw:8,workStartDate:j}],status:"ready",owner:"Маша Л.",businessValue:8,timeCriticality:5,riskReduction:5,jobSize:6,manualRank:null},{id:"j4",title:"Интеграция телефонии для отдела продаж",type:"project",backlog:"Projects backlog · Sales Ops",assignments:[{teamId:"crm",estimatePw:3,workStartDate:G}],status:"ready",owner:"Сергей М.",businessValue:7,timeCriticality:7,riskReduction:3,jobSize:3,manualRank:null},{id:"p6",title:"Push-уведомления и deep links",type:"product",backlog:"Product backlog · Mobile",assignments:[{teamId:"mobile",estimatePw:3,workStartDate:Y}],status:"idea",owner:"Маша Л.",businessValue:6,timeCriticality:4,riskReduction:2,jobSize:3,manualRank:null},{id:"j6",title:"Дашборд KPI для совета директоров",type:"project",backlog:"Projects backlog · Exec",assignments:[{teamId:"data",estimatePw:2,workStartDate:j}],status:"ready",owner:"Павел Р.",businessValue:8,timeCriticality:9,riskReduction:2,jobSize:2,notes:"Нужен к ближайшему совету",manualRank:null},{id:"p5",title:"Админ-панель ролей и аудита",type:"product",backlog:"Product backlog · Platform",assignments:[{teamId:"platform",estimatePw:4,workStartDate:X}],status:"idea",owner:"Аня К.",businessValue:5,timeCriticality:2,riskReduction:8,jobSize:4,manualRank:null},{id:"p1",title:"Единый каталог цен и остатков",type:"product",backlog:"Product backlog · Commerce",assignments:[{teamId:"platform",estimatePw:10,workStartDate:j},{teamId:"data",estimatePw:4,workStartDate:ot}],status:"in_progress",owner:"Аня К.",businessValue:9,timeCriticality:7,riskReduction:6,jobSize:8,notes:"Data стартует после первых API Platform",manualRank:null},{id:"j1",title:"Внедрение EDI для крупного B2B-клиента",type:"project",backlog:"Projects backlog · Delivery",assignments:[{teamId:"platform",estimatePw:6,workStartDate:G},{teamId:"crm",estimatePw:3,workStartDate:Y}],status:"ready",owner:"Игорь С.",businessValue:8,timeCriticality:9,riskReduction:4,jobSize:5,notes:"CRM — онбординг после ядра EDI",manualRank:null},{id:"j2",title:"Пилот Launchpad: клинический портал",type:"project",backlog:"Projects backlog · Launchpad",assignments:[{teamId:"mobile",estimatePw:5,workStartDate:z},{teamId:"platform",estimatePw:3,workStartDate:z}],status:"ready",owner:"Денис В.",businessValue:7,timeCriticality:8,riskReduction:7,jobSize:4,notes:"Обе команды стартуют одновременно",manualRank:null},{id:"j3",title:"Миграция отчётности клиента X на DWH",type:"project",backlog:"Projects backlog · Data",assignments:[{teamId:"data",estimatePw:7,workStartDate:G},{teamId:"platform",estimatePw:2,workStartDate:j}],status:"ready",owner:"Павел Р.",businessValue:6,timeCriticality:6,riskReduction:8,jobSize:5,notes:"Platform — пайплайн выгрузки раньше Data",manualRank:null},{id:"p4",title:"Сквозная воронка лида → сделка",type:"product",backlog:"Product backlog · CRM",assignments:[{teamId:"crm",estimatePw:7,workStartDate:j},{teamId:"platform",estimatePw:4,workStartDate:z},{teamId:"mobile",estimatePw:3,workStartDate:X}],status:"in_progress",owner:"Оля Т.",businessValue:9,timeCriticality:6,riskReduction:5,jobSize:6,notes:"Mobile подключается после событий Platform",manualRank:null},{id:"j5",title:"Compliance-пакет HIPAA для продукта Y",type:"project",backlog:"Projects backlog · Security",assignments:[{teamId:"platform",estimatePw:8,workStartDate:ot},{teamId:"data",estimatePw:3,workStartDate:Y},{teamId:"mobile",estimatePw:2,workStartDate:rt}],status:"blocked",owner:"Игорь С.",businessValue:8,timeCriticality:8,riskReduction:9,jobSize:6,notes:"Ждём юристов; старты сдвинуты",manualRank:null},{id:"p3",title:"Рекомендации в поиске (ML)",type:"product",backlog:"Product backlog · Growth",assignments:[{teamId:"data",estimatePw:9,workStartDate:z},{teamId:"platform",estimatePw:3,workStartDate:X},{teamId:"mobile",estimatePw:2,workStartDate:rt}],status:"idea",owner:"Катя Н.",businessValue:7,timeCriticality:3,riskReduction:6,jobSize:7,notes:"Serving и UI после модели",manualRank:null}]},B={...lt,items:C(lt.items)},ct="vi-planer-v3",m={tab:"portfolio",typeFilter:"all",teamFilter:"all",statusFilter:"all",query:"",sortKey:"priority",sortDir:"asc",editingId:null,creating:!1};function yt(){try{const a=localStorage.getItem(ct)??localStorage.getItem("vi-planer-v2")??localStorage.getItem("vi-planer-v1");if(!a)return structuredClone(B);const t=it(JSON.parse(a));return t?{...t,items:C(t.items)}:structuredClone(B)}catch{return structuredClone(B)}}function Z(a){localStorage.setItem(ct,JSON.stringify(a))}let u=yt();{const a=u.items.map(n=>n.manualRank).join(",");u={...u,items:C(u.items)};const t=u.items.map(n=>n.manualRank).join(",");a!==t&&Z(u)}function M(a){return u.teams.find(t=>t.id===a)}function tt(a){return{idea:"Идея",ready:"Готово к работе",in_progress:"В работе",blocked:"Блокер",done:"Готово"}[a]}function dt(a){return new Map(a.map(t=>[t.item.id,t]))}function wt(a){return a.assignments.map(t=>{const n=M(t.teamId);return(n==null?void 0:n.name)??t.teamId}).join(", ")}function $t(a){return`<div class="teams-stack">${a.assignments.map(n=>{const s=M(n.teamId);return`<span class="team-chip"><span class="team-dot" style="background:${(s==null?void 0:s.color)??"#94a3b8"}"></span>${I((s==null?void 0:s.name)??n.teamId)} <span class="mono muted-inline">${n.estimatePw}чн · старт ${S(n.workStartDate)}</span></span>`}).join("")}</div>`}function ht(a){const t=m.query.trim().toLowerCase(),n=dt(a),s=u.items.filter(e=>m.typeFilter!=="all"&&e.type!==m.typeFilter||m.teamFilter!=="all"&&!gt(e,m.teamFilter)||m.statusFilter!=="all"&&e.status!==m.statusFilter?!1:t?e.title.toLowerCase().includes(t)||e.backlog.toLowerCase().includes(t)||e.owner.toLowerCase().includes(t)||wt(e).toLowerCase().includes(t):!0);if(m.sortKey==="priority"){const e=O(s);return m.sortDir==="asc"?e:[...e].reverse()}const r=m.sortDir==="asc"?1:-1;return[...s].sort((e,o)=>{var f,l;let i=0;if(m.sortKey==="wsjf")i=x(e)-x(o);else if(m.sortKey==="estimate")i=E(e)-E(o);else{const c=((f=n.get(e.id))==null?void 0:f.endDate)??"9999-99-99",v=((l=n.get(o.id))==null?void 0:l.endDate)??"9999-99-99";i=c<v?-1:c>v?1:0}return i!==0?i*r:e.title.localeCompare(o.title,"ru")})}function V(a,t){const n=m.sortKey===t,s=n?m.sortDir==="asc"?" ↑":" ↓":"";return`<th class="sortable ${n?"sorted":""}" data-sort="${t}" title="Сортировать">${a}${s}</th>`}function St(a){m.sortKey===a?m.sortDir=m.sortDir==="asc"?"desc":"asc":(m.sortKey=a,m.sortDir=a==="wsjf"?"desc":"asc"),R()}function It(a,t){const n=u.items.filter(l=>l.status!=="done"),s=n.filter(l=>l.type==="product").length,r=n.filter(l=>l.type==="project").length,e=n.filter(l=>l.assignments.length>1).length,o=a.map(l=>l.endWeek),i=o.length?Math.max(...o)+1:0,f=u.teams.filter(l=>t.filter(v=>v.teamId===l.id).reduce((v,y)=>v+y.estimatePw,0)>l.capacityPw*8).length;return`
+    <div class="metrics">
+      <div class="metric">
+        <div class="label">Активных в едином портфеле</div>
+        <div class="value">${n.length}</div>
+        <div class="hint">${s} продуктов · ${r} проектов · ${e} кросс-командных</div>
+      </div>
+      <div class="metric">
+        <div class="label">Горизонт по текущей ёмкости</div>
+        <div class="value">${i} нед.</div>
+        <div class="hint">до закрытия (по bottleneck-команде)</div>
+      </div>
+      <div class="metric">
+        <div class="label">Команд под риском</div>
+        <div class="value">${f}</div>
+        <div class="hint">спрос &gt; ёмкости на 8 недель</div>
+      </div>
+      <div class="metric">
+        <div class="label">Старт планирования</div>
+        <div class="value" style="font-size:18px">${S(u.startDate)}</div>
+        <div class="hint">понедельник текущей недели</div>
+      </div>
+    </div>
+  `}function Pt(a,t){const n=[],s=a.filter(r=>r.slices.length>1).sort((r,e)=>e.wsjf-r.wsjf).slice(0,3);for(const r of s){const e=r.slices.map(i=>{const f=M(i.teamId),l=i.delayedByQueue?", сдвиг очереди":"";return`${(f==null?void 0:f.name)??i.teamId}: старт ${S(i.startDate)} → ${S(i.endDate)} (${i.estimatePw} чел·нед${l})`}).join("; "),o=M(r.bottleneckTeamId);n.push(`<li><strong>«${I(r.item.title)}»</strong> (${r.slices.length} команд): ${I(e)}. Bottleneck — <strong>${I((o==null?void 0:o.name)??"")}</strong>, ETA инициативы ${S(r.endDate)}.</li>`)}for(const r of u.teams){const e=t.filter(i=>i.teamId===r.id).sort((i,f)=>i.startWeek-f.startWeek);if(!e.length)continue;const o=e[e.length-1];n.push(`<li><strong>${I(r.name)}:</strong> очередь закрывается к <strong>${S(o.endDate)}</strong> при ${r.capacityPw} чел·нед/нед (${e.length} инициатив в очереди).</li>`)}return`
+    <div class="callout">
+      <strong>Кросс-командные инициативы.</strong>
+      У каждой команды свой объём и свой ETA; инициатива считается готовой, когда закончила последняя (bottleneck).
+      <ul class="insight-list">${n.slice(0,7).join("")}</ul>
+    </div>
+  `}function Dt(a,t){const n=dt(a),r=ht(a).map(e=>{const o=n.get(e.id),i=x(e),f=E(e),l=e.manualRank??"—",c=o?`<div class="meta">${o.slices.map(v=>{const y=M(v.teamId),k=v.teamId===o.bottleneckTeamId?" · bottleneck":"",h=v.delayedByQueue?" · очередь":"";return`${(y==null?void 0:y.name)??v.teamId}: ${S(v.startDate)}→${S(v.endDate)}${k}${h}`}).join(" · ")}</div>`:"";return`
+        <tr class="clickable" data-edit="${e.id}">
+          <td class="prio-cell">
+            <div class="prio-edit" data-stop-edit>
+              <input
+                class="prio-input"
+                type="number"
+                min="1"
+                step="1"
+                inputmode="numeric"
+                data-prio-id="${e.id}"
+                value="${l}"
+                title="Приоритет (1 = выше). При конфликте — подтверждение и пересборка"
+                aria-label="Приоритет"
+              />
+            </div>
+          </td>
+          <td>
+            <span class="badge badge-${e.type}">${e.type==="product"?"Продукт":"Проект"}</span>
+            ${e.assignments.length>1?`<div class="meta" style="margin-top:4px">${e.assignments.length} команды</div>`:""}
+          </td>
+          <td class="title-cell">
+            <div class="name">${I(e.title)}</div>
+            <div class="meta">${I(e.backlog)} · ${I(e.owner)}</div>
+          </td>
+          <td>${$t(e)}</td>
+          <td><span class="badge badge-status-${e.status}">${tt(e.status)}</span></td>
+          <td class="mono wsjf">${i}</td>
+          <td class="mono">
+            ${f}
+            ${e.assignments.length>1?`<div class="meta">${e.assignments.map(v=>v.estimatePw).join(" + ")}</div>`:""}
+          </td>
+          <td class="mono ${o&&o.waitWeeks>4?"eta-late":"eta-good"}">
+            ${o?`<span class="eta-final">${S(o.endDate)}</span>`:"—"}
+            ${c}
+          </td>
+        </tr>
+      `}).join("");return`
+    ${Pt(a,t)}
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Единый портфель (проекты + продукты)</h2>
+        <div class="filters">
+          <input id="q" placeholder="Поиск…" value="${T(m.query)}" />
+          <select id="typeFilter">
+            <option value="all" ${m.typeFilter==="all"?"selected":""}>Все типы</option>
+            <option value="product" ${m.typeFilter==="product"?"selected":""}>Продукты</option>
+            <option value="project" ${m.typeFilter==="project"?"selected":""}>Проекты</option>
+          </select>
+          <select id="teamFilter">
+            <option value="all">Все команды</option>
+            ${u.teams.map(e=>`<option value="${e.id}" ${m.teamFilter===e.id?"selected":""}>${I(e.name)}</option>`).join("")}
+          </select>
+          <select id="statusFilter">
+            <option value="all">Все статусы</option>
+            ${["idea","ready","in_progress","blocked","done"].map(e=>`<option value="${e}" ${m.statusFilter===e?"selected":""}>${tt(e)}</option>`).join("")}
+          </select>
+          <button class="btn btn-primary" id="addItem">+ Инициатива</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="portfolio-table">
+          <thead>
+            <tr>
+              ${V("Приоритет","priority")}
+              <th>Тип</th>
+              <th>Инициатива / исходный бэклог</th>
+              <th>Команды (оценка · старт)</th>
+              <th>Статус</th>
+              ${V("WSJF","wsjf")}
+              ${V("Оценка, чел·нед","estimate")}
+              ${V("ETA","eta")}
+            </tr>
+          </thead>
+          <tbody>
+            ${r||'<tr><td colspan="8" class="empty">Нет элементов по фильтру</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="footer-note">Приоритет уникален (1 = выше) и задаёт очередь команд и зависимости на Gantt. При смене на занятый номер — подтверждение, конфликтующая и соседние инициативы сдвигаются. ETA = максимум дат завершения по командам.</p>
+  `}function jt(a){return`
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Сквозной приоритет по командам</h2>
+      </div>
+      ${u.teams.map(n=>{const s=a.filter(i=>i.teamId===n.id).sort((i,f)=>i.effectiveRank-f.effectiveRank),r=s.reduce((i,f)=>i+f.estimatePw,0),e=n.capacityPw>0?r/n.capacityPw:0,o=Math.min(100,Math.round(s.filter(i=>i.startWeek<8).reduce((i,f)=>{const l=Math.min(f.endWeek+1,8)-f.startWeek;return i+Math.max(0,l)*(f.estimatePw/Math.max(1,f.endWeek-f.startWeek+1))},0)/(n.capacityPw*8)*100));return`
+        <div class="team-card">
+          <div class="team-card-head">
+            <div>
+              <h3><span class="team-dot" style="background:${n.color}"></span>${I(n.name)}</h3>
+              <div class="meta">Ёмкость ${n.capacityPw} чел·нед/нед · спрос ${r.toFixed(1)} · ~${e.toFixed(1)} нед. до очистки</div>
+            </div>
+            <div class="mono" style="font-weight:700">${o}% / 8 нед.</div>
+          </div>
+          <div class="bar"><span style="width:${Math.min(100,o)}%;background:${n.color}"></span></div>
+          ${s.map(i=>{const f=i.item.assignments.length-1;return`
+            <div class="queue-item">
+              <div class="rank">${i.effectiveRank}</div>
+              <div>
+                <div><span class="badge badge-${i.item.type}">${i.item.type==="product"?"П":"Пр"}</span> ${I(i.item.title)}</div>
+                <div class="meta">WSJF ${i.wsjf} · ${i.estimatePw} чел·нед · план ${S(i.plannedStartDate)}${i.delayedByQueue?" → сдвиг":""}${f>0?` · ещё ${f} ком.`:""}</div>
+              </div>
+              <div class="mono" style="text-align:right">
+                ${S(i.startDate)} →<br/>${S(i.endDate)}
+              </div>
+            </div>
+          `}).join("")||'<div class="empty">Очередь пуста</div>'}
+        </div>
+      `}).join("")}
+    </div>
+  `}function Rt(a,t){const n=Math.max(12,...a.map(c=>c.endWeek+2),12),s=Math.min(16,n),r=O(u.items.filter(c=>c.status!=="done")),e=new Map(r.map((c,v)=>[c.id,v])),o=[];for(const c of u.teams){const v=t.filter(y=>y.teamId===c.id).sort((y,k)=>y.effectiveRank-k.effectiveRank);for(let y=1;y<v.length;y++){const k=v[y-1],h=v[y],D=(e.get(k.item.id)??0)+.5,$=(e.get(h.item.id)??0)+.5,d=Math.min(s,k.endWeek+.85),p=Math.min(s,Math.max(.15,h.startWeek+.05)),g=(d+p)/2;o.push(`<path d="M ${d} ${D} C ${g} ${D}, ${g} ${$}, ${p} ${$}" fill="none" stroke="${c.color}" stroke-width="0.06" stroke-opacity="0.55" marker-end="url(#arrowhead)" />`)}}const i=[],f=[];for(const c of r){const v=a.find($=>$.item.id===c.id);if(!v)continue;const y=v.slices.map($=>{const d=t.filter(b=>b.teamId===$.teamId).sort((b,P)=>b.effectiveRank-P.effectiveRank),p=d.findIndex(b=>b.item.id===c.id);if(p<=0)return null;const g=d[p-1],w=M($.teamId);return`#${g.item.manualRank} (${(w==null?void 0:w.name)??$.teamId})`}).filter(Boolean),k=[...new Set(y)],h=k.length?`<div class="meta gantt-dep-meta">после ${k.join(", ")}</div>`:'<div class="meta gantt-dep-meta">старт очереди</div>',D=v.slices.map($=>{const d=M($.teamId),p=$.startWeek/s*100,g=Math.max(1,$.endWeek-$.startWeek+1)/s*100;return`<div class="gantt-bar ${$.teamId===v.bottleneckTeamId?"gantt-bot":""}" style="left:${p}%;width:${Math.max(g,2.5)}%;background:${(d==null?void 0:d.color)??"#64748b"}" title="${T((d==null?void 0:d.name)??"")}: ${S($.endDate)}">${I((d==null?void 0:d.name)??"")}</div>`}).join("");i.push(`
+      <div class="gantt-label">
+        <div class="name"><span class="prio-mini">${c.manualRank??"—"}</span> ${I(c.title)}</div>
+        <div class="meta">${c.type==="product"?"Продукт":"Проект"} · ETA ${S(v.endDate)}</div>
+        ${h}
+      </div>
+    `),f.push(`<div class="gantt-track gantt-track-multi">${D}</div>`)}const l=Math.max(1,r.length);return`
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Сроки и зависимости по приоритету (следующие ${s} нед.)</h2>
+      </div>
+      <div class="timeline">
+        ${r.length?`<div class="gantt-layout">
+          <div class="gantt-labels-col">${i.join("")}</div>
+          <div class="gantt-tracks-col">
+            <svg class="gantt-dep-layer" viewBox="0 0 ${s} ${l}" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                <marker id="arrowhead" markerWidth="0.35" markerHeight="0.35" refX="0.25" refY="0.175" orient="auto">
+                  <polygon points="0 0, 0.35 0.175, 0 0.35" fill="#64748b" fill-opacity="0.7" />
+                </marker>
+              </defs>
+              ${o.join("")}
+            </svg>
+            ${f.join("")}
+          </div>
+        </div>`:'<div class="empty">Нет активных инициатив</div>'}
+      </div>
+      <p class="footer-note" style="padding:0 16px 16px;margin:0">Стрелки — зависимости очереди команды: меньший приоритет блокирует больший. Общий ETA инициативы = конец bottleneck-полоски.</p>
+    </div>
+  `}function xt(){return`
+    <div class="callout">
+      Подвигайте ёмкость команд — пересчитаются и доли в очередях, и ETA кросс-командных инициатив (через bottleneck).
+    </div>
+    <div class="panel">
+      <div class="panel-header"><h2>What-if: ёмкость команд</h2></div>
+      ${u.teams.map(t=>`
+      <div class="capacity-row" style="padding:12px 16px;border-bottom:1px solid var(--line)">
+        <span class="team-dot" style="background:${t.color}"></span>
+        <strong style="min-width:160px">${I(t.name)}</strong>
+        <input type="range" min="1" max="8" step="0.5" value="${t.capacityPw}" data-cap="${t.id}" />
+        <span class="mono" style="min-width:70px">${t.capacityPw} чел·нед</span>
+      </div>
+    `).join("")}
+    </div>
+  `}function _t(a){var l;const t=a??{id:"",title:"",type:"product",backlog:"Product backlog",assignments:[{teamId:((l=u.teams[0])==null?void 0:l.id)??"",estimatePw:4,workStartDate:u.startDate}],status:"idea",owner:"",businessValue:5,timeCriticality:5,riskReduction:5,jobSize:5,notes:"",manualRank:A(u.items)},n=x(t),s=new Set(t.assignments.map(c=>c.teamId)),r=new Map(t.assignments.map(c=>[c.teamId,c.estimatePw])),e=new Map(t.assignments.map(c=>[c.teamId,c.workStartDate])),o=ut(t),i=o?pt(o,t.assignments):'<div class="meta">Отметьте команду, чтобы увидеть расчёт ETA</div>',f=u.teams.map(c=>{const v=s.has(c.id),y=r.get(c.id)??4,k=e.get(c.id)??u.startDate;return`
+        <div class="team-assign-row">
+          <label class="team-assign-check">
+            <input type="checkbox" class="f_team_check" data-team="${c.id}" ${v?"checked":""} />
+            <span class="team-dot" style="background:${c.color}"></span>
+            <span class="team-assign-name">${I(c.name)}</span>
+          </label>
+          <label class="team-assign-field">
+            <span class="meta">Оценка</span>
+            <input type="number" class="f_team_est" data-team="${c.id}" min="0.5" step="0.5" value="${y}" ${v?"":"disabled"} />
+          </label>
+          <label class="team-assign-field">
+            <span class="meta">Старт работы</span>
+            <input type="date" class="f_team_start" data-team="${c.id}" value="${k}" ${v?"":"disabled"} />
+          </label>
+        </div>
+      `}).join("");return`
+    <div class="modal-backdrop" id="modal">
+      <div class="modal modal-wide">
+        <div class="modal-head">
+          <h3>${a?"Карточка инициативы":"Новая инициатива"}</h3>
+          <button class="btn btn-ghost" id="closeModal">Закрыть</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Название</label>
+            <input id="f_title" value="${T(t.title)}" />
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label>Тип</label>
+              <select id="f_type">
+                <option value="product" ${t.type==="product"?"selected":""}>Продукт</option>
+                <option value="project" ${t.type==="project"?"selected":""}>Проект</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Исходный бэклог</label>
+              <input id="f_backlog" value="${T(t.backlog)}" />
+            </div>
+            <div class="field">
+              <label>Статус</label>
+              <select id="f_status">
+                ${["idea","ready","in_progress","blocked","done"].map(c=>`<option value="${c}" ${t.status===c?"selected":""}>${tt(c)}</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label>Владелец</label>
+              <input id="f_owner" value="${T(t.owner)}" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Команды: оценка и дата старта (отдельно по каждой)</label>
+            <div class="team-assign-list" id="teamAssignList">${f}</div>
+            <div class="meta" style="margin-top:6px">Итого объём: <strong class="mono" id="liveTotalEst">${E(t)}</strong> чел·нед. Дата старта — не раньше этой; если очередь команды занята, старт сдвинется позже.</div>
+          </div>
+          <div class="callout" style="margin:0" id="liveEtaBox">
+            <strong>Пересчёт ETA</strong> (с учётом очереди и стартов)
+            <div id="liveEta" style="margin-top:8px;font-size:13px;color:var(--ink)">${i}</div>
+          </div>
+          <div class="score-grid">
+            <div class="score-box"><div class="k">Business Value</div><div class="v"><input id="f_bv" type="number" min="1" max="10" value="${t.businessValue}" style="width:64px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
+            <div class="score-box"><div class="k">Time Criticality</div><div class="v"><input id="f_tc" type="number" min="1" max="10" value="${t.timeCriticality}" style="width:64px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
+            <div class="score-box"><div class="k">Risk / Opportunity</div><div class="v"><input id="f_rr" type="number" min="1" max="10" value="${t.riskReduction}" style="width:64px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
+            <div class="score-box"><div class="k">Job Size</div><div class="v"><input id="f_js" type="number" min="1" max="10" value="${t.jobSize}" style="width:64px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
+          </div>
+          <div class="callout" style="margin:0">WSJF = (BV + TC + RR) / Job Size → <strong class="mono" id="liveWsjf">${n}</strong></div>
+          <div class="grid-2">
+            <div class="field">
+              <label>Приоритет (уникальный, 1 = выше)</label>
+              <input id="f_rank" type="number" min="1" step="1" value="${t.manualRank??A(u.items)}" />
+              <div class="meta" id="f_rank_hint" style="margin-top:6px">При занятом номере спросим подтверждение и пересоберём очередь.</div>
+            </div>
+            <div class="field">
+              <label>Заметки</label>
+              <textarea id="f_notes">${I(t.notes??"")}</textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <div>${a?'<button class="btn" id="deleteItem" style="color:var(--bad)">Удалить</button>':"<span></span>"}</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn" id="closeModal2">Отмена</button>
+            <button class="btn btn-primary" id="saveItem">Сохранить</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `}function ut(a){const t=a.assignments.length?a.assignments:et();if(!t.length)return null;const n=a.id||"__draft__",s={...a,id:n,assignments:t},r=u.items.some(o=>o.id===n)?u.items.map(o=>o.id===n?s:o):[...u.items,s],{rollups:e}=st({...u,items:r});return e.find(o=>o.item.id===n)??null}function mt(a){const t=M(a.teamId),n=(t==null?void 0:t.capacityPw)||1,s=Math.round(a.estimatePw/n*100)/100,r=q(a.workStartDate||u.startDate),e=J(r,s*7);return{start:r,end:e,weeks:s}}function pt(a,t){const n=new Map(t.map(e=>[e.teamId,e])),s=a.slices.map(e=>{const o=M(e.teamId),i=n.get(e.teamId),f=i?q(i.workStartDate):e.plannedStartDate,l=i?mt(i):null,c=e.teamId===a.bottleneckTeamId?' <span class="meta">← критический путь</span>':"",v=e.startDate>f?` <span class="meta">(план ${S(f)}, очередь сдвинула на ${S(e.startDate)})</span>`:e.startDate<f?` <span class="meta">(ждём план ${S(f)})</span>`:"",y=l?`<div class="meta" style="margin-left:0;margin-top:2px">от вашей даты старта без чужой очереди: ${S(l.start)} → <span class="mono">${S(l.end)}</span></div>`:"";return`<div style="margin-bottom:8px"><strong>${I((o==null?void 0:o.name)??e.teamId)}</strong>: <span class="mono">${S(e.startDate)} → ${S(e.endDate)}</span> <span class="meta">(${e.estimatePw} чел·нед ≈ ${e.durationWeeks} нед.)</span>${v}${c}${y}</div>`}).join(""),r=t.map(e=>mt(e).end).reduce((e,o)=>e>o?e:o,"0000-00-00");return s+`<div class="eta-final-line">ETA с учётом очереди = <span class="eta-final mono">${S(a.endDate)}</span></div><div class="meta">ETA только от ваших стартов/оценок (без чужого бэклога) = <strong class="mono">${S(r)}</strong> — меняется сразу при смене даты</div>`}function I(a){return a.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;")}function T(a){return I(a).replaceAll("'","&#39;")}function R(){const{slices:a,rollups:t}=st(u),n=document.querySelector("#app");if(!n)return;const s=m.editingId!=null?u.items.find(r=>r.id===m.editingId)??null:null;n.innerHTML=`
+    <div class="app-shell">
+      <div class="topbar">
+        <div>
+          <h1>VI Planer</h1>
+          <p class="subtitle">
+            Единый портфель проектов и продуктов: сквозной WSJF, несколько команд на инициативу
+            со своими оценками и ETA, bottleneck-срок готовности.
+          </p>
+        </div>
+        <div class="top-actions">
+          <button class="btn" id="exportBtn">Экспорт JSON</button>
+          <button class="btn" id="importBtn">Импорт JSON</button>
+          <button class="btn" id="resetBtn">Сбросить демо</button>
+        </div>
+      </div>
+      ${It(t,a)}
+      <div class="tabs">
+        <button class="tab ${m.tab==="portfolio"?"active":""}" data-tab="portfolio">Портфель</button>
+        <button class="tab ${m.tab==="teams"?"active":""}" data-tab="teams">Очереди команд</button>
+        <button class="tab ${m.tab==="timeline"?"active":""}" data-tab="timeline">Сроки / Gantt</button>
+        <button class="tab ${m.tab==="capacity"?"active":""}" data-tab="capacity">Ёмкость</button>
+      </div>
+      ${m.tab==="portfolio"?Dt(t,a):m.tab==="teams"?jt(a):m.tab==="timeline"?Rt(t,a):xt()}
+    </div>
+    ${m.creating||s?_t(s):""}
+    <input type="file" id="fileInput" accept="application/json,.json" hidden />
+  `,Et()}function et(){const a=Array.from(document.querySelectorAll(".f_team_check")),t=[];for(const n of a){if(!n.checked)continue;const s=n.dataset.team,r=document.querySelector(`.f_team_est[data-team="${s}"]`),e=document.querySelector(`.f_team_start[data-team="${s}"]`),o=Math.max(.5,Number(r==null?void 0:r.value)||1),i=q((e==null?void 0:e.value)||u.startDate);t.push({teamId:s,estimatePw:o,workStartDate:i})}return t}function ft(){var o,i,f,l,c,v,y;const a=document.querySelector("#liveTotalEst"),t=document.querySelector("#liveEta"),n=et();if(a&&(a.textContent=String(n.reduce((k,h)=>k+h.estimatePw,0)||0)),!t)return;if(!n.length){t.innerHTML='<div class="meta">Отметьте команду, чтобы увидеть расчёт ETA</div>';return}const s=(m.editingId?u.items.find(k=>k.id===m.editingId):null)??{id:"__draft__",title:"Черновик",type:"product",backlog:"Backlog",assignments:n,status:"ready",owner:"—",businessValue:5,timeCriticality:5,riskReduction:5,jobSize:5,manualRank:null},r={...s,id:m.editingId||"__draft__",assignments:n,title:((o=document.querySelector("#f_title"))==null?void 0:o.value.trim())||s.title,type:((i=document.querySelector("#f_type"))==null?void 0:i.value)||s.type,status:((f=document.querySelector("#f_status"))==null?void 0:f.value)||s.status,businessValue:Number((l=document.querySelector("#f_bv"))==null?void 0:l.value)||s.businessValue,timeCriticality:Number((c=document.querySelector("#f_tc"))==null?void 0:c.value)||s.timeCriticality,riskReduction:Number((v=document.querySelector("#f_rr"))==null?void 0:v.value)||s.riskReduction,jobSize:Number((y=document.querySelector("#f_js"))==null?void 0:y.value)||s.jobSize,manualRank:(()=>{var D;const k=(D=document.querySelector("#f_rank"))==null?void 0:D.value,h=Math.round(Number(k));return Number.isFinite(h)&&h>=1?h:s.manualRank??A(u.items)})()},e=ut(r);if(!e){t.innerHTML='<div class="meta">Нет расчёта</div>';return}t.innerHTML=pt(e,n)}function vt(){const a=(e,o)=>{const i=document.querySelector(`#${e}`),f=Number(i==null?void 0:i.value);return Number.isFinite(f)?f:o},t=e=>{var o;return((o=document.querySelector(`#${e}`))==null?void 0:o.value)??""},n=et();if(!n.length)return alert("Выберите хотя бы одну команду"),null;const s=t("f_rank").trim(),r=Math.max(1,Math.round(Number(s)||A(u.items)));return{title:t("f_title").trim()||"Без названия",type:t("f_type"),backlog:t("f_backlog").trim()||"Backlog",assignments:n,status:t("f_status"),owner:t("f_owner").trim()||"—",businessValue:H(a("f_bv",5),1,10),timeCriticality:H(a("f_tc",5),1,10),riskReduction:H(a("f_rr",5),1,10),jobSize:H(a("f_js",5),1,10),notes:t("f_notes").trim(),manualRank:r}}function H(a,t,n){return Math.min(n,Math.max(t,a))}function F(){Z(u),R()}function Et(){var i,f,l,c,v,y,k,h,D,$;document.querySelectorAll("[data-tab]").forEach(d=>{d.addEventListener("click",()=>{m.tab=d.dataset.tab,R()})});const a=document.querySelector("#q");a==null||a.addEventListener("input",()=>{m.query=a.value}),a==null||a.addEventListener("change",()=>R());const t=document.querySelector("#typeFilter");t==null||t.addEventListener("change",()=>{m.typeFilter=t.value,R()});const n=document.querySelector("#teamFilter");n==null||n.addEventListener("change",()=>{m.teamFilter=n.value,R()});const s=document.querySelector("#statusFilter");s==null||s.addEventListener("change",()=>{m.statusFilter=s.value,R()}),(i=document.querySelector("#addItem"))==null||i.addEventListener("click",()=>{m.creating=!0,m.editingId=null,R()}),document.querySelectorAll("[data-edit]").forEach(d=>{d.addEventListener("click",p=>{p.target.closest("[data-stop-edit], .prio-input, .prio-edit")||(m.editingId=d.dataset.edit??null,m.creating=!1,R())})}),document.querySelectorAll(".prio-input").forEach(d=>{const p=d.dataset.prioId,g=()=>{const b=u.items.find(P=>P.id===p);d.value=String((b==null?void 0:b.manualRank)??1),d.classList.remove("prio-dup")},w=()=>{const b=u.items.find(nt=>nt.id===p);if(!b)return;const P=Number(d.value);if(!Number.isFinite(P)||P<1){g();return}const L=Math.round(P);if(d.value=String(L),L===b.manualRank)return;const W=K(u.items,L,p),at=W?`Уверены, хотите сменить приоритет?
+
+«${b.title}» → ${L}.
+«${W.title}» и вышестоящие перед ней сдвинутся вверх, очередь пересоберётся.`:`Уверены, хотите сменить приоритет?
+
+«${b.title}»: ${b.manualRank} → ${L}.`;if(!confirm(at)){g();return}u.items=U(u.items,p,L),F()};d.addEventListener("click",b=>b.stopPropagation()),d.addEventListener("mousedown",b=>b.stopPropagation()),d.addEventListener("keydown",b=>{b.key==="Enter"&&(b.preventDefault(),w(),d.blur()),b.key==="Escape"&&(g(),d.blur())}),d.addEventListener("change",w)}),document.querySelectorAll("[data-sort]").forEach(d=>{d.addEventListener("click",p=>{p.stopPropagation();const g=d.dataset.sort;(g==="wsjf"||g==="estimate"||g==="eta"||g==="priority")&&St(g)})});const r=()=>{m.creating=!1,m.editingId=null,R()};(f=document.querySelector("#closeModal"))==null||f.addEventListener("click",r),(l=document.querySelector("#closeModal2"))==null||l.addEventListener("click",r),(c=document.querySelector("#modal"))==null||c.addEventListener("click",d=>{d.target.id==="modal"&&r()}),document.querySelectorAll(".f_team_check").forEach(d=>{d.addEventListener("change",()=>{const p=d.dataset.team,g=document.querySelector(`.f_team_est[data-team="${p}"]`),w=document.querySelector(`.f_team_start[data-team="${p}"]`);g&&(g.disabled=!d.checked),w&&(w.disabled=!d.checked),ft()})});const e=document.querySelector("#teamAssignList"),o=d=>{const p=d.target;p&&(p.classList.contains("f_team_est")||p.classList.contains("f_team_start")||p.classList.contains("f_team_check"))&&ft()};e==null||e.addEventListener("input",o),e==null||e.addEventListener("change",o),e==null||e.addEventListener("keyup",o),(v=document.querySelector("#saveItem"))==null||v.addEventListener("click",()=>{const d=vt();if(!d)return;const p=d.manualRank??A(u.items);if(m.creating){const g=K(u.items,p,null);if(g){if(!confirm(`Уверены, хотите сменить приоритет?
+
+Новая инициатива займёт ${p}.
+«${g.title}» и соседние сдвинутся.`))return;const b=Q("item");u.items=[...u.items,{...d,id:b,manualRank:u.items.length+1}],u.items=U(u.items,b,p)}else u.items.push({...d,id:Q("item"),manualRank:p}),u.items=C(u.items)}else if(m.editingId){const g=u.items.findIndex(b=>b.id===m.editingId);if(g<0)return;const w=u.items[g];if(p!==w.manualRank){const b=K(u.items,p,m.editingId);if(!confirm(b?`Уверены, хотите сменить приоритет?
+
+«${w.title}» → ${p}.
+«${b.title}» и вышестоящие перед ней сдвинутся вверх, очередь пересоберётся.`:`Уверены, хотите сменить приоритет?
+
+«${w.title}»: ${w.manualRank} → ${p}.`))return;u.items[g]={...w,...d,manualRank:w.manualRank},u.items=U(u.items,m.editingId,p)}else u.items[g]={...w,...d}}m.creating=!1,m.editingId=null,F()}),(y=document.querySelector("#deleteItem"))==null||y.addEventListener("click",()=>{m.editingId&&(u.items=u.items.filter(d=>d.id!==m.editingId),m.editingId=null,F())}),["f_bv","f_tc","f_rr","f_js"].forEach(d=>{var p;(p=document.querySelector(`#${d}`))==null||p.addEventListener("input",()=>{const g=document.querySelector("#liveWsjf");if(!g)return;const w=vt();w&&(g.textContent=String(x({...w})))})}),document.querySelectorAll("[data-cap]").forEach(d=>{d.addEventListener("input",()=>{const p=d.dataset.cap,g=u.teams.find(b=>b.id===p);if(!g)return;g.capacityPw=Number(d.value),Z(u);const w=d.nextElementSibling;w&&(w.textContent=`${g.capacityPw} чел·нед`)}),d.addEventListener("change",()=>R())}),(k=document.querySelector("#exportBtn"))==null||k.addEventListener("click",()=>{const d=new Blob([JSON.stringify(u,null,2)],{type:"application/json"}),p=URL.createObjectURL(d),g=document.createElement("a");g.href=p,g.download=`vi-planer-${u.startDate}.json`,g.click(),URL.revokeObjectURL(p)}),(h=document.querySelector("#importBtn"))==null||h.addEventListener("click",()=>{var d;(d=document.querySelector("#fileInput"))==null||d.click()}),(D=document.querySelector("#fileInput"))==null||D.addEventListener("change",async d=>{var g;const p=(g=d.target.files)==null?void 0:g[0];if(p)try{const w=await p.text(),b=it(JSON.parse(w));if(!b){alert("Неверный формат файла");return}u=b,F()}catch{alert("Не удалось прочитать JSON")}}),($=document.querySelector("#resetBtn"))==null||$.addEventListener("click",()=>{confirm("Сбросить к демо-данным?")&&(u=structuredClone(B),F())})}R()})();
+</script>
+</body>
+</html>
