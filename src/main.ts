@@ -833,7 +833,11 @@ function editorHtml(item: WorkItem | null): string {
       <div class="modal modal-wide">
         <div class="modal-head">
           <h3>${item ? "Карточка инициативы" : "Новая инициатива"}</h3>
-          <button class="btn btn-ghost" id="closeModal">Закрыть</button>
+          <div class="modal-head-actions">
+            <button class="btn" id="closeModal2">Отмена</button>
+            <button class="btn btn-ghost" id="closeModal">Закрыть</button>
+            <button class="btn btn-primary" id="saveItem">Сохранить</button>
+          </div>
         </div>
         <div class="modal-body">
           <div class="field">
@@ -896,13 +900,9 @@ function editorHtml(item: WorkItem | null): string {
             </div>
           </div>
         </div>
-        <div class="modal-foot">
-          <div>${item ? `<button class="btn" id="deleteItem" style="color:var(--bad)">Удалить</button>` : "<span></span>"}</div>
-          <div style="display:flex;gap:8px">
-            <button class="btn" id="closeModal2">Отмена</button>
-            <button class="btn btn-primary" id="saveItem">Сохранить</button>
-          </div>
-        </div>
+        ${item ? `<div class="modal-foot">
+          <button class="btn" id="deleteItem" style="color:var(--bad)">Удалить</button>
+        </div>` : ""}
       </div>
     </div>
   `;

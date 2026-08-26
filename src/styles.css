@@ -1071,6 +1071,13 @@ body.prio-dragging {
   font-size: 16px;
 }
 
+.modal-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .modal-body {
   padding: 16px 18px 20px;
   display: grid;
