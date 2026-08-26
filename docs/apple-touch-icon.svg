@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-label="VI Planer">
+  <rect width="180" height="180" rx="40" fill="#1d4ed8"/>
+  <rect x="36" y="44" width="78" height="16" rx="8" fill="#ffffff"/>
+  <rect x="36" y="82" width="108" height="16" rx="8" fill="#bfdbfe"/>
+  <rect x="36" y="120" width="62" height="16" rx="8" fill="#93c5fd"/>
+</svg>
