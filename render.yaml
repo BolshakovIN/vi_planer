@@ -1,15 +1,16 @@
 services:
   - type: web
     name: vi-planer
-    runtime: docker
+    runtime: node
     plan: free
+    branch: master
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: HOST
+        value: 0.0.0.0
       - key: DATA_DIR
-        value: /data
-    disk:
-      name: vi-planer-data
-      mountPath: /data
-      sizeGB: 1
+        value: /opt/render/project/src/data

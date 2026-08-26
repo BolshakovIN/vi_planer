@@ -6,7 +6,8 @@ import { normalizeState } from "../src/model.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.join(__dirname, "..", "dist");
-const port = Number(process.env.PORT ?? 3000);
+const host = process.env.HOST ?? "127.0.0.1";
+const port = Number(process.env.PORT ?? 8787);
 
 const app = express();
 app.use(express.json({ limit: "12mb" }));
@@ -35,6 +36,6 @@ app.get("*", (_req, res) => {
   res.sendFile(path.join(distDir, "index.html"));
 });
 
-app.listen(port, () => {
-  console.log(`VI Planer listening on http://localhost:${port}`);
+app.listen(port, host, () => {
+  console.log(`VI Planer listening on http://${host}:${port}`);
 });

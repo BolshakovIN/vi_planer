@@ -15,22 +15,41 @@ npm install
 npm run dev
 ```
 
+Откройте **http://127.0.0.1:5173** — фронтенд. API проксируется на **http://127.0.0.1:8787**.
+
 Продакшен (сборка + сервер с общим хранилищем):
 
 ```bash
 npm run build
 npm start
-# http://localhost:3000
+# http://127.0.0.1:8787
 ```
+
+Порт и хост можно переопределить: `PORT=9000 HOST=0.0.0.0 npm start`.
 
 ## Render — общая база для команды
 
-Один URL, одни данные для всех:
+Один URL, одни данные для всех.
 
-1. [Deploy to Render](https://render.com/deploy?repo=https://github.com/BolshakovIN/vi_planer)
-2. После деплоя Render даст ссылку вида `https://vi-planer-xxxx.onrender.com` — её можно давать коллегам.
+1. Зарегистрируйтесь на [render.com](https://render.com) (без входа кнопка деплоя не откроется).
+2. Нажмите **Deploy to Render** (ветка `master`):
 
-Данные сохраняются на диске Render (`/data/vi-planer-state.json`).
+   [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/BolshakovIN/vi_planer/tree/master)
+
+   Прямая ссылка: https://render.com/deploy?repo=https://github.com/BolshakovIN/vi_planer/tree/master
+
+3. Подключите GitHub, подтвердите Blueprint — Render создаст сервис.
+4. После деплоя получите URL вида `https://vi-planer.onrender.com`.
+
+> На бесплатном плане Render данные сохраняются между перезапусками, но могут сброситься при полном redeploy. Для надёжного хранения подключите Supabase (см. ниже) или платный диск Render.
+
+### Если кнопка не открывается
+
+Деплой вручную:
+
+1. [dashboard.render.com](https://dashboard.render.com) → **New** → **Blueprint**
+2. Подключите репозиторий `BolshakovIN/vi_planer`, ветка `master`
+3. Render подхватит `render.yaml` из корня
 
 ## GitHub Pages — только фронтенд
 
