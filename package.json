@@ -2,12 +2,15 @@
   "name": "vi-planer",
   "private": true,
   "version": "1.1.0",
+  "homepage": "https://bolshakovin.github.io/vi_planer/",
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n web,api -c cyan,magenta \"vite\" \"tsx watch server/index.ts\"",
     "dev:web": "vite",
     "dev:api": "tsx watch server/index.ts",
     "build": "tsc && vite build",
+    "build:pages": "VITE_BASE_PATH=/vi_planer/ tsc && VITE_BASE_PATH=/vi_planer/ vite build",
+    "deploy:pages": "npm run build:pages && gh-pages -d dist -t true",
     "start": "tsx server/index.ts",
     "preview": "npm run build && npm start"
   },
@@ -19,6 +22,7 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.13.10",
     "concurrently": "^9.1.2",
+    "gh-pages": "^6.3.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "vite": "^6.2.2"

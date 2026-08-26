@@ -2,18 +2,20 @@
 
 Единый портфель **проектов и продуктов** со сквозным приоритетом (WSJF), очередями команд, Gantt и планированием ёмкости.
 
-Данные сохраняются в **базе данных** — все, кто открывает приложение по ссылке, видят одно и то же состояние.
+## Ссылка на приложение
 
-## Быстрый старт (локально)
+**https://bolshakovin.github.io/vi_planer/**
+
+> Для **общих данных** у всех пользователей по ссылке нужен сервер с базой — см. [Render](#render-общая-база-для-команды) ниже. GitHub Pages без Supabase хранит данные отдельно в каждом браузере.
+
+## Локальный запуск
 
 ```bash
 npm install
 npm run dev
 ```
 
-Откроется Vite на `:5173`, API с SQLite — на `:3000`. Фронтенд проксирует `/api` на сервер.
-
-Продакшен (сборка + сервер с SQLite):
+Продакшен (сборка + сервер с общим хранилищем):
 
 ```bash
 npm run build
@@ -21,62 +23,49 @@ npm start
 # http://localhost:3000
 ```
 
-База лежит в `./data/vi-planer-state.json`.
+## Render — общая база для команды
 
-## Публичная ссылка для команды
+Один URL, одни данные для всех:
 
-Есть два варианта деплоя — выберите один.
+1. [Deploy to Render](https://render.com/deploy?repo=https://github.com/BolshakovIN/vi_planer)
+2. После деплоя Render даст ссылку вида `https://vi-planer-xxxx.onrender.com` — её можно давать коллегам.
 
-### Вариант A — один URL (сервер + SQLite), Render
+Данные сохраняются на диске Render (`/data/vi-planer-state.json`).
 
-1. Зарегистрируйтесь на [render.com](https://render.com) и подключите репозиторий GitHub.
-2. New → **Blueprint** → укажите этот репозиторий (файл `render.yaml` уже в корне).
-3. После деплоя получите URL вида `https://vi-planer.onrender.com` — его можно давать коллегам.
+## GitHub Pages — только фронтенд
 
-Данные хранятся на подключённом диске Render (`/data`), переживают перезапуски.
+Обновить опубликованную версию:
 
-### Вариант B — GitHub Pages + Supabase (бесплатно)
+```bash
+npm run deploy:pages
+```
 
-1. Создайте проект на [supabase.com](https://supabase.com).
-2. В **SQL Editor** выполните скрипт [`supabase/schema.sql`](supabase/schema.sql).
-3. В GitHub репозитории → **Settings → Secrets and variables → Actions** добавьте:
-   - `VITE_SUPABASE_URL` — Project URL из Supabase
-   - `VITE_SUPABASE_ANON_KEY` — anon public key
-4. В репозитории включите **GitHub Pages** (Source: GitHub Actions).
-5. Запушьте в `master` — workflow соберёт и опубликует сайт.
+В Settings → Pages репозитория должен быть источник **Deploy from branch → gh-pages → / (root)**.
 
-Публичная ссылка: **https://bolshakovin.github.io/vi_planer/**
+### Общие данные на GitHub Pages (Supabase)
 
-> Без Supabase-секретов GitHub Pages будет работать только с `localStorage` в каждом браузере отдельно.
+1. Создайте проект на [supabase.com](https://supabase.com)
+2. Выполните [`supabase/schema.sql`](supabase/schema.sql) в SQL Editor
+3. Соберите с ключами:
+
+```bash
+VITE_BASE_PATH=/vi_planer/ \
+VITE_SUPABASE_URL=https://xxx.supabase.co \
+VITE_SUPABASE_ANON_KEY=eyJ... \
+npm run build
+npm run deploy:pages
+```
 
 ## Что внутри
 
 | Вкладка | Смысл |
 |---|---|
-| **Портфель** | Проекты + продукты, WSJF, ручной приоритет, drag-and-drop |
+| **Портфель** | Проекты + продукты, WSJF, ручной приоритет |
 | **Очереди команд** | Сквозной приоритет внутри каждой команды |
 | **Очереди (тест)** | Приоритет + «может взять с…» |
-| **Сроки / Gantt** | ETA по weekly capacity, зависимости по приоритету |
+| **Сроки / Gantt** | ETA по weekly capacity |
 | **Команды** | Ёмкость и названия команд |
-
-Модель: **WSJF = (BV + TC + RO) / Job Size**. Ручной ранг `manualRank` — главный для сортировки и Gantt.
-
-## Экспорт / импорт
-
-Кнопки **Экспорт JSON** / **Импорт JSON** в шапке — резервное копирование и перенос снимка вручную.
-
-## Google Apps Script (альтернатива)
-
-В папке [`gas/`](gas/) — вариант для Google Workspace без отдельного сервера (данные в браузере, см. README в `gas/`).
 
 ## Переменные окружения
 
 См. [`.env.example`](.env.example).
-
-| Переменная | Назначение |
-|---|---|
-| `VITE_SUPABASE_URL` | URL проекта Supabase (для GitHub Pages) |
-| `VITE_SUPABASE_ANON_KEY` | Anon key Supabase |
-| `VITE_BASE_PATH` | Base path Vite (`/vi_planer/` для GitHub Pages) |
-| `PORT` | Порт сервера (по умолчанию 3000) |
-| `DATA_DIR` | Каталог данных сервера (по умолчанию `./data`) |
