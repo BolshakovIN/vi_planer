@@ -9,8 +9,8 @@
     "dev:web": "vite",
     "dev:api": "tsx watch server/index.ts",
     "build": "tsc && vite build",
-    "build:pages": "VITE_BASE_PATH=/vi_planer/ tsc && VITE_BASE_PATH=/vi_planer/ vite build",
-    "deploy:pages": "npm run build:pages && rm -rf docs && mkdir -p docs && cp -R dist/* docs/",
+    "build:pages": "VITE_BASE_PATH=/vi_planer/ tsc && VITE_BASE_PATH=/vi_planer/ vite build --outDir dist-pages",
+    "deploy:pages": "npm run build:pages && rm -rf docs && mkdir -p docs && cp -R dist-pages/* docs/ && npm run build",
     "start": "tsx server/index.ts",
     "preview": "npm run build && npm start"
   },
