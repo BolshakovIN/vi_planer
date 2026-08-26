@@ -38,9 +38,10 @@ npm start
 
 ```bash
 npm run deploy:pages
+git add docs package.json && git commit -m "Update GitHub Pages site" && git push
 ```
 
-В Settings → Pages репозитория должен быть источник **Deploy from branch → gh-pages → / (root)**.
+В **Settings → Pages** репозитория источник: **Deploy from branch → master → /docs**.
 
 ### Общие данные на GitHub Pages (Supabase)
 
