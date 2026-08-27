@@ -198,15 +198,40 @@ textarea {
   filter: brightness(1.05);
 }
 
-.modal-confirm {
-  width: min(420px, 100%);
+.reset-confirm {
+  position: fixed;
+  z-index: 60;
+  width: 200px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
 }
 
-.confirm-warn {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.45;
+.reset-confirm-text {
+  font-size: 11px;
+  line-height: 1.35;
   color: var(--ink);
+  margin-bottom: 8px;
+}
+
+.reset-confirm-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.reset-confirm-actions .btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+#resetBtn.reset-ask {
+  border-color: var(--bad);
+  background: var(--bad-soft);
+  color: var(--bad);
 }
 
 .metrics {
@@ -1376,6 +1401,7 @@ body.prio-dragging {
   .sync-badge,
   .btn,
   .prio-pop,
+  #resetPop,
   .drag-handle {
     display: none !important;
   }

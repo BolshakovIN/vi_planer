@@ -57,7 +57,6 @@ interface UiState {
   creating: boolean;
   /** Gantt horizon in weeks */
   ganttWeeks: number;
-  confirmReset: boolean;
 }
 
 const ui: UiState = {
@@ -71,7 +70,6 @@ const ui: UiState = {
   editingId: null,
   creating: false,
   ganttWeeks: 16,
-  confirmReset: false,
 };
 
 let state: AppState = structuredClone(SEED);
@@ -1144,6 +1142,7 @@ function bindPortfolioDrag() {
 
 function render() {
   closePrioPop();
+  closeResetPop();
   const { slices, rollups } = schedulePortfolio(state);
   const root = document.querySelector("#app");
   if (!root) return;
@@ -1198,33 +1197,10 @@ function render() {
       </div>
     </div>
     ${ui.creating || editing ? editorHtml(editing) : ""}
-    ${ui.confirmReset ? resetConfirmHtml() : ""}
     <input type="file" id="fileInput" accept="application/json,.json" hidden />
   `;
 
   bind();
-}
-
-function resetConfirmHtml(): string {
-  return `
-    <div class="modal-backdrop" id="resetConfirmBackdrop">
-      <div class="modal modal-confirm" role="dialog" aria-modal="true" aria-labelledby="resetConfirmTitle">
-        <div class="modal-head">
-          <h3 id="resetConfirmTitle">Сбросить к демо-данным?</h3>
-        </div>
-        <div class="modal-body">
-          <p class="confirm-warn">
-            Все текущие изменения портфеля будут удалены и заменены демо-данными.
-            Это действие нельзя отменить.
-          </p>
-        </div>
-        <div class="modal-foot">
-          <button class="btn" type="button" id="resetCancelBtn">Отмена</button>
-          <button class="btn btn-danger" type="button" id="resetConfirmBtn">Да, сбросить</button>
-        </div>
-      </div>
-    </div>
-  `;
 }
 
 function readAssignments(): TeamAssignment[] {
@@ -1750,37 +1726,86 @@ function bind() {
       }
     });
 
-  document.querySelector("#resetBtn")?.addEventListener("click", () => {
-    ui.confirmReset = true;
-    render();
+  document.querySelector("#resetBtn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    askResetConfirm(e.currentTarget as HTMLElement);
+  });
+}
+
+function closeResetPop() {
+  document.querySelector("#resetPop")?.remove();
+  document.querySelector("#resetBtn")?.classList.remove("reset-ask");
+}
+
+function askResetConfirm(anchor: HTMLElement) {
+  closeResetPop();
+  closePrioPop();
+  anchor.classList.add("reset-ask");
+
+  const pop = document.createElement("div");
+  pop.id = "resetPop";
+  pop.className = "reset-confirm";
+  pop.innerHTML = `
+    <div class="reset-confirm-text">Сбросить к демо?<br>Текущие данные пропадут.</div>
+    <div class="reset-confirm-actions">
+      <button type="button" class="btn" id="resetCancelBtn">Нет</button>
+      <button type="button" class="btn btn-danger" id="resetConfirmBtn">Да</button>
+    </div>
+  `;
+  document.body.appendChild(pop);
+
+  const place = () => {
+    const r = anchor.getBoundingClientRect();
+    const pw = pop.offsetWidth;
+    const ph = pop.offsetHeight;
+    let left = r.right - pw;
+    let top = r.bottom + 6;
+    if (left < 8) left = 8;
+    if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+    if (top + ph > window.innerHeight - 8) top = r.top - ph - 6;
+    pop.style.left = `${Math.max(8, left)}px`;
+    pop.style.top = `${Math.max(8, top)}px`;
+  };
+  place();
+
+  const onScroll = () => place();
+  window.addEventListener("scroll", onScroll, true);
+  window.addEventListener("resize", onScroll);
+
+  const cleanup = () => {
+    window.removeEventListener("scroll", onScroll, true);
+    window.removeEventListener("resize", onScroll);
+    window.removeEventListener("keydown", onKey);
+    document.removeEventListener("mousedown", onDoc);
+  };
+
+  const onKey = (ev: KeyboardEvent) => {
+    if (ev.key !== "Escape") return;
+    cleanup();
+    closeResetPop();
+  };
+
+  const onDoc = (ev: MouseEvent) => {
+    const t = ev.target as Node;
+    if (pop.contains(t) || anchor.contains(t)) return;
+    cleanup();
+    closeResetPop();
+  };
+
+  pop.querySelector("#resetCancelBtn")?.addEventListener("click", () => {
+    cleanup();
+    closeResetPop();
   });
 
-  document.querySelector("#resetCancelBtn")?.addEventListener("click", () => {
-    ui.confirmReset = false;
-    render();
-  });
-
-  document.querySelector("#resetConfirmBackdrop")?.addEventListener("click", (e) => {
-    if (e.target !== e.currentTarget) return;
-    ui.confirmReset = false;
-    render();
-  });
-
-  document.querySelector("#resetConfirmBtn")?.addEventListener("click", () => {
-    ui.confirmReset = false;
+  pop.querySelector("#resetConfirmBtn")?.addEventListener("click", () => {
+    cleanup();
+    closeResetPop();
     state = structuredClone(SEED);
     persist();
   });
 
-  if (ui.confirmReset) {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      window.removeEventListener("keydown", onKey);
-      ui.confirmReset = false;
-      render();
-    };
-    window.addEventListener("keydown", onKey);
-  }
+  window.addEventListener("keydown", onKey);
+  window.setTimeout(() => document.addEventListener("mousedown", onDoc), 0);
 }
 
 function exportCurrentTabPdf() {
