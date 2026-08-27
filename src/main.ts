@@ -1813,13 +1813,31 @@ function exportCurrentTabPdf() {
   const stamp = new Date().toISOString().slice(0, 10);
   document.title = `VI-Planer-${TAB_LABELS[ui.tab]}-${stamp}`;
   document.body.classList.add("printing-tab");
+
+  // Force colour backgrounds in Chromium/Safari print → PDF
+  let colorStyle = document.querySelector<HTMLStyleElement>("#printColorForce");
+  if (!colorStyle) {
+    colorStyle = document.createElement("style");
+    colorStyle.id = "printColorForce";
+    document.head.appendChild(colorStyle);
+  }
+  colorStyle.textContent = `
+    @media print {
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+    }
+  `;
+
   const cleanup = () => {
     document.body.classList.remove("printing-tab");
     document.title = prevTitle;
+    colorStyle?.remove();
     window.removeEventListener("afterprint", cleanup);
   };
   window.addEventListener("afterprint", cleanup);
-  // Safari / some Chromium builds need a tick before print
   window.setTimeout(() => window.print(), 50);
 }
 

@@ -1381,12 +1381,16 @@ body.prio-dragging {
     margin: 12mm;
   }
 
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
   html,
   body {
-    background: #fff !important;
-    color: #000 !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    background: var(--bg) !important;
+    color: var(--ink) !important;
   }
 
   .print-only {
@@ -1433,12 +1437,13 @@ body.prio-dragging {
   .print-doc-header h1 {
     margin: 0 0 4px;
     font-size: 18px;
+    color: var(--ink);
   }
 
   .print-doc-header p {
     margin: 0;
     font-size: 11px;
-    color: #475569;
+    color: var(--muted);
   }
 
   .metrics {
@@ -1446,10 +1451,17 @@ body.prio-dragging {
     margin-bottom: 10px;
   }
 
+  .metric,
   .panel,
   .card,
+  .badge,
+  .gantt-bar,
+  .team-chip,
+  .status-pill,
   table {
     break-inside: avoid;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   .gantt-wrap,
