@@ -278,8 +278,8 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           </td>
           <td>${teamsCellHtml(item)}</td>
           <td><span class="badge badge-status-${item.status}">${statusLabel(item.status)}</span></td>
-          <td class="mono wsjf">${score}</td>
-          <td class="mono">
+          <td class="mono metric-num">${score}</td>
+          <td class="mono metric-num">
             ${total}
             ${item.assignments.length > 1 ? `<div class="meta">${item.assignments.map((a) => a.estimatePw).join(" + ")}</div>` : ""}
           </td>
