@@ -57,6 +57,7 @@ interface UiState {
   creating: boolean;
   /** Gantt horizon in weeks */
   ganttWeeks: number;
+  confirmReset: boolean;
 }
 
 const ui: UiState = {
@@ -70,6 +71,7 @@ const ui: UiState = {
   editingId: null,
   creating: false,
   ganttWeeks: 16,
+  confirmReset: false,
 };
 
 let state: AppState = structuredClone(SEED);
@@ -1154,12 +1156,8 @@ function render() {
   root.innerHTML = `
     <div class="app-shell">
       <div class="topbar">
-        <div>
+        <div class="topbar-brand">
           <h1>VI Planer</h1>
-          <p class="subtitle">
-            Единый портфель проектов и продуктов: сквозной WSJF, несколько команд на инициативу
-            со своими оценками и ETA, bottleneck-срок готовности.
-          </p>
         </div>
         <div class="top-actions">
           <span class="sync-badge" id="syncStatus" data-status="${getSyncStatus()}">${syncStatusLabel(getSyncStatus())}</span>
@@ -1168,6 +1166,10 @@ function render() {
           <button class="btn" id="importBtn">Импорт JSON</button>
           <button class="btn" id="resetBtn">Сбросить демо</button>
         </div>
+        <p class="subtitle">
+          Единый портфель проектов и продуктов: сквозной WSJF, несколько команд на инициативу
+          со своими оценками и ETA, bottleneck-срок готовности.
+        </p>
       </div>
       <div class="print-only print-doc-header">
         <h1>VI Planer — ${TAB_LABELS[ui.tab]}</h1>
@@ -1196,10 +1198,33 @@ function render() {
       </div>
     </div>
     ${ui.creating || editing ? editorHtml(editing) : ""}
+    ${ui.confirmReset ? resetConfirmHtml() : ""}
     <input type="file" id="fileInput" accept="application/json,.json" hidden />
   `;
 
   bind();
+}
+
+function resetConfirmHtml(): string {
+  return `
+    <div class="modal-backdrop" id="resetConfirmBackdrop">
+      <div class="modal modal-confirm" role="dialog" aria-modal="true" aria-labelledby="resetConfirmTitle">
+        <div class="modal-head">
+          <h3 id="resetConfirmTitle">Сбросить к демо-данным?</h3>
+        </div>
+        <div class="modal-body">
+          <p class="confirm-warn">
+            Все текущие изменения портфеля будут удалены и заменены демо-данными.
+            Это действие нельзя отменить.
+          </p>
+        </div>
+        <div class="modal-foot">
+          <button class="btn" type="button" id="resetCancelBtn">Отмена</button>
+          <button class="btn btn-danger" type="button" id="resetConfirmBtn">Да, сбросить</button>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function readAssignments(): TeamAssignment[] {
@@ -1726,10 +1751,36 @@ function bind() {
     });
 
   document.querySelector("#resetBtn")?.addEventListener("click", () => {
-    if (!confirm("Сбросить к демо-данным?")) return;
+    ui.confirmReset = true;
+    render();
+  });
+
+  document.querySelector("#resetCancelBtn")?.addEventListener("click", () => {
+    ui.confirmReset = false;
+    render();
+  });
+
+  document.querySelector("#resetConfirmBackdrop")?.addEventListener("click", (e) => {
+    if (e.target !== e.currentTarget) return;
+    ui.confirmReset = false;
+    render();
+  });
+
+  document.querySelector("#resetConfirmBtn")?.addEventListener("click", () => {
+    ui.confirmReset = false;
     state = structuredClone(SEED);
     persist();
   });
+
+  if (ui.confirmReset) {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      window.removeEventListener("keydown", onKey);
+      ui.confirmReset = false;
+      render();
+    };
+    window.addEventListener("keydown", onKey);
+  }
 }
 
 function exportCurrentTabPdf() {
