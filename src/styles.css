@@ -1277,3 +1277,93 @@ body.prio-dragging {
 .insight-list li {
   margin-bottom: 6px;
 }
+
+.print-only {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .no-print,
+  .top-actions,
+  .tabs,
+  .modal-backdrop,
+  #fileInput,
+  .sync-badge,
+  .btn,
+  .prio-pop,
+  .drag-handle {
+    display: none !important;
+  }
+
+  .app-shell {
+    max-width: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .topbar {
+    margin-bottom: 8px;
+    border: none;
+    padding: 0;
+  }
+
+  .topbar .subtitle {
+    display: none;
+  }
+
+  .topbar h1 {
+    display: none;
+  }
+
+  .print-doc-header {
+    margin-bottom: 12px;
+  }
+
+  .print-doc-header h1 {
+    margin: 0 0 4px;
+    font-size: 18px;
+  }
+
+  .print-doc-header p {
+    margin: 0;
+    font-size: 11px;
+    color: #475569;
+  }
+
+  .metrics {
+    break-inside: avoid;
+    margin-bottom: 10px;
+  }
+
+  .panel,
+  .card,
+  table {
+    break-inside: avoid;
+  }
+
+  .gantt-wrap,
+  .table-wrap {
+    overflow: visible !important;
+  }
+
+  a[href]::after {
+    content: none !important;
+  }
+}

@@ -37,6 +37,14 @@ type Tab = "portfolio" | "teams" | "timeline" | "capacity" | "queuesTest";
 type SortKey = "priority" | "wsjf" | "estimate" | "eta";
 type SortDir = "asc" | "desc";
 
+const TAB_LABELS: Record<Tab, string> = {
+  portfolio: "Портфель",
+  teams: "Очереди команд",
+  queuesTest: "Очереди (тест)",
+  timeline: "Сроки / Gantt",
+  capacity: "Команды",
+};
+
 interface UiState {
   tab: Tab;
   typeFilter: "all" | ItemType;
@@ -1155,19 +1163,25 @@ function render() {
         </div>
         <div class="top-actions">
           <span class="sync-badge" id="syncStatus" data-status="${getSyncStatus()}">${syncStatusLabel(getSyncStatus())}</span>
+          <button class="btn" id="exportPdfBtn">Экспорт PDF</button>
           <button class="btn" id="exportBtn">Экспорт JSON</button>
           <button class="btn" id="importBtn">Импорт JSON</button>
           <button class="btn" id="resetBtn">Сбросить демо</button>
         </div>
       </div>
+      <div class="print-only print-doc-header">
+        <h1>VI Planer — ${TAB_LABELS[ui.tab]}</h1>
+        <p>Старт портфеля: ${state.startDate} · Экспорт: ${new Date().toLocaleString("ru-RU")}</p>
+      </div>
       ${metricsHtml(rollups, slices)}
-      <div class="tabs">
+      <div class="tabs no-print">
         <button class="tab ${ui.tab === "portfolio" ? "active" : ""}" data-tab="portfolio">Портфель</button>
         <button class="tab ${ui.tab === "teams" ? "active" : ""}" data-tab="teams">Очереди команд</button>
         <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очереди (тест)</button>
         <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Сроки / Gantt</button>
         <button class="tab ${ui.tab === "capacity" ? "active" : ""}" data-tab="capacity">Команды</button>
       </div>
+      <div class="tab-print-root" id="tabPrintRoot">
       ${
         ui.tab === "portfolio"
           ? portfolioHtml(rollups, slices)
@@ -1179,6 +1193,7 @@ function render() {
                 ? timelineHtml(rollups, slices)
                 : capacityHtml()
       }
+      </div>
     </div>
     ${ui.creating || editing ? editorHtml(editing) : ""}
     <input type="file" id="fileInput" accept="application/json,.json" hidden />
@@ -1671,6 +1686,10 @@ function bind() {
       }
     });
 
+  document.querySelector("#exportPdfBtn")?.addEventListener("click", () => {
+    exportCurrentTabPdf();
+  });
+
   document.querySelector("#exportBtn")?.addEventListener("click", () => {
     const blob = new Blob([JSON.stringify(state, null, 2)], {
       type: "application/json",
@@ -1711,6 +1730,21 @@ function bind() {
     state = structuredClone(SEED);
     persist();
   });
+}
+
+function exportCurrentTabPdf() {
+  const prevTitle = document.title;
+  const stamp = new Date().toISOString().slice(0, 10);
+  document.title = `VI-Planer-${TAB_LABELS[ui.tab]}-${stamp}`;
+  document.body.classList.add("printing-tab");
+  const cleanup = () => {
+    document.body.classList.remove("printing-tab");
+    document.title = prevTitle;
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
+  // Safari / some Chromium builds need a tick before print
+  window.setTimeout(() => window.print(), 50);
 }
 
 async function bootstrap() {
