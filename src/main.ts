@@ -1199,6 +1199,9 @@ function render() {
       </div>
       </div>
     </div>
+    <div class="page-foot no-print">
+      <button type="button" class="req-dl-btn" id="downloadReqsBtn" title="Скачать требования">Требования (BR / UC / FR / NFR)</button>
+    </div>
     ${ui.creating || editing ? editorHtml(editing) : ""}
     <input type="file" id="fileInput" accept="application/json,.json" hidden />
   `;
@@ -1694,6 +1697,10 @@ function bind() {
     void exportCurrentTabPdf();
   });
 
+  document.querySelector("#downloadReqsBtn")?.addEventListener("click", () => {
+    void downloadRequirementsDoc();
+  });
+
   document.querySelector("#exportBtn")?.addEventListener("click", () => {
     const blob = new Blob([JSON.stringify(state, null, 2)], {
       type: "application/json",
@@ -1809,6 +1816,29 @@ function askResetConfirm(anchor: HTMLElement) {
 
   window.addEventListener("keydown", onKey);
   window.setTimeout(() => document.addEventListener("mousedown", onDoc), 0);
+}
+
+async function downloadRequirementsDoc() {
+  const base = import.meta.env.BASE_URL || "./";
+  const url = new URL(
+    "VI-Planer-requirements.md",
+    new URL(base, window.location.href),
+  ).href;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(String(res.status));
+    const text = await res.text();
+    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = "VI-Planer-requirements.md";
+    a.click();
+    URL.revokeObjectURL(objectUrl);
+  } catch (err) {
+    console.error(err);
+    alert("Не удалось скачать файл требований");
+  }
 }
 
 async function exportCurrentTabPdf() {
