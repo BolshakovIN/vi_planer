@@ -1375,6 +1375,27 @@ body.prio-dragging {
   display: none;
 }
 
+body.pdf-capturing .no-print,
+body.pdf-capturing .tabs {
+  display: none !important;
+}
+
+body.pdf-capturing .print-only {
+  display: block !important;
+  margin-bottom: 12px;
+}
+
+body.pdf-capturing .print-only h1 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+body.pdf-capturing .print-only p {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 @media print {
   @page {
     size: A4 landscape;

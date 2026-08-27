@@ -32,6 +32,7 @@ import {
   onSyncStatusChange,
   syncStatusLabel,
 } from "./storage";
+import { downloadElementPdf } from "./pdfExport";
 
 type Tab = "portfolio" | "teams" | "timeline" | "capacity" | "queuesTest";
 type SortKey = "priority" | "wsjf" | "estimate" | "eta";
@@ -1170,7 +1171,8 @@ function render() {
           со своими оценками и ETA, bottleneck-срок готовности.
         </p>
       </div>
-      <div class="print-only print-doc-header">
+      <div id="pdfCapture">
+      <div class="print-only print-doc-header" id="pdfDocHeader">
         <h1>VI Planer — ${TAB_LABELS[ui.tab]}</h1>
         <p>Старт портфеля: ${state.startDate} · Экспорт: ${new Date().toLocaleString("ru-RU")}</p>
       </div>
@@ -1194,6 +1196,7 @@ function render() {
                 ? timelineHtml(rollups, slices)
                 : capacityHtml()
       }
+      </div>
       </div>
     </div>
     ${ui.creating || editing ? editorHtml(editing) : ""}
@@ -1688,7 +1691,7 @@ function bind() {
     });
 
   document.querySelector("#exportPdfBtn")?.addEventListener("click", () => {
-    exportCurrentTabPdf();
+    void exportCurrentTabPdf();
   });
 
   document.querySelector("#exportBtn")?.addEventListener("click", () => {
@@ -1808,37 +1811,41 @@ function askResetConfirm(anchor: HTMLElement) {
   window.setTimeout(() => document.addEventListener("mousedown", onDoc), 0);
 }
 
-function exportCurrentTabPdf() {
-  const prevTitle = document.title;
-  const stamp = new Date().toISOString().slice(0, 10);
-  document.title = `VI-Planer-${TAB_LABELS[ui.tab]}-${stamp}`;
-  document.body.classList.add("printing-tab");
-
-  // Force colour backgrounds in Chromium/Safari print → PDF
-  let colorStyle = document.querySelector<HTMLStyleElement>("#printColorForce");
-  if (!colorStyle) {
-    colorStyle = document.createElement("style");
-    colorStyle.id = "printColorForce";
-    document.head.appendChild(colorStyle);
+async function exportCurrentTabPdf() {
+  const btn = document.querySelector<HTMLButtonElement>("#exportPdfBtn");
+  const capture = document.querySelector<HTMLElement>("#pdfCapture");
+  if (!capture) {
+    alert("Не удалось найти содержимое для экспорта");
+    return;
   }
-  colorStyle.textContent = `
-    @media print {
-      * {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-        color-adjust: exact !important;
-      }
-    }
-  `;
 
-  const cleanup = () => {
-    document.body.classList.remove("printing-tab");
-    document.title = prevTitle;
-    colorStyle?.remove();
-    window.removeEventListener("afterprint", cleanup);
-  };
-  window.addEventListener("afterprint", cleanup);
-  window.setTimeout(() => window.print(), 50);
+  const prevLabel = btn?.textContent ?? "Экспорт PDF";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "PDF…";
+  }
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  const title = `VI Planer — ${TAB_LABELS[ui.tab]} · ${stamp}`;
+  const filename = `VI-Planer-${TAB_LABELS[ui.tab]}-${stamp}.pdf`.replaceAll(
+    " ",
+    "_",
+  );
+
+  document.body.classList.add("pdf-capturing");
+
+  try {
+    await downloadElementPdf(capture, filename, title);
+  } catch (err) {
+    console.error(err);
+    alert("Не удалось создать PDF. Проверьте интернет (нужны библиотеки с CDN).");
+  } finally {
+    document.body.classList.remove("pdf-capturing");
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+  }
 }
 
 async function bootstrap() {
