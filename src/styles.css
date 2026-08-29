@@ -1,24 +1,31 @@
 :root {
-  --bg: #f3f5f8;
+  /* ВсеИнструменты.ру — светлый нейтральный фон, красный акцент #D60000 */
+  --bg: #f4f4f4;
   --surface: #ffffff;
-  --surface-2: #f8fafc;
-  --ink: #0f172a;
-  --muted: #64748b;
-  --line: #e2e8f0;
-  --accent: #1d4ed8;
-  --accent-soft: #eff6ff;
-  --good: #047857;
-  --good-soft: #ecfdf5;
-  --warn: #b45309;
-  --warn-soft: #fffbeb;
-  --bad: #b91c1c;
-  --bad-soft: #fef2f2;
-  --product: #5b21b6;
-  --product-soft: #f5f3ff;
-  --project: #0369a1;
-  --project-soft: #f0f9ff;
-  --radius: 12px;
-  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --surface-2: #fafafa;
+  --ink: #1a1a1a;
+  --muted: #737373;
+  --line: #e0e0e0;
+  --accent: #d60000;
+  --accent-hover: #b80000;
+  --accent-soft: #fff0f0;
+  --accent-border: #f5c6c6;
+  --good: #2e7d32;
+  --good-soft: #e8f5e9;
+  --warn: #e65100;
+  --warn-soft: #fff3e0;
+  --bad: #c62828;
+  --bad-soft: #ffebee;
+  --product: #d60000;
+  --product-soft: #fff0f0;
+  --project: #455a64;
+  --project-soft: #eceff1;
+  --callout-ink: #3d1515;
+  --row-hover: #fff8f8;
+  --gantt-bg: #f5f5f5;
+  --gantt-line: #e0e0e0;
+  --radius: 6px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   font-family: "IBM Plex Sans", system-ui, sans-serif;
   color: var(--ink);
   background: var(--bg);
@@ -57,6 +64,8 @@ textarea {
   gap: 8px 12px;
   align-items: center;
   margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 3px solid var(--accent);
 }
 
 .topbar-brand {
@@ -68,6 +77,7 @@ textarea {
   font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.02em;
+  color: var(--ink);
 }
 
 .topbar .subtitle {
@@ -141,22 +151,22 @@ textarea {
 }
 
 .sync-badge[data-status="saved"] {
-  color: #15803d;
-  border-color: #bbf7d0;
-  background: #f0fdf4;
+  color: var(--good);
+  border-color: #a5d6a7;
+  background: var(--good-soft);
 }
 
 .sync-badge[data-status="loading"] {
-  color: #1d4ed8;
-  border-color: #bfdbfe;
-  background: #eff6ff;
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
 }
 
 .sync-badge[data-status="offline"],
 .sync-badge[data-status="error"] {
-  color: #b45309;
-  border-color: #fde68a;
-  background: #fffbeb;
+  color: var(--warn);
+  border-color: #ffcc80;
+  background: var(--warn-soft);
 }
 
 .btn {
@@ -181,7 +191,8 @@ textarea {
 }
 
 .btn-primary:hover {
-  filter: brightness(1.05);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .btn-ghost {
@@ -294,8 +305,8 @@ textarea {
 
 .tab.active {
   background: var(--surface);
-  border-color: var(--line);
-  color: var(--ink);
+  border-color: var(--accent);
+  color: var(--accent);
   box-shadow: var(--shadow);
 }
 
@@ -346,6 +357,61 @@ table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
+}
+
+.portfolio-table {
+  table-layout: fixed;
+  width: max(100%, 960px);
+}
+
+.resizable-th {
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.resizable-th .th-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 8px;
+}
+
+.col-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  z-index: 2;
+}
+
+.col-resize::after {
+  content: "";
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  left: 3px;
+  width: 2px;
+  border-radius: 1px;
+  background: transparent;
+}
+
+.resizable-th:hover .col-resize::after,
+.col-resizing .col-resize::after {
+  background: var(--line);
+}
+
+body.col-resizing {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+body.col-resizing * {
+  cursor: col-resize !important;
 }
 
 th,
@@ -480,7 +546,7 @@ tr.clickable {
 }
 
 tr.clickable:hover td {
-  background: #f8fbff;
+  background: var(--row-hover);
 }
 
 .badge {
@@ -504,8 +570,8 @@ tr.clickable:hover td {
 }
 
 .badge-status-idea {
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--surface-2);
+  color: var(--muted);
 }
 .badge-status-ready {
   background: var(--accent-soft);
@@ -520,8 +586,8 @@ tr.clickable:hover td {
   color: var(--bad);
 }
 .badge-status-done {
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--surface-2);
+  color: var(--muted);
 }
 
 .mono {
@@ -581,7 +647,7 @@ tr.row-draggable.is-dragging {
 }
 
 tr.row-draggable.is-dragging td {
-  background: #f8fbff;
+  background: var(--row-hover);
 }
 
 tr.row-draggable.drag-over > td {
@@ -762,7 +828,7 @@ body.prio-dragging {
 .eta-final-line {
   margin-top: 10px;
   padding-top: 8px;
-  border-top: 1px solid #bfdbfe;
+  border-top: 1px solid var(--accent-border);
   font-size: 14px;
   color: var(--ink);
 }
@@ -810,7 +876,7 @@ body.prio-dragging {
 
 .bar {
   height: 8px;
-  background: #eef2f7;
+  background: var(--gantt-bg);
   border-radius: 999px;
   overflow: hidden;
   margin: 8px 0 6px;
@@ -897,7 +963,7 @@ body.prio-dragging {
   position: relative;
   height: 6px;
   margin-top: 8px;
-  background: #eef2f7;
+  background: var(--gantt-bg);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -990,7 +1056,7 @@ body.prio-dragging {
 }
 
 .gantt-axis-tick-empty {
-  border-right: 1px solid #edf2f7;
+  border-right: 1px solid var(--gantt-line);
 }
 
 .gantt-axis-w {
@@ -1051,7 +1117,7 @@ body.prio-dragging {
 .gantt-track {
   position: relative;
   height: 34px;
-  background: #f8fafc;
+  background: var(--gantt-bg);
   border-radius: 8px;
   border: 1px solid var(--line);
   z-index: 1;
@@ -1098,13 +1164,13 @@ body.prio-dragging {
 
 .callout {
   background: var(--accent-soft);
-  border: 1px solid #bfdbfe;
+  border: 1px solid var(--accent-border);
   border-radius: var(--radius);
   padding: 14px 16px;
   margin-bottom: 14px;
   font-size: 13px;
   line-height: 1.5;
-  color: #1e3a8a;
+  color: var(--callout-ink);
 }
 
 .callout strong {
@@ -1148,7 +1214,7 @@ body.prio-dragging {
 .agenda .cols-help {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid #bfdbfe;
+  border-top: 1px solid var(--accent-border);
 }
 
 .cols-help {
@@ -1157,7 +1223,7 @@ body.prio-dragging {
   gap: 6px 20px;
   font-size: 12px;
   line-height: 1.4;
-  color: #1e3a8a;
+  color: var(--ink);
 }
 
 .cols-help-k {
@@ -1399,7 +1465,7 @@ body.prio-dragging {
 .insight-list {
   margin: 0;
   padding-left: 18px;
-  color: #1e3a8a;
+  color: var(--ink);
 }
 
 .insight-list li {

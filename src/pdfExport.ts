@@ -90,7 +90,7 @@ export async function downloadElementPdf(
     scale: Math.min(2, window.devicePixelRatio || 2),
     useCORS: true,
     allowTaint: true,
-    backgroundColor: "#f3f5f8",
+    backgroundColor: "#f4f4f4",
     logging: false,
     windowWidth: Math.max(element.scrollWidth, element.clientWidth),
     windowHeight: Math.max(element.scrollHeight, element.clientHeight),

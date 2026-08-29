@@ -151,10 +151,109 @@ function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
   });
 }
 
+const COL_WIDTH_KEY = "vi-planer-col-widths";
+
+type PortfolioCol =
+  | "priority"
+  | "type"
+  | "title"
+  | "teams"
+  | "status"
+  | "wsjf"
+  | "estimate"
+  | "eta";
+
+const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
+  priority: "Приоритет",
+  type: "Тип",
+  title: "Инициатива / исходный бэклог",
+  teams: "Команды (оценка · старт)",
+  status: "Статус",
+  wsjf: "WSJF",
+  estimate: "Оценка, чел·нед",
+  eta: "ETA",
+};
+
+const PORTFOLIO_COL_DEFAULTS: Record<PortfolioCol, number> = {
+  priority: 96,
+  type: 88,
+  title: 260,
+  teams: 220,
+  status: 130,
+  wsjf: 72,
+  estimate: 120,
+  eta: 140,
+};
+
+function loadColWidths(): Partial<Record<PortfolioCol, number>> {
+  try {
+    const raw = localStorage.getItem(COL_WIDTH_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Partial<Record<PortfolioCol, number>>;
+  } catch {
+    return {};
+  }
+}
+
+function saveColWidths(widths: Partial<Record<PortfolioCol, number>>) {
+  localStorage.setItem(COL_WIDTH_KEY, JSON.stringify(widths));
+}
+
+const colMinWidthCache: Partial<Record<PortfolioCol, number>> = {};
+
+function measureColMinWidth(label: string, col?: PortfolioCol): number {
+  if (col && colMinWidthCache[col] != null) return colMinWidthCache[col]!;
+  const probe = document.createElement("span");
+  probe.textContent = label;
+  probe.style.cssText =
+    "position:absolute;visibility:hidden;white-space:nowrap;font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;font-family:IBM Plex Sans,system-ui,sans-serif;padding:0;";
+  document.body.appendChild(probe);
+  const w = Math.ceil(probe.getBoundingClientRect().width);
+  probe.remove();
+  // padding of th (12+12) + resize grip room + sort arrow slack
+  const min = Math.max(56, w + 36);
+  if (col) colMinWidthCache[col] = min;
+  return min;
+}
+
+function colWidthStyle(col: PortfolioCol): string {
+  const stored = loadColWidths()[col];
+  const min = measureColMinWidth(PORTFOLIO_COL_LABELS[col], col);
+  const width = Math.max(min, stored ?? PORTFOLIO_COL_DEFAULTS[col]);
+  return `width:${width}px;min-width:${min}px`;
+}
+
+function resizableTh(
+  label: string,
+  col: PortfolioCol,
+  extraClass = "",
+  dataSort?: SortKey,
+): string {
+  const active = dataSort != null && ui.sortKey === dataSort;
+  const arrow =
+    !active || !dataSort ? "" : ui.sortDir === "asc" ? " ↑" : " ↓";
+  const sortCls = dataSort
+    ? `sortable ${active ? "sorted" : ""}`
+    : "";
+  const sortAttr = dataSort ? ` data-sort="${dataSort}"` : "";
+  const titleAttr = dataSort ? ` title="Сортировать"` : "";
+  return `<th class="resizable-th ${sortCls} ${extraClass}" data-col="${col}"${sortAttr}${titleAttr} style="${colWidthStyle(col)}"><span class="th-label">${label}${arrow}</span><span class="col-resize" data-col-resize="${col}" title="Изменить ширину"></span></th>`;
+}
+
 function sortHeader(label: string, key: SortKey): string {
-  const active = ui.sortKey === key;
-  const arrow = !active ? "" : ui.sortDir === "asc" ? " ↑" : " ↓";
-  return `<th class="sortable ${active ? "sorted" : ""}" data-sort="${key}" title="Сортировать">${label}${arrow}</th>`;
+  const colMap: Partial<Record<SortKey, PortfolioCol>> = {
+    priority: "priority",
+    wsjf: "wsjf",
+    estimate: "estimate",
+    eta: "eta",
+  };
+  const col = colMap[key];
+  if (!col) {
+    const active = ui.sortKey === key;
+    const arrow = !active ? "" : ui.sortDir === "asc" ? " ↑" : " ↓";
+    return `<th class="sortable ${active ? "sorted" : ""}" data-sort="${key}" title="Сортировать">${label}${arrow}</th>`;
+  }
+  return resizableTh(label, col, "", key);
 }
 
 function toggleSort(key: SortKey) {
@@ -331,15 +430,15 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           ? ""
           : `<p class="sort-prio-hint">Сейчас сортировка не по приоритету — перестановка строк отключена, приоритеты не меняются. Верните сортировку по «Приоритет», чтобы двигать строки.</p>`
       }
-      <div style="overflow-x:auto">
+      <div class="table-scroll" style="overflow-x:auto">
         <table class="portfolio-table">
           <thead>
             <tr>
               ${sortHeader("Приоритет", "priority")}
-              <th>Тип</th>
-              <th>Инициатива / исходный бэклог</th>
-              <th>Команды (оценка · старт)</th>
-              <th>Статус</th>
+              ${resizableTh("Тип", "type")}
+              ${resizableTh("Инициатива / исходный бэклог", "title")}
+              ${resizableTh("Команды (оценка · старт)", "teams")}
+              ${resizableTh("Статус", "status")}
               ${sortHeader("WSJF", "wsjf")}
               ${sortHeader("Оценка, чел·нед", "estimate")}
               ${sortHeader("ETA", "eta")}
@@ -535,7 +634,7 @@ function timelineHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string
   const ordered = sortByPriority(state.items.filter((i) => i.status !== "done"));
   const rowIndex = new Map(ordered.map((item, i) => [item.id, i]));
   const weekPct = 100 / weeks;
-  const trackBg = `repeating-linear-gradient(90deg, #f8fafc 0, #f8fafc calc(${weekPct}% - 1px), #e2e8f0 calc(${weekPct}% - 1px), #e2e8f0 ${weekPct}%)`;
+  const trackBg = `repeating-linear-gradient(90deg, #f5f5f5 0, #f5f5f5 calc(${weekPct}% - 1px), #e0e0e0 calc(${weekPct}% - 1px), #e0e0e0 ${weekPct}%)`;
 
   // Same-team queue deps: soft cubic curves (not rigid elbows, not stretched loops)
   const depPaths: string[] = [];
@@ -689,16 +788,16 @@ function timelineHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string
 }
 
 const TEAM_COLORS = [
-  "#2563eb",
-  "#7c3aed",
-  "#0d9488",
-  "#c2410c",
-  "#db2777",
-  "#059669",
-  "#d97706",
-  "#4f46e5",
-  "#0891b2",
-  "#be123c",
+  "#d60000",
+  "#455a64",
+  "#737373",
+  "#c62828",
+  "#e65100",
+  "#1a1a1a",
+  "#8d6e63",
+  "#546e7a",
+  "#b71c1c",
+  "#f57c00",
 ];
 
 function nextTeamColor(): string {
@@ -1463,12 +1562,15 @@ function bind() {
 
   document.querySelectorAll<HTMLTableCellElement>("[data-sort]").forEach((th) => {
     th.addEventListener("click", (e) => {
+      if ((e.target as HTMLElement).closest("[data-col-resize]")) return;
       e.stopPropagation();
       const key = th.dataset.sort as SortKey | undefined;
       if (key === "wsjf" || key === "estimate" || key === "eta" || key === "priority")
         toggleSort(key);
     });
   });
+
+  bindPortfolioColResize();
 
   const close = () => {
     ui.creating = false;
@@ -1816,6 +1918,55 @@ function askResetConfirm(anchor: HTMLElement) {
 
   window.addEventListener("keydown", onKey);
   window.setTimeout(() => document.addEventListener("mousedown", onDoc), 0);
+}
+
+function bindPortfolioColResize() {
+  const table = document.querySelector<HTMLTableElement>(".portfolio-table");
+  if (!table) return;
+
+  table.querySelectorAll<HTMLElement>("[data-col-resize]").forEach((handle) => {
+    handle.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const col = handle.dataset.colResize as PortfolioCol | undefined;
+      if (!col) return;
+      const th = handle.closest<HTMLTableCellElement>("th");
+      if (!th) return;
+
+      const min = measureColMinWidth(PORTFOLIO_COL_LABELS[col], col);
+      const startX = e.clientX;
+      const startW = th.getBoundingClientRect().width;
+      const pointerId = e.pointerId;
+      handle.setPointerCapture(pointerId);
+      document.body.classList.add("col-resizing");
+
+      const onMove = (ev: PointerEvent) => {
+        const next = Math.max(min, Math.round(startW + (ev.clientX - startX)));
+        th.style.width = `${next}px`;
+        th.style.minWidth = `${min}px`;
+      };
+
+      const onUp = (ev: PointerEvent) => {
+        handle.releasePointerCapture(pointerId);
+        handle.removeEventListener("pointermove", onMove);
+        handle.removeEventListener("pointerup", onUp);
+        handle.removeEventListener("pointercancel", onUp);
+        document.body.classList.remove("col-resizing");
+
+        const finalW = Math.max(min, Math.round(th.getBoundingClientRect().width));
+        const widths = loadColWidths();
+        widths[col] = finalW;
+        saveColWidths(widths);
+        th.style.width = `${finalW}px`;
+        void ev;
+      };
+
+      handle.addEventListener("pointermove", onMove);
+      handle.addEventListener("pointerup", onUp);
+      handle.addEventListener("pointercancel", onUp);
+    });
+  });
 }
 
 async function downloadRequirementsDoc() {
