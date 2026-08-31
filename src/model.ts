@@ -1,5 +1,39 @@
 export type ItemType = "project" | "product";
 export type ItemStatus = "idea" | "ready" | "in_progress" | "blocked" | "done";
+export type TShirtSize = "S" | "M" | "L";
+
+export const SIZE_RANGES: Record<TShirtSize, { min: number; max: number }> = {
+  S: { min: 5, max: 10 },
+  M: { min: 10, max: 20 },
+  L: { min: 20, max: 40 },
+};
+
+export const TSHIRT_SIZES: TShirtSize[] = ["S", "M", "L"];
+
+/** Planning duration — midpoint of the size range, in calendar days */
+export function sizePlanDays(size: TShirtSize): number {
+  const r = SIZE_RANGES[size];
+  return Math.round((r.min + r.max) / 2);
+}
+
+export function sizeLabel(size: TShirtSize): string {
+  const r = SIZE_RANGES[size];
+  return `${size} (${r.min}–${r.max} дн.)`;
+}
+
+export function parseSize(raw: unknown): TShirtSize {
+  const s = String(raw ?? "").toUpperCase();
+  if (s === "S" || s === "M" || s === "L") return s;
+  return "M";
+}
+
+/** Legacy person-week estimate → t-shirt size via team capacity */
+export function pwToSize(estimatePw: number, capacityPw = 3): TShirtSize {
+  const days = (estimatePw / Math.max(capacityPw, 0.5)) * 7;
+  if (days <= 10) return "S";
+  if (days <= 20) return "M";
+  return "L";
+}
 
 export interface Team {
   id: string;
@@ -12,7 +46,8 @@ export interface Team {
 /** Work of one initiative for a specific team (own effort → own ETA) */
 export interface TeamAssignment {
   teamId: string;
-  estimatePw: number;
+  /** T-shirt estimate: S 5–10 d, M 10–20 d, L 20–40 d */
+  size: TShirtSize;
   /** Planned earliest start for this team (ISO date, Monday) */
   workStartDate: string;
 }
@@ -55,7 +90,7 @@ export interface AppState {
 export interface ScheduledSlice {
   item: WorkItem;
   teamId: string;
-  estimatePw: number;
+  size: TShirtSize;
   wsjf: number;
   effectiveRank: number;
   /** User-planned earliest start */
@@ -67,7 +102,9 @@ export interface ScheduledSlice {
   waitWeeks: number;
   /** True if queue pushed start later than planned */
   delayedByQueue: boolean;
-  /** Calendar span of this team's work in weeks (estimate-driven length) */
+  /** Calendar span in days (from t-shirt size) */
+  durationDays: number;
+  /** Calendar span in weeks (for Gantt) */
   durationWeeks: number;
 }
 
@@ -76,7 +113,7 @@ export interface ItemSchedule {
   item: WorkItem;
   slices: ScheduledSlice[];
   wsjf: number;
-  totalEstimatePw: number;
+  totalEstimateDays: number;
   startWeek: number;
   endWeek: number;
   startDate: string;
@@ -100,8 +137,8 @@ export function wsjf(item: WorkItem): number {
   return Math.round((costOfDelay / Math.max(item.jobSize, 0.5)) * 100) / 100;
 }
 
-export function totalEstimate(item: WorkItem): number {
-  return item.assignments.reduce((sum, a) => sum + a.estimatePw, 0);
+export function totalEstimateDays(item: WorkItem): number {
+  return item.assignments.reduce((sum, a) => sum + sizePlanDays(a.size), 0);
 }
 
 export function itemTeamIds(item: WorkItem): string[] {
@@ -135,8 +172,8 @@ export function pickBottleneck(slices: ScheduledSlice[]): ScheduledSlice {
     if (cur.endDate !== best.endDate) {
       return cur.endDate > best.endDate ? cur : best;
     }
-    if (cur.estimatePw !== best.estimatePw) {
-      return cur.estimatePw > best.estimatePw ? cur : best;
+    if (cur.durationDays !== best.durationDays) {
+      return cur.durationDays > best.durationDays ? cur : best;
     }
     return cur.durationWeeks > best.durationWeeks ? cur : best;
   });
@@ -178,7 +215,7 @@ export function sortByPriority(items: WorkItem[]): WorkItem[] {
     if (pa == null && pb != null) return 1;
     const dw = wsjf(b) - wsjf(a);
     if (dw !== 0) return dw;
-    return totalEstimate(a) - totalEstimate(b);
+    return totalEstimateDays(a) - totalEstimateDays(b);
   });
 }
 
@@ -279,7 +316,7 @@ export function ensureUniquePriorities(items: WorkItem[]): WorkItem[] {
   const byWsjf = [...items].sort((a, b) => {
     const dw = wsjf(b) - wsjf(a);
     if (dw !== 0) return dw;
-    return totalEstimate(a) - totalEstimate(b);
+    return totalEstimateDays(a) - totalEstimateDays(b);
   });
 
   const used = new Set<number>();
@@ -308,11 +345,15 @@ export function ensureUniquePriorities(items: WorkItem[]): WorkItem[] {
   });
 }
 
+export function maxDate(a: string, b: string): string {
+  return a >= b ? a : b;
+}
+
 /**
  * Schedule each team's work independently by shared priority field.
- * Actual start = max(queue free week, planned workStartDate).
+ * Duration from t-shirt size (calendar days); tasks run sequentially per team.
+ * Actual start = max(queue free date, planned workStartDate).
  * Cross-team initiative finishes when the last (bottleneck) team finishes.
- * Queue order = priority dependencies (lower number blocks higher).
  */
 export function schedulePortfolio(state: AppState): {
   slices: ScheduledSlice[];
@@ -324,7 +365,7 @@ export function schedulePortfolio(state: AppState): {
 
   const byTeam = new Map<
     string,
-    { item: WorkItem; estimatePw: number; workStartDate: string }[]
+    { item: WorkItem; size: TShirtSize; workStartDate: string }[]
   >();
   for (const team of state.teams) byTeam.set(team.id, []);
   for (const item of ordered) {
@@ -332,7 +373,7 @@ export function schedulePortfolio(state: AppState): {
       const list = byTeam.get(a.teamId) ?? [];
       list.push({
         item,
-        estimatePw: a.estimatePw,
+        size: a.size,
         workStartDate: snapToMonday(a.workStartDate || state.startDate),
       });
       byTeam.set(a.teamId, list);
@@ -353,70 +394,41 @@ export function schedulePortfolio(state: AppState): {
       items: [],
     }));
 
-    let cursor = 0;
+    let cursorDate = state.startDate;
     queue.forEach((entry, idx) => {
-      const plannedWeek = weekIndex(state.startDate, entry.workStartDate);
-      let startWeek = Math.max(cursor, plannedWeek);
-      // skip weeks already fully booked
-      while (
-        startWeek < maxWeeks &&
-        weeks[startWeek].usedPw >= team.capacityPw - 0.001
-      ) {
-        startWeek += 1;
-      }
+      const durationDays = sizePlanDays(entry.size);
+      const plannedStartDate = entry.workStartDate;
+      const startDate = maxDate(cursorDate, plannedStartDate);
+      const endDate = addDays(startDate, durationDays);
+      const startWeek = weekIndex(state.startDate, startDate);
+      const endWeek = weekIndex(state.startDate, endDate);
+      const durationWeeks = Math.round((durationDays / 7) * 100) / 100;
 
-      let remaining = entry.estimatePw;
-      let endWeek = startWeek;
-      let endDate = addWeeks(state.startDate, startWeek);
-      const startDate = addWeeks(state.startDate, startWeek);
-
-      while (remaining > 0.001 && endWeek < maxWeeks) {
-        const slot = weeks[endWeek];
-        const free = Math.max(0, slot.capacityPw - slot.usedPw);
-        if (free <= 0.001) {
-          endWeek += 1;
-          continue;
+      for (let w = startWeek; w <= Math.min(endWeek, maxWeeks - 1); w++) {
+        const slot = weeks[w];
+        if (slot && !slot.items.includes(entry.item.id)) {
+          slot.items.push(entry.item.id);
         }
-        const take = Math.min(free, remaining);
-        const weekStart = addWeeks(state.startDate, endWeek);
-        // Finish date advances inside the week proportional to capacity used
-        const daysUsed = (take / slot.capacityPw) * 7;
-        const offsetInWeek = (slot.usedPw / slot.capacityPw) * 7;
-        endDate = addDays(weekStart, offsetInWeek + daysUsed);
-
-        slot.usedPw += take;
-        slot.items.push(entry.item.id);
-        remaining -= take;
-        if (remaining > 0.001) endWeek += 1;
       }
-
-      const durationWeeks =
-        team.capacityPw > 0
-          ? Math.round((entry.estimatePw / team.capacityPw) * 100) / 100
-          : entry.estimatePw;
 
       slices.push({
         item: entry.item,
         teamId: team.id,
-        estimatePw: entry.estimatePw,
+        size: entry.size,
         wsjf: wsjf(entry.item),
         effectiveRank: idx + 1,
-        plannedStartDate: entry.workStartDate,
+        plannedStartDate,
         startWeek,
         endWeek,
         startDate,
         endDate,
         waitWeeks: startWeek,
-        delayedByQueue: startWeek > plannedWeek,
+        delayedByQueue: startDate > plannedStartDate,
+        durationDays,
         durationWeeks,
       });
 
-      cursor = endWeek;
-      if (weeks[cursor] && weeks[cursor].usedPw >= team.capacityPw - 0.001) {
-        cursor = endWeek + 1;
-      } else {
-        cursor = endWeek;
-      }
+      cursorDate = endDate;
     });
 
     load[team.id] = weeks;
@@ -433,7 +445,6 @@ export function schedulePortfolio(state: AppState): {
   for (const item of ordered) {
     const itemSlices = byItem.get(item.id) ?? [];
     if (!itemSlices.length) continue;
-    // Critical path = team that finishes last (longest path / оценка)
     const bottleneck = pickBottleneck(itemSlices);
     const earliest = itemSlices.reduce((best, cur) =>
       cur.startWeek < best.startWeek ? cur : best
@@ -442,13 +453,13 @@ export function schedulePortfolio(state: AppState): {
       item,
       slices: [...itemSlices].sort((a, b) =>
         a.endDate === b.endDate
-          ? b.estimatePw - a.estimatePw
+          ? b.durationDays - a.durationDays
           : a.endDate < b.endDate
             ? 1
             : -1
       ),
       wsjf: wsjf(item),
-      totalEstimatePw: totalEstimate(item),
+      totalEstimateDays: totalEstimateDays(item),
       startWeek: earliest.startWeek,
       endWeek: bottleneck.endWeek,
       startDate: earliest.startDate,
@@ -477,37 +488,46 @@ export function normalizeState(raw: unknown): AppState | null {
   if (!Array.isArray(data.teams) || !Array.isArray(data.items)) return null;
 
   const planStart = snapToMonday(String(data.startDate ?? mondayOf()));
+  const teams = data.teams as Team[];
+  const teamCap = new Map(teams.map((t) => [t.id, t.capacityPw]));
 
   const items: WorkItem[] = data.items.map((row) => {
     const r = row as Record<string, unknown>;
     let assignments: TeamAssignment[] = [];
     if (Array.isArray(r.assignments) && r.assignments.length) {
-      assignments = (r.assignments as TeamAssignment[])
+      assignments = (r.assignments as Record<string, unknown>[])
         .filter((a) => a && typeof a.teamId === "string")
-        .map((a) => ({
-          teamId: a.teamId,
-          estimatePw: Math.max(0.5, Number(a.estimatePw) || 1),
-          workStartDate: snapToMonday(
-            String(
-              (a as TeamAssignment).workStartDate ||
-                (r as { workStartDate?: string }).workStartDate ||
-                planStart
-            )
-          ),
-        }));
+        .map((a) => {
+          const teamId = String(a.teamId);
+          const cap = teamCap.get(teamId) ?? 3;
+          const size =
+            a.size != null
+              ? parseSize(a.size)
+              : pwToSize(Number(a.estimatePw) || 1, cap);
+          return {
+            teamId,
+            size,
+            workStartDate: snapToMonday(
+              String(
+                a.workStartDate ||
+                  (r as { workStartDate?: string }).workStartDate ||
+                  planStart
+              )
+            ),
+          };
+        });
     } else if (typeof r.teamId === "string") {
       assignments = [
         {
           teamId: r.teamId,
-          estimatePw: Math.max(0.5, Number(r.estimatePw) || 1),
+          size: pwToSize(Number(r.estimatePw) || 1, teamCap.get(r.teamId) ?? 3),
           workStartDate: planStart,
         },
       ];
     }
-    if (!assignments.length && Array.isArray(data.teams) && data.teams[0]) {
-      const t0 = data.teams[0] as Team;
+    if (!assignments.length && teams[0]) {
       assignments = [
-        { teamId: t0.id, estimatePw: 4, workStartDate: planStart },
+        { teamId: teams[0].id, size: "M", workStartDate: planStart },
       ];
     }
 
@@ -538,7 +558,7 @@ export function normalizeState(raw: unknown): AppState | null {
   return {
     version: 3,
     startDate: planStart,
-    teams: data.teams as Team[],
+    teams,
     items: ensureUniquePriorities(items),
   };
 }

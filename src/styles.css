@@ -514,6 +514,32 @@ th.sortable.sorted {
   opacity: 0.45;
 }
 
+.team-assign-field select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.team-assign-field select:disabled {
+  opacity: 0.45;
+}
+
+.size-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--neutral-soft);
+  color: var(--neutral-ink);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 .modal-wide {
   width: min(720px, 100%);
 }

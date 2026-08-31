@@ -10,7 +10,12 @@ import {
   formatDate,
   schedulePortfolio,
   sortByPriority,
-  totalEstimate,
+  totalEstimateDays,
+  sizePlanDays,
+  sizeLabel,
+  parseSize,
+  TSHIRT_SIZES,
+  TShirtSize,
   hasTeam,
   uid,
   wsjf,
@@ -93,6 +98,23 @@ function rollupById(rollups: ItemSchedule[]): Map<string, ItemSchedule> {
   return new Map(rollups.map((r) => [r.item.id, r]));
 }
 
+function sizesSummary(item: WorkItem): string {
+  return item.assignments.map((a) => a.size).join(" + ");
+}
+
+function teamQueueDays(slices: ScheduledSlice[], teamId: string): number {
+  return slices
+    .filter((s) => s.teamId === teamId)
+    .reduce((sum, s) => sum + s.durationDays, 0);
+}
+
+function sizeSelectOptions(selected: TShirtSize): string {
+  return TSHIRT_SIZES.map(
+    (sz) =>
+      `<option value="${sz}" ${selected === sz ? "selected" : ""}>${sizeLabel(sz)}</option>`
+  ).join("");
+}
+
 function teamsLabel(item: WorkItem): string {
   return item.assignments
     .map((a) => {
@@ -106,7 +128,7 @@ function teamsCellHtml(item: WorkItem): string {
   const chips = item.assignments
     .map((a) => {
       const t = teamById(a.teamId);
-      return `<span class="team-chip"><span class="team-dot" style="background:${t?.color ?? "#94a3b8"}"></span>${escapeHtml(t?.name ?? a.teamId)} <span class="mono muted-inline">${a.estimatePw}чн · старт ${formatDate(a.workStartDate)}</span></span>`;
+      return `<span class="team-chip"><span class="team-dot" style="background:${t?.color ?? "#94a3b8"}"></span>${escapeHtml(t?.name ?? a.teamId)} <span class="size-badge mono">${a.size}</span> <span class="mono muted-inline">старт ${formatDate(a.workStartDate)}</span></span>`;
     })
     .join("");
   return `<div class="teams-stack">${chips}</div>`;
@@ -140,7 +162,7 @@ function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
     if (ui.sortKey === "wsjf") {
       cmp = wsjf(a) - wsjf(b);
     } else if (ui.sortKey === "estimate") {
-      cmp = totalEstimate(a) - totalEstimate(b);
+      cmp = totalEstimateDays(a) - totalEstimateDays(b);
     } else {
       const ea = byId.get(a.id)?.endDate ?? "9999-99-99";
       const eb = byId.get(b.id)?.endDate ?? "9999-99-99";
@@ -167,10 +189,10 @@ const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
   priority: "Приоритет",
   type: "Тип",
   title: "Инициатива / исходный бэклог",
-  teams: "Команды (оценка · старт)",
+  teams: "Команды (майка · старт)",
   status: "Статус",
   wsjf: "WSJF",
-  estimate: "Оценка, чел·нед",
+  estimate: "Оценка, майки",
   eta: "ETA",
 };
 
@@ -275,10 +297,8 @@ function metricsHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string 
   const ends = rollups.map((s) => s.endWeek);
   const horizon = ends.length ? Math.max(...ends) + 1 : 0;
   const overloaded = state.teams.filter((t) => {
-    const demand = slices
-      .filter((s) => s.teamId === t.id)
-      .reduce((sum, s) => sum + s.estimatePw, 0);
-    return demand > t.capacityPw * 8;
+    const demandDays = teamQueueDays(slices, t.id);
+    return demandDays > 8 * 7;
   }).length;
 
   return `
@@ -289,14 +309,14 @@ function metricsHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string 
         <div class="hint">${products} продуктов · ${projects} проектов · ${multi} кросс-командных</div>
       </div>
       <div class="metric">
-        <div class="label">Горизонт по текущей ёмкости</div>
+        <div class="label">Горизонт портфеля</div>
         <div class="value">${horizon} нед.</div>
         <div class="hint">до закрытия (по bottleneck-команде)</div>
       </div>
       <div class="metric">
         <div class="label">Команд под риском</div>
         <div class="value">${overloaded}</div>
-        <div class="hint">спрос &gt; ёмкости на 8 недель</div>
+        <div class="hint">очередь длиннее 8 недель</div>
       </div>
       <div class="metric">
         <div class="label">Старт планирования</div>
@@ -315,10 +335,10 @@ function columnsHelpHtml(): string {
         <div><span class="cols-help-k">Приоритет</span> — сквозной ранг (1 = выше); тяните строку за ⋮⋮, чтобы переставить. Сортировка других колонок приоритет не меняет</div>
         <div><span class="cols-help-k">Тип</span> — проект или продукт</div>
         <div><span class="cols-help-k">Инициатива</span> — название, исходный бэклог и владелец</div>
-        <div><span class="cols-help-k">Команды</span> — кто делает, оценка (чел·нед) и план старта</div>
+        <div><span class="cols-help-k">Команды</span> — кто делает, майка (S/M/L) и план старта</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
         <div><span class="cols-help-k">WSJF</span> — (BV + TC + RR) / Job Size</div>
-        <div><span class="cols-help-k">Оценка</span> — суммарный объём по всем командам</div>
+        <div><span class="cols-help-k">Оценка</span> — майки S (5–10 дн.), M (10–20 дн.), L (20–40 дн.) по командам</div>
         <div><span class="cols-help-k">ETA</span> — дата готовности (когда закончила последняя команда)</div>
       </div>
     </details>
@@ -334,7 +354,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
     .map((item) => {
       const r = byId.get(item.id);
       const score = wsjf(item);
-      const total = totalEstimate(item);
+      const total = totalEstimateDays(item);
       const prio = item.manualRank ?? "—";
       const etaMeta = r
         ? `<div class="eta-teams">${r.slices
@@ -379,8 +399,8 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           <td><span class="badge badge-status-${item.status}">${statusLabel(item.status)}</span></td>
           <td class="mono metric-num">${score}</td>
           <td class="mono metric-num">
-            ${total}
-            ${item.assignments.length > 1 ? `<div class="meta">${item.assignments.map((a) => a.estimatePw).join(" + ")}</div>` : ""}
+            <span class="size-badge">${sizesSummary(item)}</span>
+            <div class="meta">~${total} дн.</div>
           </td>
           <td class="mono ${r && r.waitWeeks > 4 ? "eta-late" : "eta-good"}">
             ${r ? `<span class="eta-final">${formatDate(r.endDate)}</span>` : "—"}
@@ -440,7 +460,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
               ${resizableTh("Команды (оценка · старт)", "teams")}
               ${resizableTh("Статус", "status")}
               ${sortHeader("WSJF", "wsjf")}
-              ${sortHeader("Оценка, чел·нед", "estimate")}
+              ${sortHeader("Оценка, майки", "estimate")}
               ${sortHeader("ETA", "eta")}
             </tr>
           </thead>
@@ -459,24 +479,11 @@ function teamsHtml(slices: ScheduledSlice[]): string {
       const queue = slices
         .filter((s) => s.teamId === team.id)
         .sort((a, b) => a.effectiveRank - b.effectiveRank);
-      const demand = queue.reduce((sum, s) => sum + s.estimatePw, 0);
-      const weeksToClear = team.capacityPw > 0 ? demand / team.capacityPw : 0;
+      const demandDays = queue.reduce((sum, s) => sum + s.durationDays, 0);
+      const weeksToClear = Math.round((demandDays / 7) * 10) / 10;
       const util8 = Math.min(
         100,
-        Math.round(
-          (queue
-            .filter((s) => s.startWeek < 8)
-            .reduce((sum, s) => {
-              const overlap = Math.min(s.endWeek + 1, 8) - s.startWeek;
-              return (
-                sum +
-                Math.max(0, overlap) *
-                  (s.estimatePw / Math.max(1, s.endWeek - s.startWeek + 1))
-              );
-            }, 0) /
-            (team.capacityPw * 8)) *
-            100
-        )
+        Math.round((demandDays / (8 * 7)) * 100)
       );
 
       return `
@@ -484,7 +491,7 @@ function teamsHtml(slices: ScheduledSlice[]): string {
           <div class="team-card-head">
             <div>
               <h3><span class="team-dot" style="background:${team.color}"></span>${escapeHtml(team.name)}</h3>
-              <div class="meta">Ёмкость ${team.capacityPw} чел·нед/нед · спрос ${demand.toFixed(1)} · ~${weeksToClear.toFixed(1)} нед. до очистки</div>
+              <div class="meta">${queue.length} задач · ~${demandDays} дн. · ~${weeksToClear} нед. до очистки</div>
             </div>
             <div class="mono" style="font-weight:700">${util8}% / 8 нед.</div>
           </div>
@@ -497,7 +504,7 @@ function teamsHtml(slices: ScheduledSlice[]): string {
               <div class="rank">${s.effectiveRank}</div>
               <div>
                 <div><span class="badge badge-${s.item.type}">${s.item.type === "product" ? "П" : "Пр"}</span> ${escapeHtml(s.item.title)}</div>
-                <div class="meta">WSJF ${s.wsjf} · ${s.estimatePw} чел·нед · план ${formatDate(s.plannedStartDate)}${s.delayedByQueue ? " → сдвиг" : ""}${others > 0 ? ` · ещё ${others} ком.` : ""}</div>
+                <div class="meta">WSJF ${s.wsjf} · ${s.size} (${s.durationDays} дн.) · план ${formatDate(s.plannedStartDate)}${s.delayedByQueue ? " → сдвиг" : ""}${others > 0 ? ` · ещё ${others} ком.` : ""}</div>
               </div>
               <div class="mono" style="text-align:right">
                 ${formatDate(s.startDate)} →<br/>${formatDate(s.endDate)}
@@ -534,8 +541,8 @@ function queuesTestHtml(slices: ScheduledSlice[]): string {
           if (pa !== pb) return pa - pb;
           return a.effectiveRank - b.effectiveRank;
         });
-      const demand = queue.reduce((sum, s) => sum + s.estimatePw, 0);
-      const weeksToClear = team.capacityPw > 0 ? demand / team.capacityPw : 0;
+      const demandDays = queue.reduce((sum, s) => sum + s.durationDays, 0);
+      const weeksToClear = Math.round((demandDays / 7) * 10) / 10;
       const freeFrom = queue.length
         ? queue[queue.length - 1].endDate
         : planStart;
@@ -548,7 +555,7 @@ function queuesTestHtml(slices: ScheduledSlice[]): string {
               idx > 0
                 ? queue[idx - 1]
                 : null;
-            let takeReason = "может взять сразу (есть свободная ёмкость)";
+            let takeReason = "может взять сразу (очередь свободна)";
             let takeClass = "take-now";
             if (s.startDate > s.plannedStartDate) {
               takeReason = blockedBy
@@ -576,7 +583,7 @@ function queuesTestHtml(slices: ScheduledSlice[]): string {
                   <span class="meta"> · ${escapeHtml(takeReason)}</span>
                 </div>
                 <div class="meta">
-                  ${s.estimatePw} чел·нед · план ${formatDate(s.plannedStartDate)} · до ${formatDate(s.endDate)}
+                  ${s.size} (${s.durationDays} дн.) · план ${formatDate(s.plannedStartDate)} · до ${formatDate(s.endDate)}
                   ${others.length ? ` · ещё: ${others.map(escapeHtml).join(", ")}` : ""}
                 </div>
                 <div class="take-bar" title="Окно работы в горизонте 12 нед.">
@@ -599,7 +606,7 @@ function queuesTestHtml(slices: ScheduledSlice[]): string {
           <div class="team-card-head">
             <div>
               <h3><span class="team-dot" style="background:${team.color}"></span>${escapeHtml(team.name)}</h3>
-              <div class="meta">Ёмкость ${team.capacityPw} чел·нед/нед · спрос ${demand.toFixed(1)} · ~${weeksToClear.toFixed(1)} нед. до очистки</div>
+              <div class="meta">${queue.length} задач · ~${demandDays} дн. · ~${weeksToClear} нед. до очистки</div>
               <div class="take-free">Очередь закрывается / слот после всего: <strong>${formatDate(freeFrom)}</strong></div>
             </div>
             <div class="mono" style="font-weight:600;text-align:right;font-size:12px;color:var(--muted)">
@@ -615,7 +622,7 @@ function queuesTestHtml(slices: ScheduledSlice[]): string {
   return `
     <div class="callout">
       <strong>Тест:</strong> цифра — приоритет из Портфеля (1 = выше).
-      «Может взять с …» — фактическая дата, когда у команды появляется ёмкость с учётом очереди и планового старта.
+      «Может взять с …» — фактическая дата, когда команда освобождается с учётом очереди и планового старта.
       Полоска — окно работы в ближайшие 12 недель.
     </div>
     <div class="panel">
@@ -821,8 +828,6 @@ function capacityHtml(): string {
           value="${escapeAttr(t.name)}"
           aria-label="Название команды"
         />
-        <input type="range" min="1" max="8" step="0.5" value="${t.capacityPw}" data-cap="${t.id}" />
-        <span class="mono capacity-label" data-cap-label="${t.id}">${t.capacityPw} чел·нед</span>
       </div>
     `
     )
@@ -830,7 +835,7 @@ function capacityHtml(): string {
 
   return `
     <div class="callout">
-      Управляйте командами: название и ёмкость (чел·нед/нед). Изменение ёмкости пересчитывает очереди и ETA.
+      Управляйте командами: название и цвет. Оценки задаются майками S / M / L (5–10 / 10–20 / 20–40 календарных дней).
     </div>
     <div class="panel">
       <div class="panel-header">
@@ -861,7 +866,7 @@ function editorHtml(item: WorkItem | null): string {
       assignments: [
         {
           teamId: state.teams[0]?.id ?? "",
-          estimatePw: 4,
+          size: "M",
           workStartDate: state.startDate,
         },
       ],
@@ -877,8 +882,8 @@ function editorHtml(item: WorkItem | null): string {
 
   const score = wsjf(draft);
   const selected = new Set(draft.assignments.map((a) => a.teamId));
-  const estimateMap = new Map(
-    draft.assignments.map((a) => [a.teamId, a.estimatePw])
+  const sizeMap = new Map(
+    draft.assignments.map((a) => [a.teamId, a.size])
   );
   const startMap = new Map(
     draft.assignments.map((a) => [a.teamId, a.workStartDate])
@@ -892,7 +897,7 @@ function editorHtml(item: WorkItem | null): string {
   const teamRows = state.teams
     .map((t) => {
       const on = selected.has(t.id);
-      const est = estimateMap.get(t.id) ?? 4;
+      const sz = sizeMap.get(t.id) ?? "M";
       const start = startMap.get(t.id) ?? state.startDate;
       return `
         <div class="team-assign-row">
@@ -902,8 +907,8 @@ function editorHtml(item: WorkItem | null): string {
             <span class="team-assign-name">${escapeHtml(t.name)}</span>
           </label>
           <label class="team-assign-field">
-            <span class="meta">Оценка</span>
-            <input type="number" class="f_team_est" data-team="${t.id}" min="0.5" step="0.5" value="${est}" ${on ? "" : "disabled"} />
+            <span class="meta">Майка</span>
+            <select class="f_team_size" data-team="${t.id}" ${on ? "" : "disabled"}>${sizeSelectOptions(sz)}</select>
           </label>
           <label class="team-assign-field">
             <span class="meta">Старт работы</span>
@@ -959,9 +964,9 @@ function editorHtml(item: WorkItem | null): string {
             </div>
           </div>
           <div class="field">
-            <label>Команды: оценка и дата старта (отдельно по каждой)</label>
+            <label>Команды: майка и дата старта (отдельно по каждой)</label>
             <div class="team-assign-list" id="teamAssignList">${teamRows}</div>
-            <div class="meta" style="margin-top:6px">Итого объём: <strong class="mono" id="liveTotalEst">${totalEstimate(draft)}</strong> чел·нед. Дата старта — не раньше этой; если очередь команды занята, старт сдвинется позже.</div>
+            <div class="meta" style="margin-top:6px">S — 5–10 дн., M — 10–20 дн., L — 20–40 дн. Итого ~<strong class="mono" id="liveTotalEst">${totalEstimateDays(draft)}</strong> дн. Старт — не раньше указанной даты; если очередь занята, сдвинется позже.</div>
           </div>
           <div class="callout" style="margin:0" id="liveEtaBox">
             <strong>Пересчёт ETA</strong> (с учётом очереди и стартов)
@@ -1009,13 +1014,11 @@ function previewScheduleFor(draft: WorkItem): ItemSchedule | null {
 }
 
 /** ETA from plan+estimate only (no other backlog items stealing capacity) */
-function planOnlyEnd(a: TeamAssignment): { start: string; end: string; weeks: number } {
-  const team = teamById(a.teamId);
-  const cap = team?.capacityPw || 1;
-  const weeks = Math.round((a.estimatePw / cap) * 100) / 100;
+function planOnlyEnd(a: TeamAssignment): { start: string; end: string; days: number } {
+  const days = sizePlanDays(a.size);
   const start = snapToMonday(a.workStartDate || state.startDate);
-  const end = addDays(start, weeks * 7);
-  return { start, end, weeks };
+  const end = addDays(start, days);
+  return { start, end, days };
 }
 
 function formatLiveEtaHtml(
@@ -1044,7 +1047,7 @@ function formatLiveEtaHtml(
       const soloNote = solo
         ? `<div class="meta" style="margin-left:0;margin-top:2px">от вашей даты старта без чужой очереди: ${formatDate(solo.start)} → <span class="mono">${formatDate(solo.end)}</span></div>`
         : "";
-      return `<div style="margin-bottom:8px"><strong>${escapeHtml(t?.name ?? s.teamId)}</strong>: <span class="mono">${formatDate(s.startDate)} → ${formatDate(s.endDate)}</span> <span class="meta">(${s.estimatePw} чел·нед ≈ ${s.durationWeeks} нед.)</span>${shiftNote}${crit}${soloNote}</div>`;
+      return `<div style="margin-bottom:8px"><strong>${escapeHtml(t?.name ?? s.teamId)}</strong>: <span class="mono">${formatDate(s.startDate)} → ${formatDate(s.endDate)}</span> <span class="meta">(${s.size} · ~${s.durationDays} дн.)</span>${shiftNote}${crit}${soloNote}</div>`;
     })
     .join("");
 
@@ -1316,17 +1319,17 @@ function readAssignments(): TeamAssignment[] {
   for (const check of checks) {
     if (!check.checked) continue;
     const teamId = check.dataset.team!;
-    const estInput = document.querySelector<HTMLInputElement>(
-      `.f_team_est[data-team="${teamId}"]`
+    const sizeInput = document.querySelector<HTMLSelectElement>(
+      `.f_team_size[data-team="${teamId}"]`
     );
     const startInput = document.querySelector<HTMLInputElement>(
       `.f_team_start[data-team="${teamId}"]`
     );
-    const estimatePw = Math.max(0.5, Number(estInput?.value) || 1);
+    const size = parseSize(sizeInput?.value);
     const workStartDate = snapToMonday(
       startInput?.value || state.startDate
     );
-    assignments.push({ teamId, estimatePw, workStartDate });
+    assignments.push({ teamId, size, workStartDate });
   }
   return assignments;
 }
@@ -1337,7 +1340,7 @@ function refreshLiveEta() {
   const assignments = readAssignments();
   if (liveEst) {
     liveEst.textContent = String(
-      assignments.reduce((s, a) => s + a.estimatePw, 0) || 0
+      assignments.reduce((s, a) => s + sizePlanDays(a.size), 0) || 0
     );
   }
   if (!liveEta) return;
@@ -1586,13 +1589,13 @@ function bind() {
   document.querySelectorAll<HTMLInputElement>(".f_team_check").forEach((check) => {
     check.addEventListener("change", () => {
       const teamId = check.dataset.team!;
-      const est = document.querySelector<HTMLInputElement>(
-        `.f_team_est[data-team="${teamId}"]`
+      const size = document.querySelector<HTMLSelectElement>(
+        `.f_team_size[data-team="${teamId}"]`
       );
       const start = document.querySelector<HTMLInputElement>(
         `.f_team_start[data-team="${teamId}"]`
       );
-      if (est) est.disabled = !check.checked;
+      if (size) size.disabled = !check.checked;
       if (start) start.disabled = !check.checked;
       refreshLiveEta();
     });
@@ -1604,7 +1607,7 @@ function bind() {
     const el = e.target as HTMLElement | null;
     if (!el) return;
     if (
-      el.classList.contains("f_team_est") ||
+      el.classList.contains("f_team_size") ||
       el.classList.contains("f_team_start") ||
       el.classList.contains("f_team_check")
     ) {
@@ -1706,19 +1709,6 @@ function bind() {
       if (!draft) return;
       live.textContent = String(wsjf({ ...draft, id: "x", manualRank: null }));
     });
-  });
-
-  document.querySelectorAll<HTMLInputElement>("[data-cap]").forEach((input) => {
-    input.addEventListener("input", () => {
-      const id = input.dataset.cap!;
-      const team = state.teams.find((t) => t.id === id);
-      if (!team) return;
-      team.capacityPw = Number(input.value);
-      saveState(state);
-      const label = document.querySelector(`[data-cap-label="${id}"]`);
-      if (label) label.textContent = `${team.capacityPw} чел·нед`;
-    });
-    input.addEventListener("change", () => render());
   });
 
   const ganttWeeks = document.querySelector<HTMLInputElement>("#ganttWeeks");
