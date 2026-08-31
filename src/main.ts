@@ -1025,14 +1025,16 @@ function timelineHtml(
         <h2>Сроки и зависимости по приоритету</h2>
         <div class="gantt-weeks-ctrl">
           ${showTeamLoadToggleHtml()}
-          <label for="ganttWeeks">Горизонт</label>
-          <input id="ganttWeeks" type="range" min="4" max="52" step="1" value="${weeks}" />
-          <span class="mono" id="ganttWeeksLabel">${weeks} нед.</span>
-          ${
-            needed > weeks
-              ? `<span class="meta">часть работ за горизонтом (нужно ~${needed})</span>`
-              : ""
-          }
+          <div class="gantt-weeks-ctrl-right">
+            <label for="ganttWeeks">Горизонт</label>
+            <input id="ganttWeeks" type="range" min="4" max="52" step="1" value="${weeks}" />
+            <span class="mono" id="ganttWeeksLabel">${weeks} нед.</span>
+            ${
+              needed > weeks
+                ? `<span class="meta">часть работ за горизонтом (нужно ~${needed})</span>`
+                : ""
+            }
+          </div>
         </div>
       </div>
       <div class="timeline">

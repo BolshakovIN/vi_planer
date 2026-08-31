@@ -1439,23 +1439,31 @@ body.prio-dragging {
 
 .gantt-weeks-ctrl {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  width: 100%;
+  flex-basis: 100%;
   font-size: 13px;
   color: var(--muted);
 }
 
-.gantt-weeks-ctrl label {
+.gantt-weeks-ctrl-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gantt-weeks-ctrl-right label {
   font-weight: 600;
   color: var(--ink);
 }
 
-.gantt-weeks-ctrl input[type="range"] {
+.gantt-weeks-ctrl-right input[type="range"] {
   width: min(220px, 40vw);
 }
 
-.gantt-weeks-ctrl .mono {
+.gantt-weeks-ctrl-right .mono {
   min-width: 58px;
   font-weight: 600;
   color: var(--accent);
