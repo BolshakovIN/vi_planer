@@ -755,8 +755,13 @@ function teamsHtml(
 }
 
 /** Test view: portfolio priority + when the team can pick up the task */
-function queuesTestHtml(slices: ScheduledSlice[]): string {
+function queuesTestHtml(
+  slices: ScheduledSlice[],
+  load: Record<string, TeamLoadWeek[]>,
+  overflowByTeam: Record<string, Set<number>>
+): string {
   const planStart = state.startDate;
+  const horizon = 12;
   const cards = state.teams
     .map((team) => {
       const queue = slices
@@ -839,6 +844,19 @@ function queuesTestHtml(slices: ScheduledSlice[]): string {
               по приоритету<br/>портфеля
             </div>
           </div>
+          ${
+            ui.showTeamLoad
+              ? `<div class="cap-strip-wrap">
+            <div class="cap-strip-label meta">Загрузка по неделям (эксп.)</div>
+            ${teamCapacityStripHtml(
+              team,
+              load[team.id] ?? [],
+              overflowByTeam[team.id] ?? new Set(),
+              horizon
+            )}
+          </div>`
+              : ""
+          }
           ${items}
         </div>
       `;
@@ -854,6 +872,7 @@ function queuesTestHtml(slices: ScheduledSlice[]): string {
     <div class="panel">
       <div class="panel-header">
         <h2>Очереди (тест) — когда команда может взять задачу</h2>
+        ${showTeamLoadToggleHtml()}
       </div>
       ${cards}
     </div>
@@ -1766,7 +1785,7 @@ function render() {
           : ui.tab === "teams"
             ? teamsHtml(slices, load, overflowByTeam)
             : ui.tab === "queuesTest"
-              ? queuesTestHtml(slices)
+              ? queuesTestHtml(slices, load, overflowByTeam)
               : ui.tab === "timeline"
                 ? timelineHtml(rollups, slices, load, overflowByTeam)
                 : ui.tab === "settings"
