@@ -187,6 +187,53 @@ export interface TeamLoadWeek {
   items: string[];
 }
 
+/** Scheduled week load exceeds team capacity (should not happen after queue merge). */
+export function isTeamWeekOverloaded(lw: TeamLoadWeek): boolean {
+  return lw.usedPw > lw.capacityPw + 0.001;
+}
+
+export function utilizationPct(usedPw: number, capacityPw: number): number {
+  if (capacityPw <= 0) return usedPw > 0 ? 100 : 0;
+  return Math.round((usedPw / capacityPw) * 100);
+}
+
+/**
+ * Weeks where parallel planned work (each assignment from its workStartDate)
+ * would exceed team capacity before the queue merges slots.
+ */
+export function concurrentOverloadWeeks(
+  state: AppState,
+  maxWeeks = 52
+): Record<string, Set<number>> {
+  const ranges = state.sizeRanges ?? DEFAULT_SIZE_RANGES;
+  const result: Record<string, Set<number>> = {};
+
+  for (const team of state.teams) {
+    const used = Array.from({ length: maxWeeks }, () => 0);
+    for (const item of state.items) {
+      if (item.status === "done") continue;
+      for (const a of item.assignments) {
+        if (a.teamId !== team.id) continue;
+        const pw = sizePlanWeeks(a.size, ranges);
+        let rem = pw;
+        let w = weekIndex(state.startDate, a.workStartDate);
+        while (rem > 0.001 && w < maxWeeks) {
+          const take = Math.min(team.capacityPw, rem);
+          used[w] += take;
+          rem -= take;
+          w += 1;
+        }
+      }
+    }
+    const overloaded = new Set<number>();
+    used.forEach((pw, w) => {
+      if (pw > team.capacityPw + 0.001) overloaded.add(w);
+    });
+    result[team.id] = overloaded;
+  }
+  return result;
+}
+
 export function wsjf(item: WorkItem): number {
   const costOfDelay =
     item.businessValue + item.timeCriticality + item.riskReduction;

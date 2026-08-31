@@ -1458,6 +1458,118 @@ body.prio-dragging {
   overflow: hidden;
 }
 
+/* Experimental per-week team capacity strips */
+.cap-strip-wrap {
+  margin: 8px 0 10px;
+}
+
+.cap-strip-label {
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+
+.cap-strip {
+  display: flex;
+  height: 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.cap-cell {
+  position: relative;
+  box-sizing: border-box;
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+}
+
+.cap-cell:last-child {
+  border-right: none;
+}
+
+.cap-cell > span {
+  display: block;
+  width: 100%;
+  background: color-mix(in srgb, var(--team-color, var(--accent)) 55%, transparent);
+  border-radius: 2px 2px 0 0;
+  min-height: 2px;
+}
+
+.cap-cell-full {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.cap-cell-full > span {
+  background: color-mix(in srgb, var(--team-color, #f59e0b) 75%, #f59e0b);
+}
+
+.cap-cell-overflow {
+  background: rgba(220, 38, 38, 0.18);
+}
+
+.cap-cell-overflow > span {
+  background: #dc2626;
+}
+
+.gantt-axis-tick-overflow {
+  background: rgba(220, 38, 38, 0.12);
+}
+
+.gantt-axis-tick-overflow .gantt-axis-w {
+  color: #b91c1c;
+}
+
+.gantt-capacity-block {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
+.gantt-capacity-head {
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+
+.gantt-capacity-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gantt-cap-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.gantt-cap-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 0;
+}
+
+.cap-overflow-badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #b91c1c;
+  background: rgba(220, 38, 38, 0.12);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.gantt-cap-row .cap-strip {
+  height: 16px;
+}
+
 .callout {
   background: var(--surface-2);
   border: 1px solid var(--neutral-border);

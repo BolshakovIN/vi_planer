@@ -31,6 +31,11 @@ import {
   nextPriority,
   moveItemToPriority,
   reorderVisiblePriority,
+  TeamLoadWeek,
+  Team,
+  concurrentOverloadWeeks,
+  isTeamWeekOverloaded,
+  utilizationPct,
 } from "./model";
 import { SEED } from "./seed";
 import {
@@ -94,6 +99,34 @@ function szRanges(): SizeRanges {
 
 function teamById(id: string) {
   return state.teams.find((t) => t.id === id);
+}
+
+function teamCapacityStripHtml(
+  team: Team,
+  loadWeeks: TeamLoadWeek[],
+  overflowWeeks: Set<number>,
+  horizonWeeks: number
+): string {
+  const weekPct = 100 / horizonWeeks;
+  const cells = Array.from({ length: horizonWeeks }, (_, w) => {
+    const lw = loadWeeks[w];
+    const used = lw?.usedPw ?? 0;
+    const cap = team.capacityPw;
+    const pct = utilizationPct(used, cap);
+    const isOverflow =
+      overflowWeeks.has(w) || (lw != null && isTeamWeekOverloaded(lw));
+    const cls = [
+      "cap-cell",
+      isOverflow ? "cap-cell-overflow" : pct >= 99 ? "cap-cell-full" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const title = `Н${w + 1}: ${used.toFixed(1)}/${cap} чел·нед${
+      isOverflow ? " · превышение" : ""
+    }`;
+    return `<div class="${cls}" style="width:${weekPct}%" title="${escapeAttr(title)}"><span style="height:${Math.min(100, pct)}%"></span></div>`;
+  }).join("");
+  return `<div class="cap-strip" style="--team-color:${team.color}">${cells}</div>`;
 }
 
 function statusLabel(s: ItemStatus): string {
@@ -610,7 +643,12 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
   `;
 }
 
-function teamsHtml(slices: ScheduledSlice[]): string {
+function teamsHtml(
+  slices: ScheduledSlice[],
+  load: Record<string, TeamLoadWeek[]>,
+  overflowByTeam: Record<string, Set<number>>
+): string {
+  const horizon = 12;
   const cards = state.teams
     .map((team) => {
       const queue = slices
@@ -646,6 +684,15 @@ function teamsHtml(slices: ScheduledSlice[]): string {
             <div class="mono" style="font-weight:700">${util8}% / 8 нед.</div>
           </div>
           <div class="bar"><span style="width:${Math.min(100, util8)}%;background:${team.color}"></span></div>
+          <div class="cap-strip-wrap">
+            <div class="cap-strip-label meta">Загрузка по неделям (эксп.)</div>
+            ${teamCapacityStripHtml(
+              team,
+              load[team.id] ?? [],
+              overflowByTeam[team.id] ?? new Set(),
+              horizon
+            )}
+          </div>
           ${queue
             .map((s) => {
               const others = s.item.assignments.length - 1;
@@ -784,7 +831,12 @@ function queuesTestHtml(slices: ScheduledSlice[]): string {
   `;
 }
 
-function timelineHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string {
+function timelineHtml(
+  rollups: ItemSchedule[],
+  slices: ScheduledSlice[],
+  load: Record<string, TeamLoadWeek[]>,
+  overflowByTeam: Record<string, Set<number>>
+): string {
   const needed = Math.max(4, ...rollups.map((s) => s.endWeek + 2), 4);
   const weeks = Math.max(4, Math.min(52, Math.round(ui.ganttWeeks) || 16));
   ui.ganttWeeks = weeks;
@@ -885,18 +937,38 @@ function timelineHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string
 
   const tickStep =
     weeks <= 12 ? 1 : weeks <= 24 ? 2 : weeks <= 36 ? 3 : 4;
+  const anyOverflowWeek = (w: number) =>
+    state.teams.some((t) => overflowByTeam[t.id]?.has(w));
+
   const axisTicks = Array.from({ length: weeks }, (_, w) => {
     const show = w % tickStep === 0 || w === weeks - 1;
+    const overflowCls = anyOverflowWeek(w) ? " gantt-axis-tick-overflow" : "";
     if (!show) {
-      return `<div class="gantt-axis-tick gantt-axis-tick-empty" style="width:${weekPct}%"></div>`;
+      return `<div class="gantt-axis-tick gantt-axis-tick-empty${overflowCls}" style="width:${weekPct}%"></div>`;
     }
     const monday = addWeeks(state.startDate, w);
     const [, m, d] = monday.split("-");
-    return `<div class="gantt-axis-tick" style="width:${weekPct}%">
+    return `<div class="gantt-axis-tick${overflowCls}" style="width:${weekPct}%">
       <span class="gantt-axis-w">Н${w + 1}</span>
       <span class="gantt-axis-d">${d}.${m}</span>
     </div>`;
   }).join("");
+
+  const capacityRows = state.teams
+    .map((team) => {
+      const teamOverflow = overflowByTeam[team.id] ?? new Set();
+      const hasOverflow = [...teamOverflow].some((w) => w < weeks);
+      return `
+        <div class="gantt-cap-row">
+          <div class="gantt-cap-label">
+            <span class="team-dot" style="background:${team.color}"></span>
+            ${escapeHtml(team.name)}
+            ${hasOverflow ? '<span class="cap-overflow-badge">перегруз</span>' : ""}
+          </div>
+          ${teamCapacityStripHtml(team, load[team.id] ?? [], teamOverflow, weeks)}
+        </div>`;
+    })
+    .join("");
 
   return `
     <div class="panel">
@@ -934,12 +1006,16 @@ function timelineHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string
               </svg>
               ${tracks.join("")}
             </div>
+            <div class="gantt-capacity-block">
+              <div class="gantt-capacity-head meta">Загрузка команд (эксперимент) — оранжевый/красный = перегруз по плановым стартам</div>
+              <div class="gantt-capacity-rows">${capacityRows}</div>
+            </div>
           </div>
         </div>`
             : `<div class="empty">Нет активных инициатив</div>`
         }
       </div>
-      <p class="footer-note" style="padding:0 16px 16px;margin:0">Шкала — недели от старта планирования (понедельник). Стрелки — зависимости очереди команды. ETA инициативы = конец bottleneck-полоски.</p>
+      <p class="footer-note" style="padding:0 16px 16px;margin:0">Шкала — недели от старта планирования (понедельник). Стрелки — зависимости очереди команды. ETA инициативы = конец bottleneck-полоски. Красная подсветка — плановый спрос команды в неделю выше ёмкости (очередь сдвигает старт).</p>
     </div>
   `;
 }
@@ -1602,7 +1678,8 @@ function render() {
   closePrioPop();
   closeResetPop();
   closeColPickerOutside();
-  const { slices, rollups } = schedulePortfolio(state);
+  const { slices, rollups, load } = schedulePortfolio(state);
+  const overflowByTeam = concurrentOverloadWeeks(state);
   const root = document.querySelector("#app");
   if (!root) return;
 
@@ -1648,11 +1725,11 @@ function render() {
         ui.tab === "portfolio"
           ? portfolioHtml(rollups, slices)
           : ui.tab === "teams"
-            ? teamsHtml(slices)
+            ? teamsHtml(slices, load, overflowByTeam)
             : ui.tab === "queuesTest"
               ? queuesTestHtml(slices)
               : ui.tab === "timeline"
-                ? timelineHtml(rollups, slices)
+                ? timelineHtml(rollups, slices, load, overflowByTeam)
                 : ui.tab === "settings"
                   ? settingsHtml(rollups)
                   : capacityHtml()
