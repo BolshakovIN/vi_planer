@@ -500,7 +500,7 @@ function teamsHtml(slices: ScheduledSlice[]): string {
           <div class="team-card-head">
             <div>
               <h3><span class="team-dot" style="background:${team.color}"></span>${escapeHtml(team.name)}</h3>
-              <div class="meta">${queue.length} задач · ~${demandDays} дн. · ~${weeksToClear} нед. до очистки</div>
+              <div class="meta">${queue.length} задач · ~${demandDays} дн. · ёмк. ${team.capacity}/нед · ~${weeksToClear} нед. до очистки</div>
             </div>
             <div class="mono" style="font-weight:700">${util8}% / 8 нед.</div>
           </div>
@@ -615,7 +615,7 @@ function queuesTestHtml(slices: ScheduledSlice[]): string {
           <div class="team-card-head">
             <div>
               <h3><span class="team-dot" style="background:${team.color}"></span>${escapeHtml(team.name)}</h3>
-              <div class="meta">${queue.length} задач · ~${demandDays} дн. · ~${weeksToClear} нед. до очистки</div>
+              <div class="meta">${queue.length} задач · ~${demandDays} дн. · ёмк. ${team.capacity}/нед · ~${weeksToClear} нед. до очистки</div>
               <div class="take-free">Очередь закрывается / слот после всего: <strong>${formatDate(freeFrom)}</strong></div>
             </div>
             <div class="mono" style="font-weight:600;text-align:right;font-size:12px;color:var(--muted)">
@@ -964,6 +964,19 @@ function capacityHtml(): string {
           value="${escapeAttr(t.name)}"
           aria-label="Название команды"
         />
+        <label class="team-capacity-field">
+          <span class="meta">Ёмкость / нед.</span>
+          <select class="team-capacity-select" data-team-capacity="${t.id}" aria-label="Ёмкость команды">
+            ${sizeSelectOptions(t.capacity)}
+          </select>
+        </label>
+        <button
+          type="button"
+          class="btn btn-ghost team-delete-btn"
+          data-team-delete="${t.id}"
+          title="Удалить команду"
+          ${state.teams.length <= 1 ? "disabled" : ""}
+        >Удалить</button>
       </div>
     `
     )
@@ -971,7 +984,8 @@ function capacityHtml(): string {
 
   return `
     <div class="callout">
-      Управляйте командами: название и цвет. Оценки задаются майками S / M / L (5–10 / 10–20 / 20–40 календарных дней).
+      <strong>Ёмкость</strong> — сколько работы команда тянет в неделю, в майках (${sizeRangesSummary(szRanges())}).
+      Чем крупнее майка, тем быстрее закрывается очередь. Оценки инициатив задаются отдельно по каждой команде.
     </div>
     <div class="panel">
       <div class="panel-header">
@@ -1210,37 +1224,47 @@ function escapeAttr(s: string): string {
   return escapeHtml(s).replaceAll("'", "&#39;");
 }
 
-function closePrioPop() {
-  document.querySelectorAll(".prio-input.prio-ask, #f_rank.prio-ask").forEach((el) => {
-    el.classList.remove("prio-ask");
+function closeAppPop() {
+  document
+    .querySelectorAll(".prio-input.prio-ask, #f_rank.prio-ask")
+    .forEach((el) => {
+      el.classList.remove("prio-ask");
+    });
+  document.querySelectorAll(".confirm-ask").forEach((el) => {
+    el.classList.remove("confirm-ask");
   });
-  document.querySelector("#prioPop")?.remove();
+  document.querySelector("#appConfirmPop")?.remove();
 }
 
-function prioConfirmHtml(textHtml: string): string {
+function closePrioPop() {
+  closeAppPop();
+}
+
+function confirmPopHtml(textHtml: string): string {
   return `
     <div class="prio-confirm-text">${textHtml}</div>
     <div class="prio-confirm-actions">
-      <button type="button" class="btn" data-prio-no>Нет</button>
-      <button type="button" class="btn btn-primary" data-prio-yes>Да</button>
+      <button type="button" class="btn" data-confirm-no>Нет</button>
+      <button type="button" class="btn btn-primary" data-confirm-yes>Да</button>
     </div>
   `;
 }
 
-function askPrioConfirm(
+function askAppConfirm(
   anchor: HTMLElement,
   textHtml: string,
   onYes: () => void,
-  onNo: () => void
+  onNo: () => void = () => undefined,
+  opts?: { anchorClass?: string; wide?: boolean }
 ) {
-  closePrioPop();
-  anchor.classList.add("prio-ask");
+  closeAppPop();
+  anchor.classList.add(opts?.anchorClass ?? "confirm-ask");
 
   const pop = document.createElement("div");
-  pop.id = "prioPop";
-  pop.className = "prio-confirm prio-confirm-float";
+  pop.id = "appConfirmPop";
+  pop.className = `prio-confirm prio-confirm-float${opts?.wide ? " prio-confirm-wide" : ""}`;
   pop.setAttribute("data-stop-edit", "");
-  pop.innerHTML = prioConfirmHtml(textHtml);
+  pop.innerHTML = confirmPopHtml(textHtml);
   document.body.appendChild(pop);
 
   const place = () => {
@@ -1269,12 +1293,12 @@ function askPrioConfirm(
 
   const finishNo = () => {
     cleanup();
-    closePrioPop();
+    closeAppPop();
     onNo();
   };
   const finishYes = () => {
     cleanup();
-    closePrioPop();
+    closeAppPop();
     onYes();
   };
 
@@ -1285,14 +1309,65 @@ function askPrioConfirm(
   };
   document.addEventListener("mousedown", onDoc, true);
 
-  pop.querySelector("[data-prio-yes]")?.addEventListener("click", (e) => {
+  pop.querySelector("[data-confirm-yes]")?.addEventListener("click", (e) => {
     e.stopPropagation();
     finishYes();
   });
-  pop.querySelector("[data-prio-no]")?.addEventListener("click", (e) => {
+  pop.querySelector("[data-confirm-no]")?.addEventListener("click", (e) => {
     e.stopPropagation();
     finishNo();
   });
+}
+
+function countTeamUsage(teamId: string): number {
+  return state.items.filter((i) =>
+    i.assignments.some((a) => a.teamId === teamId)
+  ).length;
+}
+
+function removeTeam(teamId: string) {
+  state.teams = state.teams.filter((t) => t.id !== teamId);
+  state.items = state.items
+    .map((item) => ({
+      ...item,
+      assignments: item.assignments.filter((a) => a.teamId !== teamId),
+    }))
+    .filter((item) => item.assignments.length > 0);
+  if (ui.teamFilter === teamId) ui.teamFilter = "all";
+  persist();
+}
+
+function confirmDeleteTeam(teamId: string, anchor: HTMLElement) {
+  const team = teamById(teamId);
+  if (!team) return;
+  if (state.teams.length <= 1) {
+    askAppConfirm(
+      anchor,
+      "Нельзя удалить последнюю команду.",
+      () => undefined,
+      () => undefined,
+      { wide: true }
+    );
+    return;
+  }
+  const n = countTeamUsage(teamId);
+  const cap = sizeLabel(team.capacity, szRanges());
+  const text =
+    n > 0
+      ? `Удалить «<strong>${escapeHtml(team.name)}</strong>» (${cap}/нед)?<br/>Снимется с <span class="accent">${n}</span> инициатив. Карточки без команд тоже удалятся.`
+      : `Удалить «<strong>${escapeHtml(team.name)}</strong>» (${cap}/нед)?`;
+  askAppConfirm(anchor, text, () => removeTeam(teamId), () => undefined, {
+    wide: true,
+  });
+}
+
+function askPrioConfirm(
+  anchor: HTMLElement,
+  textHtml: string,
+  onYes: () => void,
+  onNo: () => void
+) {
+  askAppConfirm(anchor, textHtml, onYes, onNo, { anchorClass: "prio-ask" });
 }
 
 /** Row drag only when sorted by priority — other sorts never rewrite ranks */
@@ -1649,7 +1724,7 @@ function bind() {
       const t = e.target as HTMLElement;
       if (
         t.closest(
-          "[data-stop-edit], .prio-input, .prio-edit, #prioPop, .drag-handle"
+          "[data-stop-edit], .prio-input, .prio-edit, #appConfirmPop, .drag-handle"
         )
       )
         return;
@@ -1890,6 +1965,28 @@ function bind() {
     });
   });
 
+  document.querySelectorAll<HTMLSelectElement>("[data-team-capacity]").forEach(
+    (select) => {
+      select.addEventListener("change", () => {
+        const id = select.dataset.teamCapacity!;
+        const team = state.teams.find((t) => t.id === id);
+        if (!team) return;
+        team.capacity = parseSize(select.value);
+        persist();
+      });
+    }
+  );
+
+  document.querySelectorAll<HTMLButtonElement>("[data-team-delete]").forEach(
+    (btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.teamDelete!;
+        confirmDeleteTeam(id, btn);
+      });
+    }
+  );
+
   document.querySelector("#addTeam")?.addEventListener("click", () => {
     const bar = document.querySelector<HTMLElement>("#teamAddBar");
     const nameInput = document.querySelector<HTMLInputElement>("#newTeamName");
@@ -1916,7 +2013,7 @@ function bind() {
     state.teams.push({
       id: uid("team"),
       name,
-      capacityPw: 3,
+      capacity: "M",
       color: nextTeamColor(),
     });
     persist();

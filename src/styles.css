@@ -1506,32 +1506,71 @@ body.prio-dragging {
 }
 
 .capacity-row {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: auto minmax(140px, 1fr) minmax(150px, 200px) auto;
   gap: 10px;
+  align-items: end;
   font-size: 13px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
+}
+
+.team-capacity-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.team-capacity-select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #fff;
+}
+
+.team-capacity-select:focus {
+  outline: none;
+  border-color: var(--neutral);
+  box-shadow: 0 0 0 3px var(--neutral-soft);
+}
+
+.team-delete-btn {
+  color: var(--bad);
+  padding: 7px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.team-delete-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.confirm-ask {
+  box-shadow: 0 0 0 3px var(--neutral-soft);
+}
+
+.prio-confirm-wide {
+  width: min(280px, calc(100vw - 24px));
+}
+
+.prio-confirm-actions .btn.btn-primary {
+  min-width: 52px;
 }
 
 .capacity-row:last-child {
   border-bottom: none;
 }
 
-.capacity-row input[type="range"] {
-  flex: 1;
-  min-width: 120px;
-}
-
-.capacity-label {
-  min-width: 78px;
-  text-align: right;
-}
-
 .team-name-input {
-  min-width: 160px;
-  max-width: 240px;
-  flex: 0 1 220px;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  flex: unset;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 7px 10px;
@@ -1566,18 +1605,12 @@ body.prio-dragging {
 
 @media (max-width: 720px) {
   .capacity-row {
-    flex-wrap: wrap;
+    grid-template-columns: auto 1fr;
   }
 
-  .capacity-row input[type="range"] {
-    width: 100%;
-    flex: 1 1 100%;
-    order: 3;
-  }
-
-  .capacity-label {
-    order: 2;
-    margin-left: auto;
+  .team-capacity-field,
+  .team-delete-btn {
+    grid-column: 1 / -1;
   }
 }
 

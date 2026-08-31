@@ -71,11 +71,18 @@ export function pwToSize(estimatePw: number, capacityPw = 3): TShirtSize {
   return "L";
 }
 
+/** Legacy person-week capacity → t-shirt weekly throughput */
+export function pwToCapacitySize(capacityPw: number): TShirtSize {
+  if (capacityPw <= 2.5) return "S";
+  if (capacityPw <= 4) return "M";
+  return "L";
+}
+
 export interface Team {
   id: string;
   name: string;
-  /** Available person-weeks per calendar week */
-  capacityPw: number;
+  /** Weekly throughput expressed as a t-shirt size (days/week from sizeRanges) */
+  capacity: TShirtSize;
   color: string;
 }
 
@@ -164,8 +171,8 @@ export interface ItemSchedule {
 export interface TeamLoadWeek {
   week: number;
   weekStart: string;
-  usedPw: number;
-  capacityPw: number;
+  usedDays: number;
+  capacityDays: number;
   items: string[];
 }
 
@@ -394,10 +401,6 @@ export function ensureUniquePriorities(
   });
 }
 
-export function maxDate(a: string, b: string): string {
-  return a >= b ? a : b;
-}
-
 /**
  * Schedule each team's work independently by shared priority field.
  * Duration from t-shirt size (calendar days); tasks run sequentially per team.
@@ -436,30 +439,56 @@ export function schedulePortfolio(state: AppState): {
 
   for (const team of state.teams) {
     const queue = byTeam.get(team.id) ?? [];
+    const weekCap = sizePlanDays(team.capacity, ranges);
     const weeks: TeamLoadWeek[] = Array.from({ length: maxWeeks }, (_, w) => ({
       week: w,
       weekStart: addWeeks(state.startDate, w),
-      usedPw: 0,
-      capacityPw: team.capacityPw,
+      usedDays: 0,
+      capacityDays: weekCap,
       items: [],
     }));
 
-    let cursorDate = state.startDate;
+    let cursor = 0;
     queue.forEach((entry, idx) => {
-      const durationDays = sizePlanDays(entry.size, ranges);
-      const plannedStartDate = entry.workStartDate;
-      const startDate = maxDate(cursorDate, plannedStartDate);
-      const endDate = addDays(startDate, durationDays);
-      const startWeek = weekIndex(state.startDate, startDate);
-      const endWeek = weekIndex(state.startDate, endDate);
-      const durationWeeks = Math.round((durationDays / 7) * 100) / 100;
+      const effortDays = sizePlanDays(entry.size, ranges);
+      const plannedWeek = weekIndex(state.startDate, entry.workStartDate);
+      let startWeek = Math.max(cursor, plannedWeek);
 
-      for (let w = startWeek; w <= Math.min(endWeek, maxWeeks - 1); w++) {
-        const slot = weeks[w];
-        if (slot && !slot.items.includes(entry.item.id)) {
+      while (
+        startWeek < maxWeeks &&
+        weeks[startWeek].usedDays >= weekCap - 0.001
+      ) {
+        startWeek += 1;
+      }
+
+      let remaining = effortDays;
+      let endWeek = startWeek;
+      let endDate = addWeeks(state.startDate, startWeek);
+      const startDate = addWeeks(state.startDate, startWeek);
+
+      while (remaining > 0.001 && endWeek < maxWeeks) {
+        const slot = weeks[endWeek];
+        const free = Math.max(0, weekCap - slot.usedDays);
+        if (free <= 0.001) {
+          endWeek += 1;
+          continue;
+        }
+        const take = Math.min(free, remaining);
+        const weekStart = addWeeks(state.startDate, endWeek);
+        const daysUsed = (take / weekCap) * 7;
+        const offsetInWeek = (slot.usedDays / weekCap) * 7;
+        endDate = addDays(weekStart, offsetInWeek + daysUsed);
+
+        slot.usedDays += take;
+        if (!slot.items.includes(entry.item.id)) {
           slot.items.push(entry.item.id);
         }
+        remaining -= take;
+        if (remaining > 0.001) endWeek += 1;
       }
+
+      const durationDays = effortDays;
+      const durationWeeks = Math.round((durationDays / 7) * 100) / 100;
 
       slices.push({
         item: entry.item,
@@ -467,18 +496,23 @@ export function schedulePortfolio(state: AppState): {
         size: entry.size,
         wsjf: wsjf(entry.item),
         effectiveRank: idx + 1,
-        plannedStartDate,
+        plannedStartDate: entry.workStartDate,
         startWeek,
         endWeek,
         startDate,
         endDate,
         waitWeeks: startWeek,
-        delayedByQueue: startDate > plannedStartDate,
+        delayedByQueue: startWeek > plannedWeek,
         durationDays,
         durationWeeks,
       });
 
-      cursorDate = endDate;
+      cursor = endWeek;
+      if (weeks[cursor] && weeks[cursor].usedDays >= weekCap - 0.001) {
+        cursor = endWeek + 1;
+      } else {
+        cursor = endWeek;
+      }
     });
 
     load[team.id] = weeks;
@@ -538,8 +572,19 @@ export function normalizeState(raw: unknown): AppState | null {
   if (!Array.isArray(data.teams) || !Array.isArray(data.items)) return null;
 
   const planStart = snapToMonday(String(data.startDate ?? mondayOf()));
-  const teams = data.teams as Team[];
-  const teamCap = new Map(teams.map((t) => [t.id, t.capacityPw]));
+  const teams: Team[] = (data.teams as unknown[]).map((row) => {
+    const t = row as Record<string, unknown>;
+    return {
+      id: String(t.id ?? uid("team")),
+      name: String(t.name ?? "Команда"),
+      color: String(t.color ?? "#737373"),
+      capacity:
+        t.capacity != null
+          ? parseSize(t.capacity)
+          : pwToCapacitySize(Number(t.capacityPw) || 3),
+    };
+  });
+  const teamCap = new Map(teams.map((t) => [t.id, t.capacity]));
 
   const items: WorkItem[] = data.items.map((row) => {
     const r = row as Record<string, unknown>;
@@ -549,11 +594,11 @@ export function normalizeState(raw: unknown): AppState | null {
         .filter((a) => a && typeof a.teamId === "string")
         .map((a) => {
           const teamId = String(a.teamId);
-          const cap = teamCap.get(teamId) ?? 3;
+          const cap = teamCap.get(teamId) ?? "M";
           const size =
             a.size != null
               ? parseSize(a.size)
-              : pwToSize(Number(a.estimatePw) || 1, cap);
+              : pwToSize(Number(a.estimatePw) || 1, cap === "S" ? 2 : cap === "M" ? 3.5 : 5);
           return {
             teamId,
             size,
@@ -570,7 +615,14 @@ export function normalizeState(raw: unknown): AppState | null {
       assignments = [
         {
           teamId: r.teamId,
-          size: pwToSize(Number(r.estimatePw) || 1, teamCap.get(r.teamId) ?? 3),
+          size: pwToSize(
+            Number(r.estimatePw) || 1,
+            teamCap.get(r.teamId) === "S"
+              ? 2
+              : teamCap.get(r.teamId) === "L"
+                ? 5
+                : 3.5
+          ),
           workStartDate: planStart,
         },
       ];
