@@ -67,6 +67,8 @@ interface UiState {
   creating: boolean;
   /** Gantt horizon in weeks */
   ganttWeeks: number;
+  hiddenCols: HideablePortfolioCol[];
+  colPickerOpen: boolean;
 }
 
 const ui: UiState = {
@@ -80,6 +82,8 @@ const ui: UiState = {
   editingId: null,
   creating: false,
   ganttWeeks: 16,
+  hiddenCols: [],
+  colPickerOpen: false,
 };
 
 let state: AppState = structuredClone(SEED);
@@ -137,7 +141,9 @@ function teamsCellHtml(item: WorkItem): string {
   const chips = item.assignments
     .map((a) => {
       const t = teamById(a.teamId);
-      return `<span class="team-chip"><span class="team-dot" style="background:${t?.color ?? "#94a3b8"}"></span>${escapeHtml(t?.name ?? a.teamId)} <span class="size-badge mono">${a.size}</span> <span class="mono muted-inline">старт ${formatDate(a.workStartDate)}</span></span>`;
+      const name = t?.name ?? a.teamId;
+      const tip = `${name} ${a.size} · старт ${formatDate(a.workStartDate)}`;
+      return `<span class="team-chip" title="${escapeAttr(tip)}"><span class="team-chip-name"><span class="team-dot" style="background:${t?.color ?? "#94a3b8"}"></span><span class="team-chip-text">${escapeHtml(name)}</span></span><span class="team-chip-estimate"><span class="size-badge mono">${a.size}</span><span class="mono muted-inline">старт ${formatDate(a.workStartDate)}</span></span></span>`;
     })
     .join("");
   return `<div class="teams-stack">${chips}</div>`;
@@ -183,6 +189,7 @@ function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
 }
 
 const COL_WIDTH_KEY = "vi-planer-col-widths";
+const COL_VISIBILITY_KEY = "vi-planer-col-hidden";
 
 type PortfolioCol =
   | "priority"
@@ -193,6 +200,28 @@ type PortfolioCol =
   | "wsjf"
   | "estimate"
   | "eta";
+
+type HideablePortfolioCol = Exclude<PortfolioCol, "priority" | "title">;
+
+const HIDEABLE_PORTFOLIO_COLS: HideablePortfolioCol[] = [
+  "type",
+  "teams",
+  "status",
+  "wsjf",
+  "estimate",
+  "eta",
+];
+
+const ALL_PORTFOLIO_COLS: PortfolioCol[] = [
+  "priority",
+  "type",
+  "title",
+  "teams",
+  "status",
+  "wsjf",
+  "estimate",
+  "eta",
+];
 
 const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
   priority: "Приоритет",
@@ -228,6 +257,48 @@ function loadColWidths(): Partial<Record<PortfolioCol, number>> {
 
 function saveColWidths(widths: Partial<Record<PortfolioCol, number>>) {
   localStorage.setItem(COL_WIDTH_KEY, JSON.stringify(widths));
+}
+
+function resetColWidths() {
+  localStorage.removeItem(COL_WIDTH_KEY);
+}
+
+function loadHiddenCols(): HideablePortfolioCol[] {
+  try {
+    const raw = localStorage.getItem(COL_VISIBILITY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((c): c is HideablePortfolioCol =>
+      HIDEABLE_PORTFOLIO_COLS.includes(c as HideablePortfolioCol),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function saveHiddenCols(hidden: HideablePortfolioCol[]) {
+  localStorage.setItem(COL_VISIBILITY_KEY, JSON.stringify(hidden));
+}
+
+function isColVisible(col: PortfolioCol): boolean {
+  if (col === "priority" || col === "title") return true;
+  return !ui.hiddenCols.includes(col);
+}
+
+function visiblePortfolioColCount(): number {
+  return ALL_PORTFOLIO_COLS.filter(isColVisible).length;
+}
+
+function setColVisible(col: HideablePortfolioCol, visible: boolean) {
+  const next = visible
+    ? ui.hiddenCols.filter((c) => c !== col)
+    : ui.hiddenCols.includes(col)
+      ? ui.hiddenCols
+      : [...ui.hiddenCols, col];
+  ui.hiddenCols = next;
+  saveHiddenCols(next);
+  render();
 }
 
 const colMinWidthCache: Partial<Record<PortfolioCol, number>> = {};
@@ -266,12 +337,13 @@ function resizableTh(
   const sortCls = dataSort
     ? `sortable ${active ? "sorted" : ""}`
     : "";
+  const hiddenCls = isColVisible(col) ? "" : " col-hidden";
   const sortAttr = dataSort ? ` data-sort="${dataSort}"` : "";
   const titleAttr = dataSort ? ` title="Сортировать"` : "";
-  return `<th class="resizable-th ${sortCls} ${extraClass}" data-col="${col}"${sortAttr}${titleAttr} style="${colWidthStyle(col)}"><span class="th-label">${label}${arrow}</span><span class="col-resize" data-col-resize="${col}" title="Изменить ширину"></span></th>`;
+  return `<th class="resizable-th ${sortCls}${hiddenCls} ${extraClass}" data-col="${col}"${sortAttr}${titleAttr} style="${colWidthStyle(col)}"><span class="th-label">${label}${arrow}</span><span class="col-resize" data-col-resize="${col}" title="Изменить ширину"></span></th>`;
 }
 
-function sortHeader(label: string, key: SortKey): string {
+function sortHeader(label: string, key: SortKey, extraClass = ""): string {
   const colMap: Partial<Record<SortKey, PortfolioCol>> = {
     priority: "priority",
     wsjf: "wsjf",
@@ -284,7 +356,59 @@ function sortHeader(label: string, key: SortKey): string {
     const arrow = !active ? "" : ui.sortDir === "asc" ? " ↑" : " ↓";
     return `<th class="sortable ${active ? "sorted" : ""}" data-sort="${key}" title="Сортировать">${label}${arrow}</th>`;
   }
-  return resizableTh(label, col, "", key);
+  return resizableTh(label, col, extraClass, key);
+}
+
+function portfolioColPickerHtml(): string {
+  return `
+    <details class="col-picker" ${ui.colPickerOpen ? "open" : ""}>
+      <summary class="btn col-picker-toggle">Колонки</summary>
+      <div class="col-picker-menu">
+        ${HIDEABLE_PORTFOLIO_COLS.map(
+          (col) => `
+          <label class="col-picker-item">
+            <input
+              type="checkbox"
+              class="col-visibility"
+              data-col="${col}"
+              ${isColVisible(col) ? "checked" : ""}
+            />
+            ${escapeHtml(PORTFOLIO_COL_LABELS[col])}
+          </label>`,
+        ).join("")}
+      </div>
+    </details>
+  `;
+}
+
+let colPickerOutsideCleanup: (() => void) | null = null;
+
+function closeColPickerOutside() {
+  colPickerOutsideCleanup?.();
+}
+
+function bindColPickerOutsideClose(colPicker: HTMLDetailsElement) {
+  closeColPickerOutside();
+  const onDoc = (ev: MouseEvent) => {
+    const t = ev.target as Node;
+    if (colPicker.contains(t)) return;
+    closeColPickerOutside();
+    ui.colPickerOpen = false;
+    render();
+  };
+  const cleanup = () => {
+    document.removeEventListener("mousedown", onDoc);
+    colPickerOutsideCleanup = null;
+  };
+  colPickerOutsideCleanup = cleanup;
+  window.setTimeout(() => document.addEventListener("mousedown", onDoc), 0);
+}
+
+function tdAttrs(col: PortfolioCol, extraClass = ""): string {
+  const cls = [extraClass, isColVisible(col) ? "" : "col-hidden"]
+    .filter(Boolean)
+    .join(" ");
+  return ` data-col="${col}"${cls ? ` class="${cls}"` : ""}`;
 }
 
 function toggleSort(key: SortKey) {
@@ -376,7 +500,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
         : "";
       return `
         <tr class="clickable ${canDrag ? "row-draggable" : ""}" data-edit="${item.id}" data-row-id="${item.id}">
-          <td class="prio-cell">
+          <td${tdAttrs("priority", "prio-cell")}>
             <div class="prio-edit" data-stop-edit>
               ${
                 canDrag
@@ -396,22 +520,22 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
               />
             </div>
           </td>
-          <td>
+          <td${tdAttrs("type", "type-cell")}>
             <span class="badge badge-${item.type}">${item.type === "product" ? "Продукт" : "Проект"}</span>
-            ${item.assignments.length > 1 ? `<div class="meta" style="margin-top:4px">${item.assignments.length} команды</div>` : ""}
+            ${item.assignments.length > 1 ? `<div class="type-team-count">${item.assignments.length} команды</div>` : ""}
           </td>
-          <td class="title-cell">
+          <td${tdAttrs("title", "title-cell")}>
             <div class="name">${escapeHtml(item.title)}</div>
             <div class="meta">${escapeHtml(item.backlog)} · ${escapeHtml(item.owner)}</div>
           </td>
-          <td>${teamsCellHtml(item)}</td>
-          <td><span class="badge badge-status-${item.status}">${statusLabel(item.status)}</span></td>
-          <td class="mono metric-num">${score}</td>
-          <td class="mono metric-num">
+          <td${tdAttrs("teams", "teams-cell")}>${teamsCellHtml(item)}</td>
+          <td${tdAttrs("status", "status-cell")}><span class="badge badge-status-${item.status}">${statusLabel(item.status)}</span></td>
+          <td${tdAttrs("wsjf", "wsjf-cell mono metric-num")}>${score}</td>
+          <td${tdAttrs("estimate", "estimate-cell mono metric-num")}>
             <span class="size-badge">${sizesSummary(item)}</span>
             <div class="meta">~${total} чел·нед</div>
           </td>
-          <td class="mono ${r && r.waitWeeks > 4 ? "eta-late" : "eta-good"}">
+          <td${tdAttrs("eta", `mono eta-cell ${r && r.waitWeeks > 4 ? "eta-late" : "eta-good"}`)}>
             ${r ? `<span class="eta-final">${formatDate(r.endDate)}</span>` : "—"}
             ${etaMeta}
           </td>
@@ -450,7 +574,8 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
               )
               .join("")}
           </select>
-          <button class="btn" id="resetFilters" title="Сбросить фильтры и сортировку">Сбросить фильтры</button>
+          ${portfolioColPickerHtml()}
+          <button class="btn" id="resetFilters" title="Сбросить фильтры, сортировку и колонки">Сбросить фильтры</button>
           <button class="btn btn-primary" id="addItem">+ Инициатива</button>
         </div>
       </div>
@@ -459,24 +584,27 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           ? ""
           : `<p class="sort-prio-hint">Сейчас сортировка не по приоритету — перестановка строк отключена, приоритеты не меняются. Верните сортировку по «Приоритет», чтобы двигать строки.</p>`
       }
-      <div class="table-scroll" style="overflow-x:auto">
-        <table class="portfolio-table">
-          <thead>
-            <tr>
-              ${sortHeader("Приоритет", "priority")}
-              ${resizableTh("Тип", "type")}
-              ${resizableTh("Инициатива / исходный бэклог", "title")}
-              ${resizableTh("Команды (оценка · старт)", "teams")}
-              ${resizableTh("Статус", "status")}
-              ${sortHeader("WSJF", "wsjf")}
-              ${sortHeader("Оценка, майки", "estimate")}
-              ${sortHeader("ETA", "eta")}
-            </tr>
-          </thead>
-          <tbody id="portfolioBody">
-            ${rows || `<tr><td colspan="8" class="empty">Нет элементов по фильтру</td></tr>`}
-          </tbody>
-        </table>
+      <div class="table-scroll-wrap">
+        <div class="table-scroll-top" aria-hidden="true"><div class="table-scroll-top-inner"></div></div>
+        <div class="table-scroll">
+          <table class="portfolio-table">
+            <thead>
+              <tr>
+                ${sortHeader("Приоритет", "priority")}
+                ${resizableTh("Тип", "type", "type-cell")}
+                ${resizableTh("Инициатива / исходный бэклог", "title", "title-cell")}
+                ${resizableTh("Команды (оценка · старт)", "teams")}
+                ${resizableTh("Статус", "status", "status-cell")}
+                ${sortHeader("WSJF", "wsjf", "wsjf-cell")}
+                ${sortHeader("Оценка, майки", "estimate", "estimate-cell")}
+                ${sortHeader("ETA", "eta")}
+              </tr>
+            </thead>
+            <tbody id="portfolioBody">
+              ${rows || `<tr><td colspan="${visiblePortfolioColCount()}" class="empty">Нет элементов по фильтру</td></tr>`}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   `;
@@ -1473,6 +1601,7 @@ function bindPortfolioDrag() {
 function render() {
   closePrioPop();
   closeResetPop();
+  closeColPickerOutside();
   const { slices, rollups } = schedulePortfolio(state);
   const root = document.querySelector("#app");
   if (!root) return;
@@ -1732,7 +1861,30 @@ function bind() {
     ui.query = "";
     ui.sortKey = "priority";
     ui.sortDir = "asc";
+    ui.hiddenCols = [];
+    saveHiddenCols([]);
+    resetColWidths();
     render();
+  });
+
+  const colPicker = document.querySelector<HTMLDetailsElement>(".col-picker");
+  colPicker?.addEventListener("toggle", () => {
+    ui.colPickerOpen = colPicker.open;
+    if (colPicker.open) {
+      bindColPickerOutsideClose(colPicker);
+    } else {
+      closeColPickerOutside();
+    }
+  });
+  if (ui.colPickerOpen && colPicker) {
+    bindColPickerOutsideClose(colPicker);
+  }
+  document.querySelectorAll<HTMLInputElement>(".col-visibility").forEach((check) => {
+    check.addEventListener("change", () => {
+      const col = check.dataset.col as HideablePortfolioCol | undefined;
+      if (!col) return;
+      setColVisible(col, check.checked);
+    });
   });
 
   document.querySelectorAll<HTMLTableRowElement>("[data-edit]").forEach((row) => {
@@ -1812,6 +1964,7 @@ function bind() {
   });
 
   bindPortfolioColResize();
+  bindPortfolioTableScroll();
 
   const close = () => {
     ui.creating = false;
@@ -2170,6 +2323,53 @@ function askResetConfirm(anchor: HTMLElement) {
   window.setTimeout(() => document.addEventListener("mousedown", onDoc), 0);
 }
 
+function bindPortfolioTableScroll() {
+  const wrap = document.querySelector<HTMLElement>(".table-scroll-wrap");
+  if (!wrap) return;
+
+  const top = wrap.querySelector<HTMLElement>(".table-scroll-top");
+  const main = wrap.querySelector<HTMLElement>(".table-scroll");
+  const inner = wrap.querySelector<HTMLElement>(".table-scroll-top-inner");
+  const table = wrap.querySelector<HTMLTableElement>(".portfolio-table");
+  if (!top || !main || !inner || !table) return;
+
+  let syncing = false;
+
+  const update = () => {
+    inner.style.width = `${table.offsetWidth}px`;
+    const needsScroll = table.offsetWidth > main.clientWidth + 1;
+    top.style.display = needsScroll ? "" : "none";
+    if (needsScroll && !syncing) {
+      syncing = true;
+      top.scrollLeft = main.scrollLeft;
+      syncing = false;
+    }
+  };
+
+  const syncFromMain = () => {
+    if (syncing) return;
+    syncing = true;
+    top.scrollLeft = main.scrollLeft;
+    syncing = false;
+  };
+
+  const syncFromTop = () => {
+    if (syncing) return;
+    syncing = true;
+    main.scrollLeft = top.scrollLeft;
+    syncing = false;
+  };
+
+  update();
+  main.addEventListener("scroll", syncFromMain);
+  top.addEventListener("scroll", syncFromTop);
+
+  const ro = new ResizeObserver(update);
+  ro.observe(table);
+  ro.observe(main);
+  window.addEventListener("resize", update);
+}
+
 function bindPortfolioColResize() {
   const table = document.querySelector<HTMLTableElement>(".portfolio-table");
   if (!table) return;
@@ -2281,6 +2481,7 @@ async function exportCurrentTabPdf() {
 
 async function bootstrap() {
   state = await loadState();
+  ui.hiddenCols = loadHiddenCols();
   const before = state.items.map((i) => i.manualRank).join(",");
   state = { ...state, items: ensureUniquePriorities(state.items, szRanges()) };
   const after = state.items.map((i) => i.manualRank).join(",");

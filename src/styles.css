@@ -347,6 +347,7 @@ textarea {
 
 .filters select,
 .filters input,
+.filters .col-picker-toggle,
 .field input,
 .field select,
 .field textarea {
@@ -366,6 +367,91 @@ table {
 .portfolio-table {
   table-layout: fixed;
   width: max(100%, 960px);
+}
+
+.portfolio-table th,
+.portfolio-table td {
+  overflow: hidden;
+  min-width: 0;
+}
+
+.portfolio-table .col-hidden {
+  display: none;
+}
+
+.col-picker {
+  position: relative;
+}
+
+.col-picker-toggle {
+  list-style: none;
+  user-select: none;
+}
+
+.col-picker-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.col-picker-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 240px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  display: grid;
+  gap: 6px;
+}
+
+.col-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.col-picker-item input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.table-scroll-wrap {
+  position: relative;
+}
+
+.table-scroll-top {
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 5px;
+  margin-bottom: 1px;
+}
+
+.table-scroll-top::-webkit-scrollbar {
+  height: 4px;
+}
+
+.table-scroll-top::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 2px;
+}
+
+.table-scroll-top::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+.table-scroll-top-inner {
+  height: 1px;
+  pointer-events: none;
+}
+
+.table-scroll {
+  overflow-x: auto;
 }
 
 .resizable-th {
@@ -454,14 +540,55 @@ th.sortable.sorted {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .team-chip {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  font-size: 12px;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.team-chip-name {
+  display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.team-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.team-chip-estimate {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-left: 12px;
+}
+
+.team-chip .team-dot,
+.team-chip .size-badge,
+.team-chip .muted-inline {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.team-chip .team-dot {
+  margin-right: 0;
 }
 
 .muted-inline {
@@ -714,14 +841,29 @@ tr.clickable:hover td {
   font-variant-numeric: tabular-nums;
 }
 
+.title-cell {
+  min-width: 0;
+  overflow: hidden;
+  vertical-align: middle !important;
+}
+
 .title-cell .name {
   font-weight: 600;
   margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
 }
 
 .title-cell .meta {
   color: var(--muted);
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .prio-edit {
@@ -791,6 +933,17 @@ body.prio-dragging {
   width: 84px;
   text-align: center;
   vertical-align: middle !important;
+}
+
+.type-cell {
+  vertical-align: middle !important;
+}
+
+.type-team-count {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.2;
 }
 
 .prio-input,
@@ -930,6 +1083,8 @@ body.prio-dragging {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .eta-team {
@@ -938,6 +1093,28 @@ body.prio-dragging {
   color: var(--muted);
   line-height: 1.35;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.eta-cell {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.teams-cell,
+.status-cell {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.status-cell {
+  vertical-align: middle !important;
+}
+
+.wsjf-cell,
+.estimate-cell {
+  vertical-align: middle !important;
 }
 
 .eta-team-name {
