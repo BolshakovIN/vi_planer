@@ -10,8 +10,8 @@ import {
   formatDate,
   schedulePortfolio,
   sortByPriority,
-  totalEstimateDays,
-  sizePlanDays,
+  totalEstimateWeeks,
+  sizePlanWeeks,
   sizeLabel,
   sizeRangesSummary,
   parseSize,
@@ -111,10 +111,10 @@ function sizesSummary(item: WorkItem): string {
   return item.assignments.map((a) => a.size).join(" + ");
 }
 
-function teamQueueDays(slices: ScheduledSlice[], teamId: string): number {
+function teamQueuePw(slices: ScheduledSlice[], teamId: string): number {
   return slices
     .filter((s) => s.teamId === teamId)
-    .reduce((sum, s) => sum + s.durationDays, 0);
+    .reduce((sum, s) => sum + s.estimatePw, 0);
 }
 
 function sizeSelectOptions(selected: TShirtSize): string {
@@ -171,7 +171,7 @@ function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
     if (ui.sortKey === "wsjf") {
       cmp = wsjf(a) - wsjf(b);
     } else if (ui.sortKey === "estimate") {
-      cmp = totalEstimateDays(a, szRanges()) - totalEstimateDays(b, szRanges());
+      cmp = totalEstimateWeeks(a, szRanges()) - totalEstimateWeeks(b, szRanges());
     } else {
       const ea = byId.get(a.id)?.endDate ?? "9999-99-99";
       const eb = byId.get(b.id)?.endDate ?? "9999-99-99";
@@ -306,8 +306,8 @@ function metricsHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string 
   const ends = rollups.map((s) => s.endWeek);
   const horizon = ends.length ? Math.max(...ends) + 1 : 0;
   const overloaded = state.teams.filter((t) => {
-    const demandDays = teamQueueDays(slices, t.id);
-    return demandDays > 8 * 7;
+    const demandDays = teamQueuePw(slices, t.id);
+    return demandDays > t.capacityPw * 8;
   }).length;
 
   return `
@@ -347,7 +347,7 @@ function columnsHelpHtml(): string {
         <div><span class="cols-help-k">Команды</span> — кто делает, майка (S/M/L) и план старта</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
         <div><span class="cols-help-k">WSJF</span> — (BV + TC + RR) / Job Size</div>
-        <div><span class="cols-help-k">Оценка</span> — майки S / M / L (диапазоны в Настройках)</div>
+        <div><span class="cols-help-k">Оценка</span> — майки S / M / L (недели в Настройках)</div>
         <div><span class="cols-help-k">ETA</span> — дата готовности (когда закончила последняя команда)</div>
       </div>
     </details>
@@ -363,7 +363,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
     .map((item) => {
       const r = byId.get(item.id);
       const score = wsjf(item);
-      const total = totalEstimateDays(item, szRanges());
+      const total = totalEstimateWeeks(item, szRanges());
       const prio = item.manualRank ?? "—";
       const etaMeta = r
         ? `<div class="eta-teams">${r.slices
@@ -409,7 +409,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           <td class="mono metric-num">${score}</td>
           <td class="mono metric-num">
             <span class="size-badge">${sizesSummary(item)}</span>
-            <div class="meta">~${total} дн.</div>
+            <div class="meta">~${total} чел·нед</div>
           </td>
           <td class="mono ${r && r.waitWeeks > 4 ? "eta-late" : "eta-good"}">
             ${r ? `<span class="eta-final">${formatDate(r.endDate)}</span>` : "—"}
@@ -488,11 +488,24 @@ function teamsHtml(slices: ScheduledSlice[]): string {
       const queue = slices
         .filter((s) => s.teamId === team.id)
         .sort((a, b) => a.effectiveRank - b.effectiveRank);
-      const demandDays = queue.reduce((sum, s) => sum + s.durationDays, 0);
-      const weeksToClear = Math.round((demandDays / 7) * 10) / 10;
+      const demand = queue.reduce((sum, s) => sum + s.estimatePw, 0);
+      const weeksToClear = team.capacityPw > 0 ? demand / team.capacityPw : 0;
       const util8 = Math.min(
         100,
-        Math.round((demandDays / (8 * 7)) * 100)
+        Math.round(
+          (queue
+            .filter((s) => s.startWeek < 8)
+            .reduce((sum, s) => {
+              const overlap = Math.min(s.endWeek + 1, 8) - s.startWeek;
+              return (
+                sum +
+                Math.max(0, overlap) *
+                  (s.estimatePw / Math.max(1, s.endWeek - s.startWeek + 1))
+              );
+            }, 0) /
+            (team.capacityPw * 8)) *
+            100
+        )
       );
 
       return `
@@ -500,7 +513,7 @@ function teamsHtml(slices: ScheduledSlice[]): string {
           <div class="team-card-head">
             <div>
               <h3><span class="team-dot" style="background:${team.color}"></span>${escapeHtml(team.name)}</h3>
-              <div class="meta">${queue.length} задач · ~${demandDays} дн. · ёмк. ${team.capacity}/нед · ~${weeksToClear} нед. до очистки</div>
+              <div class="meta">Ёмкость ${team.capacityPw} чел·нед/нед · спрос ${demand.toFixed(1)} · ~${weeksToClear.toFixed(1)} нед. до очистки</div>
             </div>
             <div class="mono" style="font-weight:700">${util8}% / 8 нед.</div>
           </div>
@@ -513,7 +526,7 @@ function teamsHtml(slices: ScheduledSlice[]): string {
               <div class="rank">${s.effectiveRank}</div>
               <div>
                 <div><span class="badge badge-${s.item.type}">${s.item.type === "product" ? "П" : "Пр"}</span> ${escapeHtml(s.item.title)}</div>
-                <div class="meta">WSJF ${s.wsjf} · ${s.size} (${s.durationDays} дн.) · план ${formatDate(s.plannedStartDate)}${s.delayedByQueue ? " → сдвиг" : ""}${others > 0 ? ` · ещё ${others} ком.` : ""}</div>
+                <div class="meta">WSJF ${s.wsjf} · ${s.size} (${s.estimatePw} чел·нед) · план ${formatDate(s.plannedStartDate)}${s.delayedByQueue ? " → сдвиг" : ""}${others > 0 ? ` · ещё ${others} ком.` : ""}</div>
               </div>
               <div class="mono" style="text-align:right">
                 ${formatDate(s.startDate)} →<br/>${formatDate(s.endDate)}
@@ -550,8 +563,8 @@ function queuesTestHtml(slices: ScheduledSlice[]): string {
           if (pa !== pb) return pa - pb;
           return a.effectiveRank - b.effectiveRank;
         });
-      const demandDays = queue.reduce((sum, s) => sum + s.durationDays, 0);
-      const weeksToClear = Math.round((demandDays / 7) * 10) / 10;
+      const demand = queue.reduce((sum, s) => sum + s.estimatePw, 0);
+      const weeksToClear = team.capacityPw > 0 ? demand / team.capacityPw : 0;
       const freeFrom = queue.length
         ? queue[queue.length - 1].endDate
         : planStart;
@@ -592,7 +605,7 @@ function queuesTestHtml(slices: ScheduledSlice[]): string {
                   <span class="meta"> · ${escapeHtml(takeReason)}</span>
                 </div>
                 <div class="meta">
-                  ${s.size} (${s.durationDays} дн.) · план ${formatDate(s.plannedStartDate)} · до ${formatDate(s.endDate)}
+                  ${s.size} (${s.estimatePw} чел·нед) · план ${formatDate(s.plannedStartDate)} · до ${formatDate(s.endDate)}
                   ${others.length ? ` · ещё: ${others.map(escapeHtml).join(", ")}` : ""}
                 </div>
                 <div class="take-bar" title="Окно работы в горизонте 12 нед.">
@@ -615,7 +628,7 @@ function queuesTestHtml(slices: ScheduledSlice[]): string {
           <div class="team-card-head">
             <div>
               <h3><span class="team-dot" style="background:${team.color}"></span>${escapeHtml(team.name)}</h3>
-              <div class="meta">${queue.length} задач · ~${demandDays} дн. · ёмк. ${team.capacity}/нед · ~${weeksToClear} нед. до очистки</div>
+              <div class="meta">Ёмкость ${team.capacityPw} чел·нед/нед · спрос ${demand.toFixed(1)} · ~${weeksToClear.toFixed(1)} нед. до очистки</div>
               <div class="take-free">Очередь закрывается / слот после всего: <strong>${formatDate(freeFrom)}</strong></div>
             </div>
             <div class="mono" style="font-weight:600;text-align:right;font-size:12px;color:var(--muted)">
@@ -835,7 +848,7 @@ function settingsHtml(rollups: ItemSchedule[]): string {
     <div class="size-range-row">
       <div class="size-range-label"><span class="size-badge size-badge-lg">${sz}</span></div>
       <label class="size-range-field">
-        <span class="meta">от, дн.</span>
+        <span class="meta">от, нед.</span>
         <input
           type="number"
           id="set_${sz}_min"
@@ -848,7 +861,7 @@ function settingsHtml(rollups: ItemSchedule[]): string {
         />
       </label>
       <label class="size-range-field">
-        <span class="meta">до, дн.</span>
+        <span class="meta">до, нед.</span>
         <input
           type="number"
           id="set_${sz}_max"
@@ -862,7 +875,7 @@ function settingsHtml(rollups: ItemSchedule[]): string {
       </label>
       <div class="size-range-plan">
         <span class="meta">для плана</span>
-        <strong class="mono" data-plan="${sz}">${sizePlanDays(sz, r)} дн.</strong>
+        <strong class="mono" data-plan="${sz}">${sizePlanWeeks(sz, r)} нед.</strong>
       </div>
     </div>
   `
@@ -870,8 +883,8 @@ function settingsHtml(rollups: ItemSchedule[]): string {
 
   return `
     <div class="callout">
-      Диапазоны майок задают длительность работ в календарных днях. Для ETA и Gantt берётся <strong>середина</strong> диапазона.
-      Изменения применяются сразу и перестраивают все расчёты.
+      Диапазоны майок — <strong>сколько недель</strong> заложено в оценке проекта (S / M / L). Для плана берётся середина диапазона.
+      Изменения сразу перестраивают ETA и Gantt.
     </div>
     <div class="panel">
       <div class="panel-header">
@@ -917,7 +930,7 @@ function patchSettingsPreview(rollups: ItemSchedule[]) {
   for (const sz of TSHIRT_SIZES) {
     document
       .querySelector(`[data-plan="${sz}"]`)
-      ?.replaceChildren(document.createTextNode(`${sizePlanDays(sz, r)} дн.`));
+      ?.replaceChildren(document.createTextNode(`${sizePlanWeeks(sz, r)} нед.`));
   }
   const ends = rollups.map((s) => s.endWeek);
   const horizon = ends.length ? Math.max(...ends) + 1 : 0;
@@ -965,10 +978,11 @@ function capacityHtml(): string {
           aria-label="Название команды"
         />
         <label class="team-capacity-field">
-          <span class="meta">Ёмкость / нед.</span>
-          <select class="team-capacity-select" data-team-capacity="${t.id}" aria-label="Ёмкость команды">
-            ${sizeSelectOptions(t.capacity)}
-          </select>
+          <span class="meta">Ёмкость, чел·нед/нед</span>
+          <div class="team-capacity-slider">
+            <input type="range" min="1" max="8" step="0.5" value="${t.capacityPw}" data-cap="${t.id}" />
+            <span class="mono capacity-label" data-cap-label="${t.id}">${t.capacityPw}</span>
+          </div>
         </label>
         <button
           type="button"
@@ -984,8 +998,8 @@ function capacityHtml(): string {
 
   return `
     <div class="callout">
-      <strong>Ёмкость</strong> — сколько работы команда тянет в неделю, в майках (${sizeRangesSummary(szRanges())}).
-      Чем крупнее майка, тем быстрее закрывается очередь. Оценки инициатив задаются отдельно по каждой команде.
+      <strong>Ёмкость</strong> — сколько человеко-недель команда может отдать за календарную неделю.
+      Оценки инициатив задаются майками (недели — в <a href="#" data-tab-jump="settings">Настройках</a>).
     </div>
     <div class="panel">
       <div class="panel-header">
@@ -1116,7 +1130,7 @@ function editorHtml(item: WorkItem | null): string {
           <div class="field">
             <label>Команды: майка и дата старта (отдельно по каждой)</label>
             <div class="team-assign-list" id="teamAssignList">${teamRows}</div>
-            <div class="meta" style="margin-top:6px">${sizeRangesSummary(szRanges())}. Итого ~<strong class="mono" id="liveTotalEst">${totalEstimateDays(draft, szRanges())}</strong> дн. Старт — не раньше указанной даты; если очередь занята, сдвинется позже.</div>
+            <div class="meta" style="margin-top:6px">${sizeRangesSummary(szRanges())}. Итого ~<strong class="mono" id="liveTotalEst">${totalEstimateWeeks(draft, szRanges())}</strong> чел·нед. Старт — не раньше указанной даты; если очередь занята, сдвинется позже.</div>
           </div>
           <div class="callout" style="margin:0" id="liveEtaBox">
             <strong>Пересчёт ETA</strong> (с учётом очереди и стартов)
@@ -1164,11 +1178,14 @@ function previewScheduleFor(draft: WorkItem): ItemSchedule | null {
 }
 
 /** ETA from plan+estimate only (no other backlog items stealing capacity) */
-function planOnlyEnd(a: TeamAssignment): { start: string; end: string; days: number } {
-  const days = sizePlanDays(a.size, szRanges());
+function planOnlyEnd(a: TeamAssignment): { start: string; end: string; weeks: number } {
+  const team = teamById(a.teamId);
+  const cap = team?.capacityPw || 1;
+  const estimatePw = sizePlanWeeks(a.size, szRanges());
+  const weeks = Math.round((estimatePw / cap) * 100) / 100;
   const start = snapToMonday(a.workStartDate || state.startDate);
-  const end = addDays(start, days);
-  return { start, end, days };
+  const end = addDays(start, weeks * 7);
+  return { start, end, weeks };
 }
 
 function formatLiveEtaHtml(
@@ -1197,7 +1214,7 @@ function formatLiveEtaHtml(
       const soloNote = solo
         ? `<div class="meta" style="margin-left:0;margin-top:2px">от вашей даты старта без чужой очереди: ${formatDate(solo.start)} → <span class="mono">${formatDate(solo.end)}</span></div>`
         : "";
-      return `<div style="margin-bottom:8px"><strong>${escapeHtml(t?.name ?? s.teamId)}</strong>: <span class="mono">${formatDate(s.startDate)} → ${formatDate(s.endDate)}</span> <span class="meta">(${s.size} · ~${s.durationDays} дн.)</span>${shiftNote}${crit}${soloNote}</div>`;
+      return `<div style="margin-bottom:8px"><strong>${escapeHtml(t?.name ?? s.teamId)}</strong>: <span class="mono">${formatDate(s.startDate)} → ${formatDate(s.endDate)}</span> <span class="meta">(${s.size} · ${s.estimatePw} чел·нед ≈ ${s.durationWeeks} нед.)</span>${shiftNote}${crit}${soloNote}</div>`;
     })
     .join("");
 
@@ -1351,7 +1368,7 @@ function confirmDeleteTeam(teamId: string, anchor: HTMLElement) {
     return;
   }
   const n = countTeamUsage(teamId);
-  const cap = sizeLabel(team.capacity, szRanges());
+  const cap = `${team.capacityPw} чел·нед/нед`;
   const text =
     n > 0
       ? `Удалить «<strong>${escapeHtml(team.name)}</strong>» (${cap}/нед)?<br/>Снимется с <span class="accent">${n}</span> инициатив. Карточки без команд тоже удалятся.`
@@ -1554,7 +1571,7 @@ function refreshLiveEta() {
   const assignments = readAssignments();
   if (liveEst) {
     liveEst.textContent = String(
-      assignments.reduce((s, a) => s + sizePlanDays(a.size, szRanges()), 0) || 0
+      assignments.reduce((s, a) => s + sizePlanWeeks(a.size, szRanges()), 0) || 0
     );
   }
   if (!liveEta) return;
@@ -1965,17 +1982,26 @@ function bind() {
     });
   });
 
-  document.querySelectorAll<HTMLSelectElement>("[data-team-capacity]").forEach(
-    (select) => {
-      select.addEventListener("change", () => {
-        const id = select.dataset.teamCapacity!;
-        const team = state.teams.find((t) => t.id === id);
-        if (!team) return;
-        team.capacity = parseSize(select.value);
-        persist();
-      });
-    }
-  );
+  document.querySelectorAll<HTMLInputElement>("[data-cap]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const id = input.dataset.cap!;
+      const team = state.teams.find((t) => t.id === id);
+      if (!team) return;
+      team.capacityPw = Number(input.value);
+      saveState(state);
+      const label = document.querySelector(`[data-cap-label="${id}"]`);
+      if (label) label.textContent = String(team.capacityPw);
+    });
+    input.addEventListener("change", () => render());
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-tab-jump]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      ui.tab = btn.dataset.tabJump as Tab;
+      render();
+    });
+  });
 
   document.querySelectorAll<HTMLButtonElement>("[data-team-delete]").forEach(
     (btn) => {
@@ -2013,7 +2039,7 @@ function bind() {
     state.teams.push({
       id: uid("team"),
       name,
-      capacity: "M",
+      capacityPw: 3,
       color: nextTeamColor(),
     });
     persist();

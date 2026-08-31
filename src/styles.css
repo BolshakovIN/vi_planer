@@ -1522,20 +1522,31 @@ body.prio-dragging {
   min-width: 0;
 }
 
-.team-capacity-select {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 7px 10px;
-  font-size: 13px;
-  font-weight: 600;
-  background: #fff;
+.team-capacity-slider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.team-capacity-select:focus {
-  outline: none;
-  border-color: var(--neutral);
-  box-shadow: 0 0 0 3px var(--neutral-soft);
+.team-capacity-slider input[type="range"] {
+  flex: 1;
+  min-width: 100px;
+}
+
+.capacity-label {
+  min-width: 36px;
+  text-align: right;
+  font-weight: 700;
+}
+
+.callout a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.callout a:hover {
+  text-decoration: underline;
 }
 
 .team-delete-btn {
