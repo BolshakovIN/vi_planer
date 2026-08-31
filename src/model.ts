@@ -2,24 +2,60 @@ export type ItemType = "project" | "product";
 export type ItemStatus = "idea" | "ready" | "in_progress" | "blocked" | "done";
 export type TShirtSize = "S" | "M" | "L";
 
-export const SIZE_RANGES: Record<TShirtSize, { min: number; max: number }> = {
+export const DEFAULT_SIZE_RANGES: Record<TShirtSize, { min: number; max: number }> = {
   S: { min: 5, max: 10 },
   M: { min: 10, max: 20 },
   L: { min: 20, max: 40 },
 };
 
-export const TSHIRT_SIZES: TShirtSize[] = ["S", "M", "L"];
+/** @deprecated use DEFAULT_SIZE_RANGES */
+export const SIZE_RANGES = DEFAULT_SIZE_RANGES;
+
+export type SizeRanges = Record<TShirtSize, { min: number; max: number }>;
+
+export function normalizeSizeRanges(raw: unknown): SizeRanges {
+  const out: SizeRanges = {
+    S: { ...DEFAULT_SIZE_RANGES.S },
+    M: { ...DEFAULT_SIZE_RANGES.M },
+    L: { ...DEFAULT_SIZE_RANGES.L },
+  };
+  if (!raw || typeof raw !== "object") return out;
+  for (const sz of TSHIRT_SIZES) {
+    const row = (raw as Record<string, unknown>)[sz];
+    if (!row || typeof row !== "object") continue;
+    const rec = row as { min?: unknown; max?: unknown };
+    let min = Math.round(Number(rec.min));
+    let max = Math.round(Number(rec.max));
+    if (!Number.isFinite(min)) min = out[sz].min;
+    if (!Number.isFinite(max)) max = out[sz].max;
+    min = Math.max(1, min);
+    max = Math.max(min, max);
+    out[sz] = { min, max };
+  }
+  return out;
+}
 
 /** Planning duration — midpoint of the size range, in calendar days */
-export function sizePlanDays(size: TShirtSize): number {
-  const r = SIZE_RANGES[size];
+export function sizePlanDays(
+  size: TShirtSize,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): number {
+  const r = ranges[size];
   return Math.round((r.min + r.max) / 2);
 }
 
-export function sizeLabel(size: TShirtSize): string {
-  const r = SIZE_RANGES[size];
+export function sizeLabel(
+  size: TShirtSize,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): string {
+  const r = ranges[size];
   return `${size} (${r.min}–${r.max} дн.)`;
 }
+
+export function sizeRangesSummary(ranges: SizeRanges): string {
+  return TSHIRT_SIZES.map((sz) => sizeLabel(sz, ranges)).join(", ");
+}
+export const TSHIRT_SIZES: TShirtSize[] = ["S", "M", "L"];
 
 export function parseSize(raw: unknown): TShirtSize {
   const s = String(raw ?? "").toUpperCase();
@@ -83,6 +119,8 @@ export interface AppState {
   items: WorkItem[];
   /** Planning start date ISO (Monday) */
   startDate: string;
+  /** T-shirt size day ranges (editable in Settings) */
+  sizeRanges: SizeRanges;
   version: 3;
 }
 
@@ -137,8 +175,11 @@ export function wsjf(item: WorkItem): number {
   return Math.round((costOfDelay / Math.max(item.jobSize, 0.5)) * 100) / 100;
 }
 
-export function totalEstimateDays(item: WorkItem): number {
-  return item.assignments.reduce((sum, a) => sum + sizePlanDays(a.size), 0);
+export function totalEstimateDays(
+  item: WorkItem,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): number {
+  return item.assignments.reduce((sum, a) => sum + sizePlanDays(a.size, ranges), 0);
 }
 
 export function itemTeamIds(item: WorkItem): string[] {
@@ -206,7 +247,10 @@ export function weekIndex(planStart: string, dateIso: string): number {
 }
 
 /** Sort by explicit priority (1 first); missing ranks fall back to WSJF */
-export function sortByPriority(items: WorkItem[]): WorkItem[] {
+export function sortByPriority(
+  items: WorkItem[],
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): WorkItem[] {
   return [...items].sort((a, b) => {
     const pa = a.manualRank;
     const pb = b.manualRank;
@@ -215,7 +259,7 @@ export function sortByPriority(items: WorkItem[]): WorkItem[] {
     if (pa == null && pb != null) return 1;
     const dw = wsjf(b) - wsjf(a);
     if (dw !== 0) return dw;
-    return totalEstimateDays(a) - totalEstimateDays(b);
+    return totalEstimateDays(a, ranges) - totalEstimateDays(b, ranges);
   });
 }
 
@@ -241,9 +285,10 @@ export function findPriorityConflict(
 export function moveItemToPriority(
   items: WorkItem[],
   itemId: string,
-  newPriority: number
+  newPriority: number,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): WorkItem[] {
-  const ordered = sortByPriority(items);
+  const ordered = sortByPriority(items, ranges);
   const fromIndex = ordered.findIndex((i) => i.id === itemId);
   if (fromIndex < 0) return items;
 
@@ -269,10 +314,11 @@ export function moveItemToPriority(
  */
 export function reorderVisiblePriority(
   items: WorkItem[],
-  visibleIdsInNewOrder: string[]
+  visibleIdsInNewOrder: string[],
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): WorkItem[] {
   if (visibleIdsInNewOrder.length < 2) return items;
-  const ordered = sortByPriority(items);
+  const ordered = sortByPriority(items, ranges);
   const visibleSet = new Set(visibleIdsInNewOrder);
   const byId = new Map(items.map((i) => [i.id, i]));
   const visibleQueue = visibleIdsInNewOrder
@@ -312,11 +358,14 @@ export function nextPriority(items: WorkItem[]): number {
  * Ensure every item has a unique integer priority.
  * Keeps valid unique ranks; fills gaps / fixes duplicates by WSJF order.
  */
-export function ensureUniquePriorities(items: WorkItem[]): WorkItem[] {
+export function ensureUniquePriorities(
+  items: WorkItem[],
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): WorkItem[] {
   const byWsjf = [...items].sort((a, b) => {
     const dw = wsjf(b) - wsjf(a);
     if (dw !== 0) return dw;
-    return totalEstimateDays(a) - totalEstimateDays(b);
+    return totalEstimateDays(a, ranges) - totalEstimateDays(b, ranges);
   });
 
   const used = new Set<number>();
@@ -360,8 +409,9 @@ export function schedulePortfolio(state: AppState): {
   rollups: ItemSchedule[];
   load: Record<string, TeamLoadWeek[]>;
 } {
+  const ranges = state.sizeRanges ?? DEFAULT_SIZE_RANGES;
   const active = state.items.filter((i) => i.status !== "done");
-  const ordered = sortByPriority(active);
+  const ordered = sortByPriority(active, ranges);
 
   const byTeam = new Map<
     string,
@@ -396,7 +446,7 @@ export function schedulePortfolio(state: AppState): {
 
     let cursorDate = state.startDate;
     queue.forEach((entry, idx) => {
-      const durationDays = sizePlanDays(entry.size);
+      const durationDays = sizePlanDays(entry.size, ranges);
       const plannedStartDate = entry.workStartDate;
       const startDate = maxDate(cursorDate, plannedStartDate);
       const endDate = addDays(startDate, durationDays);
@@ -459,7 +509,7 @@ export function schedulePortfolio(state: AppState): {
             : -1
       ),
       wsjf: wsjf(item),
-      totalEstimateDays: totalEstimateDays(item),
+      totalEstimateDays: totalEstimateDays(item, ranges),
       startWeek: earliest.startWeek,
       endWeek: bottleneck.endWeek,
       startDate: earliest.startDate,
@@ -555,10 +605,12 @@ export function normalizeState(raw: unknown): AppState | null {
     };
   });
 
+  const parsedRanges = normalizeSizeRanges(data.sizeRanges);
   return {
     version: 3,
     startDate: planStart,
     teams,
-    items: ensureUniquePriorities(items),
+    sizeRanges: parsedRanges,
+    items: ensureUniquePriorities(items, parsedRanges),
   };
 }

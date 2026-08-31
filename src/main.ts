@@ -13,9 +13,12 @@ import {
   totalEstimateDays,
   sizePlanDays,
   sizeLabel,
+  sizeRangesSummary,
   parseSize,
   TSHIRT_SIZES,
   TShirtSize,
+  SizeRanges,
+  normalizeSizeRanges,
   hasTeam,
   uid,
   wsjf,
@@ -39,7 +42,7 @@ import {
 } from "./storage";
 import { downloadElementPdf } from "./pdfExport";
 
-type Tab = "portfolio" | "teams" | "timeline" | "capacity" | "queuesTest";
+type Tab = "portfolio" | "teams" | "timeline" | "capacity" | "queuesTest" | "settings";
 type SortKey = "priority" | "wsjf" | "estimate" | "eta";
 type SortDir = "asc" | "desc";
 
@@ -49,6 +52,7 @@ const TAB_LABELS: Record<Tab, string> = {
   queuesTest: "Очереди (тест)",
   timeline: "Сроки / Gantt",
   capacity: "Команды",
+  settings: "Настройки",
 };
 
 interface UiState {
@@ -79,6 +83,11 @@ const ui: UiState = {
 };
 
 let state: AppState = structuredClone(SEED);
+
+function szRanges(): SizeRanges {
+  return state.sizeRanges;
+}
+
 function teamById(id: string) {
   return state.teams.find((t) => t.id === id);
 }
@@ -111,7 +120,7 @@ function teamQueueDays(slices: ScheduledSlice[], teamId: string): number {
 function sizeSelectOptions(selected: TShirtSize): string {
   return TSHIRT_SIZES.map(
     (sz) =>
-      `<option value="${sz}" ${selected === sz ? "selected" : ""}>${sizeLabel(sz)}</option>`
+      `<option value="${sz}" ${selected === sz ? "selected" : ""}>${sizeLabel(sz, szRanges())}</option>`
   ).join("");
 }
 
@@ -162,7 +171,7 @@ function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
     if (ui.sortKey === "wsjf") {
       cmp = wsjf(a) - wsjf(b);
     } else if (ui.sortKey === "estimate") {
-      cmp = totalEstimateDays(a) - totalEstimateDays(b);
+      cmp = totalEstimateDays(a, szRanges()) - totalEstimateDays(b, szRanges());
     } else {
       const ea = byId.get(a.id)?.endDate ?? "9999-99-99";
       const eb = byId.get(b.id)?.endDate ?? "9999-99-99";
@@ -338,7 +347,7 @@ function columnsHelpHtml(): string {
         <div><span class="cols-help-k">Команды</span> — кто делает, майка (S/M/L) и план старта</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
         <div><span class="cols-help-k">WSJF</span> — (BV + TC + RR) / Job Size</div>
-        <div><span class="cols-help-k">Оценка</span> — майки S (5–10 дн.), M (10–20 дн.), L (20–40 дн.) по командам</div>
+        <div><span class="cols-help-k">Оценка</span> — майки S / M / L (диапазоны в Настройках)</div>
         <div><span class="cols-help-k">ETA</span> — дата готовности (когда закончила последняя команда)</div>
       </div>
     </details>
@@ -354,7 +363,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
     .map((item) => {
       const r = byId.get(item.id);
       const score = wsjf(item);
-      const total = totalEstimateDays(item);
+      const total = totalEstimateDays(item, szRanges());
       const prio = item.manualRank ?? "—";
       const etaMeta = r
         ? `<div class="eta-teams">${r.slices
@@ -815,6 +824,133 @@ function nextTeamColor(): string {
   );
 }
 
+function settingsHtml(rollups: ItemSchedule[]): string {
+  const r = state.sizeRanges;
+  const active = state.items.filter((i) => i.status !== "done");
+  const ends = rollups.map((s) => s.endWeek);
+  const horizon = ends.length ? Math.max(...ends) + 1 : 0;
+
+  const rows = TSHIRT_SIZES.map(
+    (sz) => `
+    <div class="size-range-row">
+      <div class="size-range-label"><span class="size-badge size-badge-lg">${sz}</span></div>
+      <label class="size-range-field">
+        <span class="meta">от, дн.</span>
+        <input
+          type="number"
+          id="set_${sz}_min"
+          class="set-range"
+          data-size="${sz}"
+          data-bound="min"
+          min="1"
+          step="1"
+          value="${r[sz].min}"
+        />
+      </label>
+      <label class="size-range-field">
+        <span class="meta">до, дн.</span>
+        <input
+          type="number"
+          id="set_${sz}_max"
+          class="set-range"
+          data-size="${sz}"
+          data-bound="max"
+          min="1"
+          step="1"
+          value="${r[sz].max}"
+        />
+      </label>
+      <div class="size-range-plan">
+        <span class="meta">для плана</span>
+        <strong class="mono" data-plan="${sz}">${sizePlanDays(sz, r)} дн.</strong>
+      </div>
+    </div>
+  `
+  ).join("");
+
+  return `
+    <div class="callout">
+      Диапазоны майок задают длительность работ в календарных днях. Для ETA и Gantt берётся <strong>середина</strong> диапазона.
+      Изменения применяются сразу и перестраивают все расчёты.
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Майки (S / M / L)</h2>
+        <button type="button" class="btn" id="resetSizeRanges">Сбросить по умолчанию</button>
+      </div>
+      <div class="size-ranges-grid">${rows}</div>
+      <div class="settings-preview" id="settingsSchedPreview">
+        <div><span class="meta">Сейчас в плане</span></div>
+        <div class="settings-preview-row">
+          <span>Горизонт портфеля</span>
+          <strong class="mono" id="settingsHorizon">${horizon} нед.</strong>
+        </div>
+        <div class="settings-preview-row">
+          <span>Активных инициатив</span>
+          <strong class="mono">${active.length}</strong>
+        </div>
+        <div class="settings-preview-row">
+          <span>Шкала майок</span>
+          <strong id="settingsRangesSummary">${sizeRangesSummary(r)}</strong>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function readSizeRangesFromInputs(): SizeRanges | null {
+  const draft: Partial<SizeRanges> = {};
+  for (const sz of TSHIRT_SIZES) {
+    const minEl = document.querySelector<HTMLInputElement>(`#set_${sz}_min`);
+    const maxEl = document.querySelector<HTMLInputElement>(`#set_${sz}_max`);
+    if (!minEl || !maxEl) return null;
+    draft[sz] = {
+      min: Math.round(Number(minEl.value)),
+      max: Math.round(Number(maxEl.value)),
+    };
+  }
+  return normalizeSizeRanges(draft);
+}
+
+function patchSettingsPreview(rollups: ItemSchedule[]) {
+  const r = state.sizeRanges;
+  for (const sz of TSHIRT_SIZES) {
+    document
+      .querySelector(`[data-plan="${sz}"]`)
+      ?.replaceChildren(document.createTextNode(`${sizePlanDays(sz, r)} дн.`));
+  }
+  const ends = rollups.map((s) => s.endWeek);
+  const horizon = ends.length ? Math.max(...ends) + 1 : 0;
+  const horizonEl = document.querySelector("#settingsHorizon");
+  if (horizonEl) horizonEl.textContent = `${horizon} нед.`;
+  const summaryEl = document.querySelector("#settingsSchedPreview #settingsRangesSummary");
+  if (summaryEl) summaryEl.textContent = sizeRangesSummary(r);
+}
+
+let sizeRangesRenderTimer: ReturnType<typeof setTimeout> | undefined;
+
+function applySizeRangesFromInputs() {
+  const next = readSizeRangesFromInputs();
+  if (!next) return;
+  state.sizeRanges = next;
+  saveState(state);
+  const { rollups } = schedulePortfolio(state);
+  patchSettingsPreview(rollups);
+
+  const focused = document.activeElement as HTMLInputElement | null;
+  const focusId = focused?.classList.contains("set-range") ? focused.id : null;
+
+  clearTimeout(sizeRangesRenderTimer);
+  sizeRangesRenderTimer = setTimeout(() => {
+    render();
+    if (focusId) {
+      const el = document.querySelector<HTMLInputElement>(`#${focusId}`);
+      el?.focus();
+      el?.select();
+    }
+  }, 200);
+}
+
 function capacityHtml(): string {
   const rows = state.teams
     .map(
@@ -966,7 +1102,7 @@ function editorHtml(item: WorkItem | null): string {
           <div class="field">
             <label>Команды: майка и дата старта (отдельно по каждой)</label>
             <div class="team-assign-list" id="teamAssignList">${teamRows}</div>
-            <div class="meta" style="margin-top:6px">S — 5–10 дн., M — 10–20 дн., L — 20–40 дн. Итого ~<strong class="mono" id="liveTotalEst">${totalEstimateDays(draft)}</strong> дн. Старт — не раньше указанной даты; если очередь занята, сдвинется позже.</div>
+            <div class="meta" style="margin-top:6px">${sizeRangesSummary(szRanges())}. Итого ~<strong class="mono" id="liveTotalEst">${totalEstimateDays(draft, szRanges())}</strong> дн. Старт — не раньше указанной даты; если очередь занята, сдвинется позже.</div>
           </div>
           <div class="callout" style="margin:0" id="liveEtaBox">
             <strong>Пересчёт ETA</strong> (с учётом очереди и стартов)
@@ -1015,7 +1151,7 @@ function previewScheduleFor(draft: WorkItem): ItemSchedule | null {
 
 /** ETA from plan+estimate only (no other backlog items stealing capacity) */
 function planOnlyEnd(a: TeamAssignment): { start: string; end: string; days: number } {
-  const days = sizePlanDays(a.size);
+  const days = sizePlanDays(a.size, szRanges());
   const start = snapToMonday(a.workStartDate || state.startDate);
   const end = addDays(start, days);
   return { start, end, days };
@@ -1189,7 +1325,7 @@ function bindPortfolioDrag() {
 
     const orderForRanks =
       ui.sortDir === "asc" ? next : [...next].reverse();
-    state.items = reorderVisiblePriority(state.items, orderForRanks);
+    state.items = reorderVisiblePriority(state.items, orderForRanks, szRanges());
     ui.sortKey = "priority";
     persist();
   };
@@ -1285,6 +1421,7 @@ function render() {
         <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очереди (тест)</button>
         <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Сроки / Gantt</button>
         <button class="tab ${ui.tab === "capacity" ? "active" : ""}" data-tab="capacity">Команды</button>
+        <button class="tab ${ui.tab === "settings" ? "active" : ""}" data-tab="settings">Настройки</button>
       </div>
       <div class="tab-print-root" id="tabPrintRoot">
       ${
@@ -1296,7 +1433,9 @@ function render() {
               ? queuesTestHtml(slices)
               : ui.tab === "timeline"
                 ? timelineHtml(rollups, slices)
-                : capacityHtml()
+                : ui.tab === "settings"
+                  ? settingsHtml(rollups)
+                  : capacityHtml()
       }
       </div>
       </div>
@@ -1340,7 +1479,7 @@ function refreshLiveEta() {
   const assignments = readAssignments();
   if (liveEst) {
     liveEst.textContent = String(
-      assignments.reduce((s, a) => s + sizePlanDays(a.size), 0) || 0
+      assignments.reduce((s, a) => s + sizePlanDays(a.size, szRanges()), 0) || 0
     );
   }
   if (!liveEta) return;
@@ -1458,6 +1597,14 @@ function bind() {
     });
   });
 
+  document.querySelectorAll<HTMLInputElement>(".set-range").forEach((input) => {
+    input.addEventListener("input", () => applySizeRangesFromInputs());
+  });
+  document.querySelector("#resetSizeRanges")?.addEventListener("click", () => {
+    state.sizeRanges = normalizeSizeRanges(undefined);
+    persist();
+  });
+
   const q = document.querySelector<HTMLInputElement>("#q");
   q?.addEventListener("input", () => {
     ui.query = q.value;
@@ -1541,7 +1688,7 @@ function bind() {
         input,
         text,
         () => {
-          state.items = moveItemToPriority(state.items, itemId, priority);
+          state.items = moveItemToPriority(state.items, itemId, priority, szRanges());
           persist();
         },
         revert
@@ -1631,10 +1778,10 @@ function bind() {
           ...state.items,
           { ...data, id, manualRank: state.items.length + 1 },
         ];
-        state.items = moveItemToPriority(state.items, id, priority);
+        state.items = moveItemToPriority(state.items, id, priority, szRanges());
       } else {
         state.items.push({ ...data, id: uid("item"), manualRank: priority });
-        state.items = ensureUniquePriorities(state.items);
+        state.items = ensureUniquePriorities(state.items, szRanges());
       }
       ui.creating = false;
       ui.editingId = null;
@@ -1648,7 +1795,7 @@ function bind() {
       const prev = state.items[idx];
       if (priority !== prev.manualRank) {
         state.items[idx] = { ...prev, ...data, manualRank: prev.manualRank };
-        state.items = moveItemToPriority(state.items, ui.editingId, priority);
+        state.items = moveItemToPriority(state.items, ui.editingId, priority, szRanges());
       } else {
         state.items[idx] = { ...prev, ...data };
       }
@@ -2022,7 +2169,7 @@ async function exportCurrentTabPdf() {
 async function bootstrap() {
   state = await loadState();
   const before = state.items.map((i) => i.manualRank).join(",");
-  state = { ...state, items: ensureUniquePriorities(state.items) };
+  state = { ...state, items: ensureUniquePriorities(state.items, szRanges()) };
   const after = state.items.map((i) => i.manualRank).join(",");
   if (before !== after) saveState(state);
   onSyncStatusChange((status) => {

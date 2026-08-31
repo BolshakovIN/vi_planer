@@ -1,4 +1,4 @@
-import { AppState, addWeeks, mondayOf, ensureUniquePriorities } from "./model";
+import { AppState, addWeeks, mondayOf, ensureUniquePriorities, DEFAULT_SIZE_RANGES } from "./model";
 
 const S0 = mondayOf();
 const S1 = addWeeks(S0, 1);
@@ -12,6 +12,11 @@ const S8 = addWeeks(S0, 8);
 const SEED_RAW: AppState = {
   version: 3,
   startDate: S0,
+  sizeRanges: {
+    S: { ...DEFAULT_SIZE_RANGES.S },
+    M: { ...DEFAULT_SIZE_RANGES.M },
+    L: { ...DEFAULT_SIZE_RANGES.L },
+  },
   teams: [
     {
       id: "platform",

@@ -52,7 +52,7 @@ function loadLocal(): AppState | null {
     if (!normalized) return null;
     return {
       ...normalized,
-      items: ensureUniquePriorities(normalized.items),
+      items: ensureUniquePriorities(normalized.items, normalized.sizeRanges),
     };
   } catch {
     return null;
@@ -72,7 +72,7 @@ async function loadFromApi(): Promise<AppState | null> {
     if (!normalized) return null;
     return {
       ...normalized,
-      items: ensureUniquePriorities(normalized.items),
+      items: ensureUniquePriorities(normalized.items, normalized.sizeRanges),
     };
   } catch {
     return null;
@@ -106,7 +106,7 @@ async function loadFromSupabase(): Promise<AppState | null> {
     if (!normalized) return null;
     return {
       ...normalized,
-      items: ensureUniquePriorities(normalized.items),
+      items: ensureUniquePriorities(normalized.items, normalized.sizeRanges),
     };
   } catch {
     return null;
