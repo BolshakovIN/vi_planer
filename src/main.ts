@@ -1004,15 +1004,14 @@ function capacityHtml(): string {
     <div class="panel">
       <div class="panel-header">
         <h2>Команды</h2>
-        <button class="btn btn-primary" id="addTeam">+ Команда</button>
       </div>
       <div id="teamsManageList">
-        ${rows || `<div class="empty">Нет команд — создайте первую</div>`}
+        ${rows || `<div class="empty">Нет команд — добавьте первую ниже</div>`}
       </div>
-      <div class="team-add-bar" id="teamAddBar" hidden>
+      <div class="team-add-bar" id="teamAddBar">
         <span class="team-dot" id="newTeamDot" style="background:${nextTeamColor()}"></span>
         <input id="newTeamName" type="text" placeholder="Название новой команды" />
-        <button class="btn btn-primary" id="saveNewTeam">Создать</button>
+        <button class="btn btn-primary" id="saveNewTeam">+ Команда</button>
         <button class="btn" id="cancelNewTeam">Отмена</button>
       </div>
     </div>
@@ -2013,22 +2012,6 @@ function bind() {
     }
   );
 
-  document.querySelector("#addTeam")?.addEventListener("click", () => {
-    const bar = document.querySelector<HTMLElement>("#teamAddBar");
-    const nameInput = document.querySelector<HTMLInputElement>("#newTeamName");
-    const dot = document.querySelector<HTMLElement>("#newTeamDot");
-    if (bar) bar.hidden = false;
-    if (dot) dot.style.background = nextTeamColor();
-    nameInput?.focus();
-  });
-
-  document.querySelector("#cancelNewTeam")?.addEventListener("click", () => {
-    const bar = document.querySelector<HTMLElement>("#teamAddBar");
-    const nameInput = document.querySelector<HTMLInputElement>("#newTeamName");
-    if (bar) bar.hidden = true;
-    if (nameInput) nameInput.value = "";
-  });
-
   const createTeam = () => {
     const nameInput = document.querySelector<HTMLInputElement>("#newTeamName");
     const name = nameInput?.value.trim() || "";
@@ -2042,8 +2025,15 @@ function bind() {
       capacityPw: 3,
       color: nextTeamColor(),
     });
+    if (nameInput) nameInput.value = "";
     persist();
   };
+
+  document.querySelector("#cancelNewTeam")?.addEventListener("click", () => {
+    const nameInput = document.querySelector<HTMLInputElement>("#newTeamName");
+    if (nameInput) nameInput.value = "";
+    nameInput?.focus();
+  });
 
   document.querySelector("#saveNewTeam")?.addEventListener("click", createTeam);
   document
