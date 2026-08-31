@@ -72,6 +72,8 @@ interface UiState {
   creating: boolean;
   /** Gantt horizon in weeks */
   ganttWeeks: number;
+  /** Experimental per-team capacity / overload visualization */
+  showTeamLoad: boolean;
   hiddenCols: HideablePortfolioCol[];
   colPickerOpen: boolean;
 }
@@ -87,6 +89,7 @@ const ui: UiState = {
   editingId: null,
   creating: false,
   ganttWeeks: 16,
+  showTeamLoad: false,
   hiddenCols: [],
   colPickerOpen: false,
 };
@@ -223,6 +226,7 @@ function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
 
 const COL_WIDTH_KEY = "vi-planer-col-widths";
 const COL_VISIBILITY_KEY = "vi-planer-col-hidden";
+const SHOW_TEAM_LOAD_KEY = "vi-planer-show-team-load";
 
 type PortfolioCol =
   | "priority"
@@ -312,6 +316,26 @@ function loadHiddenCols(): HideablePortfolioCol[] {
 
 function saveHiddenCols(hidden: HideablePortfolioCol[]) {
   localStorage.setItem(COL_VISIBILITY_KEY, JSON.stringify(hidden));
+}
+
+function loadShowTeamLoad(): boolean {
+  try {
+    return localStorage.getItem(SHOW_TEAM_LOAD_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveShowTeamLoad(show: boolean) {
+  localStorage.setItem(SHOW_TEAM_LOAD_KEY, show ? "1" : "0");
+}
+
+function showTeamLoadToggleHtml(): string {
+  return `
+    <label class="team-load-toggle">
+      <input type="checkbox" id="showTeamLoad" ${ui.showTeamLoad ? "checked" : ""} />
+      Показать загрузку команд
+    </label>`;
 }
 
 function isColVisible(col: PortfolioCol): boolean {
@@ -684,7 +708,9 @@ function teamsHtml(
             <div class="mono" style="font-weight:700">${util8}% / 8 нед.</div>
           </div>
           <div class="bar"><span style="width:${Math.min(100, util8)}%;background:${team.color}"></span></div>
-          <div class="cap-strip-wrap">
+          ${
+            ui.showTeamLoad
+              ? `<div class="cap-strip-wrap">
             <div class="cap-strip-label meta">Загрузка по неделям (эксп.)</div>
             ${teamCapacityStripHtml(
               team,
@@ -692,7 +718,9 @@ function teamsHtml(
               overflowByTeam[team.id] ?? new Set(),
               horizon
             )}
-          </div>
+          </div>`
+              : ""
+          }
           ${queue
             .map((s) => {
               const others = s.item.assignments.length - 1;
@@ -719,6 +747,7 @@ function teamsHtml(
     <div class="panel">
       <div class="panel-header">
         <h2>Сквозной приоритет по командам</h2>
+        ${showTeamLoadToggleHtml()}
       </div>
       ${cards}
     </div>
@@ -942,7 +971,8 @@ function timelineHtml(
 
   const axisTicks = Array.from({ length: weeks }, (_, w) => {
     const show = w % tickStep === 0 || w === weeks - 1;
-    const overflowCls = anyOverflowWeek(w) ? " gantt-axis-tick-overflow" : "";
+    const overflowCls =
+      ui.showTeamLoad && anyOverflowWeek(w) ? " gantt-axis-tick-overflow" : "";
     if (!show) {
       return `<div class="gantt-axis-tick gantt-axis-tick-empty${overflowCls}" style="width:${weekPct}%"></div>`;
     }
@@ -975,6 +1005,7 @@ function timelineHtml(
       <div class="panel-header">
         <h2>Сроки и зависимости по приоритету</h2>
         <div class="gantt-weeks-ctrl">
+          ${showTeamLoadToggleHtml()}
           <label for="ganttWeeks">Горизонт</label>
           <input id="ganttWeeks" type="range" min="4" max="52" step="1" value="${weeks}" />
           <span class="mono" id="ganttWeeksLabel">${weeks} нед.</span>
@@ -1006,16 +1037,24 @@ function timelineHtml(
               </svg>
               ${tracks.join("")}
             </div>
-            <div class="gantt-capacity-block">
+            ${
+              ui.showTeamLoad
+                ? `<div class="gantt-capacity-block">
               <div class="gantt-capacity-head meta">Загрузка команд (эксперимент) — оранжевый/красный = перегруз по плановым стартам</div>
               <div class="gantt-capacity-rows">${capacityRows}</div>
-            </div>
+            </div>`
+                : ""
+            }
           </div>
         </div>`
             : `<div class="empty">Нет активных инициатив</div>`
         }
       </div>
-      <p class="footer-note" style="padding:0 16px 16px;margin:0">Шкала — недели от старта планирования (понедельник). Стрелки — зависимости очереди команды. ETA инициативы = конец bottleneck-полоски. Красная подсветка — плановый спрос команды в неделю выше ёмкости (очередь сдвигает старт).</p>
+      <p class="footer-note" style="padding:0 16px 16px;margin:0">Шкала — недели от старта планирования (понедельник). Стрелки — зависимости очереди команды. ETA инициативы = конец bottleneck-полоски.${
+        ui.showTeamLoad
+          ? " Красная подсветка — плановый спрос команды в неделю выше ёмкости (очередь сдвигает старт)."
+          : ""
+      }</p>
     </div>
   `;
 }
@@ -1925,6 +1964,14 @@ function bind() {
     render();
   });
 
+  document
+    .querySelector<HTMLInputElement>("#showTeamLoad")
+    ?.addEventListener("change", (e) => {
+      ui.showTeamLoad = (e.target as HTMLInputElement).checked;
+      saveShowTeamLoad(ui.showTeamLoad);
+      render();
+    });
+
   document.querySelector("#addItem")?.addEventListener("click", () => {
     ui.creating = true;
     ui.editingId = null;
@@ -2559,6 +2606,7 @@ async function exportCurrentTabPdf() {
 async function bootstrap() {
   state = await loadState();
   ui.hiddenCols = loadHiddenCols();
+  ui.showTeamLoad = loadShowTeamLoad();
   const before = state.items.map((i) => i.manualRank).join(",");
   state = { ...state, items: ensureUniquePriorities(state.items, szRanges()) };
   const after = state.items.map((i) => i.manualRank).join(",");

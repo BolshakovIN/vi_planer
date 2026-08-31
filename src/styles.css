@@ -1419,6 +1419,24 @@ body.prio-dragging {
   z-index: 1;
 }
 
+.team-load-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  user-select: none;
+}
+
+.team-load-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+}
+
 .gantt-weeks-ctrl {
   display: flex;
   align-items: center;
