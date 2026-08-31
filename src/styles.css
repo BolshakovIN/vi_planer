@@ -1450,8 +1450,9 @@ body.prio-dragging {
 .gantt-weeks-ctrl-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   flex-wrap: wrap;
+  font-size: 12px;
 }
 
 .gantt-weeks-ctrl-right label {
@@ -1460,11 +1461,13 @@ body.prio-dragging {
 }
 
 .gantt-weeks-ctrl-right input[type="range"] {
-  width: min(220px, 40vw);
+  width: min(160px, 32vw);
+  max-width: 160px;
+  height: 4px;
 }
 
 .gantt-weeks-ctrl-right .mono {
-  min-width: 58px;
+  min-width: 52px;
   font-weight: 600;
   color: var(--accent);
 }
