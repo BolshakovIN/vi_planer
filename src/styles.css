@@ -314,6 +314,10 @@ textarea {
   box-shadow: var(--shadow);
 }
 
+.tab-settings {
+  margin-left: auto;
+}
+
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);

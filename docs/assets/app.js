@@ -527,7 +527,7 @@
         <button class="tab ${d.tab==="queuesTest"?"active":""}" data-tab="queuesTest">Очереди (тест)</button>
         <button class="tab ${d.tab==="timeline"?"active":""}" data-tab="timeline">Сроки / Gantt</button>
         <button class="tab ${d.tab==="capacity"?"active":""}" data-tab="capacity">Команды</button>
-        <button class="tab ${d.tab==="settings"?"active":""}" data-tab="settings">Настройки</button>
+        <button class="tab tab-settings ${d.tab==="settings"?"active":""}" data-tab="settings">Настройки</button>
       </div>
       <div class="tab-print-root" id="tabPrintRoot">
       ${d.tab==="portfolio"?Qe(t):d.tab==="teams"?Ze(e,n,o):d.tab==="queuesTest"?tn(e,n,o):d.tab==="timeline"?en(t,e,n,o):d.tab==="settings"?nn(t):rn()}
