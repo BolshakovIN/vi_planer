@@ -6,12 +6,13 @@
 
 **https://bolshakovin.github.io/vi_planer/**
 
-> **Бесплатно и общая база:** [Supabase + GitHub Pages](#бесплатно--supabase--github-pages) (рекомендуется). Платный VPS (Selectel и т.д.) — только если нужен свой сервер.
+> **Общая база для команды:** [Railway](#railway--общая-база-для-команды) — SPA + API + PostgreSQL на одном URL (рекомендуется, если Railway доступен). Бесплатная альтернатива: [Supabase + GitHub Pages](#бесплатно--supabase--github-pages). VPS (Selectel, Amvera…) — свой сервер в РФ.
 
 ## Режимы
 
 | Режим | Стоимость | URL | Данные |
 |---|---|---|---|
+| **Railway** | от ~$5/мес | `*.up.railway.app` | Общие, PostgreSQL |
 | **Supabase + Pages** | **0 ₽** | [bolshakovin.github.io/vi_planer/](https://bolshakovin.github.io/vi_planer/) | Общие для всей команды |
 | **Pages локально** | 0 ₽ | тот же URL | Личная копия в браузере (`npm run deploy:pages`) |
 | **VPS / Amvera** | платно | свой домен | Свой сервер + Postgres |
@@ -90,19 +91,20 @@ docker compose up -d --build
 
 ## Railway — общая база для команды
 
-Один URL, одни данные для всех. PostgreSQL на Railway, фронтенд и API на одном сервисе.
+Один URL, одни данные для всех. PostgreSQL на Railway, фронтенд и API на одном сервисе. Репозиторий уже содержит `Dockerfile`, `railway.toml` и health check на `/api/health`.
 
 ### Быстрый деплой
 
 1. Зарегистрируйтесь на [railway.com](https://railway.com).
-2. **New Project** → **Deploy from GitHub repo** → выберите `BolshakovIN/vi_planer`, ветка `master`.
+2. **New Project** → **Deploy from GitHub repo** → `BolshakovIN/vi_planer`, ветка **`master`**.
 3. В проекте: **+ New** → **Database** → **PostgreSQL**.
-4. Откройте web-сервис → **Variables** → **Add Reference** → выберите Postgres → `DATABASE_URL`.
-5. Добавьте переменные (если не заданы автоматически):
+4. Откройте **web-сервис** (не Postgres) → **Variables** → **Add Reference** → Postgres → **`DATABASE_URL`**.
+5. Убедитесь, что заданы (часть подставляется из `Dockerfile` / Railway):
    - `NODE_ENV=production`
    - `HOST=0.0.0.0`
-6. **Settings** → **Networking** → **Generate Domain** — получите URL вида `https://vi-planer-production.up.railway.app`.
-7. Дождитесь деплоя. Health check: `GET /api/health` → `{ "ok": true, "storage": "postgres" }`.
+   - `PORT` — Railway задаёт автоматически, менять не нужно
+6. **Settings** → **Networking** → **Generate Domain** — URL вида `https://vi-planer-production.up.railway.app`.
+7. Дождитесь успешного деплоя. Проверка: `GET /api/health` → `{ "ok": true, "storage": "postgres" }`.
 
 При первом запросе к API в пустую базу автоматически загружается seed-состояние из `src/seed.ts`.
 
