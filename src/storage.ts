@@ -63,9 +63,18 @@ function saveLocal(state: AppState) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+function apiBase(): string {
+  const url = import.meta.env.VITE_API_URL as string | undefined;
+  return url ? url.replace(/\/$/, "") : "";
+}
+
+function usesRemoteApi(): boolean {
+  return Boolean(apiBase()) || import.meta.env.PROD;
+}
+
 async function loadFromApi(): Promise<AppState | null> {
   try {
-    const res = await fetch("/api/state", { cache: "no-store" });
+    const res = await fetch(`${apiBase()}/api/state`, { cache: "no-store" });
     if (!res.ok) return null;
     const json = (await res.json()) as { state?: unknown };
     const normalized = normalizeState(json.state);
@@ -81,7 +90,7 @@ async function loadFromApi(): Promise<AppState | null> {
 
 async function saveToApi(state: AppState): Promise<boolean> {
   try {
-    const res = await fetch("/api/state", {
+    const res = await fetch(`${apiBase()}/api/state`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(state),
@@ -138,7 +147,7 @@ export async function loadState(): Promise<AppState> {
     structuredClone(SEED);
 
   saveLocal(remote);
-  setSyncStatus(getSupabase() || import.meta.env.PROD ? "saved" : "idle");
+  setSyncStatus(getSupabase() || usesRemoteApi() ? "saved" : "idle");
   return remote;
 }
 
@@ -164,7 +173,7 @@ export function saveState(state: AppState) {
       return;
     }
 
-    if (getSupabase() || import.meta.env.PROD) {
+    if (getSupabase() || usesRemoteApi()) {
       setSyncStatus("offline");
     } else {
       setSyncStatus("idle");
