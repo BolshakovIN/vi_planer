@@ -68,11 +68,18 @@ function apiBase(): string {
   return url ? url.replace(/\/$/, "") : "";
 }
 
+function isPagesStandalone(): boolean {
+  const v = import.meta.env.VITE_LOCAL_STORAGE_ONLY;
+  return v === "1" || v === "true";
+}
+
 function usesRemoteApi(): boolean {
+  if (isPagesStandalone()) return false;
   return Boolean(apiBase()) || import.meta.env.PROD;
 }
 
 async function loadFromApi(): Promise<AppState | null> {
+  if (isPagesStandalone()) return null;
   try {
     const res = await fetch(`${apiBase()}/api/state`, { cache: "no-store" });
     if (!res.ok) return null;
@@ -89,6 +96,7 @@ async function loadFromApi(): Promise<AppState | null> {
 }
 
 async function saveToApi(state: AppState): Promise<boolean> {
+  if (isPagesStandalone()) return false;
   try {
     const res = await fetch(`${apiBase()}/api/state`, {
       method: "PUT",

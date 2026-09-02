@@ -8,6 +8,15 @@
 
 > Для **общих данных** у всех пользователей по ссылке нужен сервер с базой — см. [Railway](#railway--общая-база-для-команды) (рекомендуется) или [Render](#render--общая-база-для-команды). GitHub Pages без Supabase хранит данные отдельно в каждом браузере.
 
+## Два режима
+
+| Режим | URL | Данные |
+|---|---|---|
+| **GitHub Pages** | [bolshakovin.github.io/vi_planer/](https://bolshakovin.github.io/vi_planer/) | Личная копия в браузере (`localStorage`), без Railway |
+| **Railway** | ваш `*.up.railway.app` | Общая PostgreSQL для всей команды |
+
+Сборка для Pages (`npm run deploy:pages`) **не** задаёт `VITE_API_URL` и включает `VITE_LOCAL_STORAGE_ONLY` — приложение не обращается к API.
+
 ## Локальный запуск
 
 ```bash
@@ -36,7 +45,7 @@ npm start
 ### Быстрый деплой
 
 1. Зарегистрируйтесь на [railway.com](https://railway.com).
-2. **New Project** → **Deploy from GitHub repo** → выберите `BolshakovIN/vi_planer`, ветка `feature/railway-shared-db` (или `master` после merge).
+2. **New Project** → **Deploy from GitHub repo** → выберите `BolshakovIN/vi_planer`, ветка `master`.
 3. В проекте: **+ New** → **Database** → **PostgreSQL**.
 4. Откройте web-сервис → **Variables** → **Add Reference** → выберите Postgres → `DATABASE_URL`.
 5. Добавьте переменные (если не заданы автоматически):
