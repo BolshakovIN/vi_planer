@@ -6,16 +6,32 @@
 
 **https://bolshakovin.github.io/vi_planer/**
 
-> Для **общих данных** всей команды — сервер с базой. Если Railway недоступен в регионе, используйте **[Amvera](#amvera--рф)** или **[VPS + Docker](#vps--docker-compose)**. GitHub Pages хранит данные отдельно в каждом браузере.
+> **Бесплатно и общая база:** [Supabase + GitHub Pages](#бесплатно--supabase--github-pages) (рекомендуется). Платный VPS (Selectel и т.д.) — только если нужен свой сервер.
 
-## Два режима
+## Режимы
 
-| Режим | URL | Данные |
-|---|---|---|
-| **GitHub Pages** | [bolshakovin.github.io/vi_planer/](https://bolshakovin.github.io/vi_planer/) | Личная копия в браузере (`localStorage`) |
-| **Amvera / VPS** | ваш домен | Общие данные для всей команды |
+| Режим | Стоимость | URL | Данные |
+|---|---|---|---|
+| **Supabase + Pages** | **0 ₽** | [bolshakovin.github.io/vi_planer/](https://bolshakovin.github.io/vi_planer/) | Общие для всей команды |
+| **Pages локально** | 0 ₽ | тот же URL | Личная копия в браузере (`npm run deploy:pages`) |
+| **VPS / Amvera** | платно | свой домен | Свой сервер + Postgres |
 
-Сборка для Pages (`npm run deploy:pages`) **не** задаёт `VITE_API_URL` и включает `VITE_LOCAL_STORAGE_ONLY` — приложение не обращается к API.
+## Бесплатно — Supabase + GitHub Pages
+
+1. Проект на [supabase.com](https://supabase.com) (free)
+2. SQL Editor → [`supabase/schema.sql`](supabase/schema.sql)
+3. Сборка с ключами и деплой:
+
+```bash
+export VITE_SUPABASE_URL='https://xxxx.supabase.co'
+export VITE_SUPABASE_ANON_KEY='eyJ...'
+npm run deploy:pages:shared
+git add docs && git commit -m "Shared cloud storage" && git push
+```
+
+Подробно: [`deploy/supabase-free.md`](deploy/supabase-free.md)
+
+Сборка `deploy:pages` (без Supabase) включает `VITE_LOCAL_STORAGE_ONLY` — только личные данные в браузере.
 
 ## Локальный запуск
 

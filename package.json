@@ -10,7 +10,9 @@
     "dev:api": "tsx watch server/index.ts",
     "build": "tsc && vite build",
     "build:pages": "VITE_BASE_PATH=/vi_planer/ VITE_LOCAL_STORAGE_ONLY=1 tsc && VITE_BASE_PATH=/vi_planer/ VITE_LOCAL_STORAGE_ONLY=1 vite build --outDir dist-pages",
+    "build:pages:shared": "tsc && VITE_BASE_PATH=/vi_planer/ vite build --outDir dist-pages",
     "deploy:pages": "npm run build:pages && rm -rf docs && mkdir -p docs && cp -R dist-pages/* docs/ && npm run build",
+    "deploy:pages:shared": "npm run build:pages:shared && rm -rf docs && mkdir -p docs && cp -R dist-pages/* docs/ && npm run build",
     "start": "tsx server/index.ts",
     "preview": "npm run build && npm start"
   },
