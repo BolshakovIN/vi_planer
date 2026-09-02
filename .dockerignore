@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-pages
+docs
+data
+.git
+.env
+.env.*
+*.md
+!README.md
+.cursor
+agent-transcripts

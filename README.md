@@ -6,14 +6,14 @@
 
 **https://bolshakovin.github.io/vi_planer/**
 
-> Для **общих данных** у всех пользователей по ссылке нужен сервер с базой — см. [Railway](#railway--общая-база-для-команды) (рекомендуется) или [Render](#render--общая-база-для-команды). GitHub Pages без Supabase хранит данные отдельно в каждом браузере.
+> Для **общих данных** всей команды — сервер с базой. Если Railway недоступен в регионе, используйте **[Amvera](#amvera--рф)** или **[VPS + Docker](#vps--docker-compose)**. GitHub Pages хранит данные отдельно в каждом браузере.
 
 ## Два режима
 
 | Режим | URL | Данные |
 |---|---|---|
-| **GitHub Pages** | [bolshakovin.github.io/vi_planer/](https://bolshakovin.github.io/vi_planer/) | Личная копия в браузере (`localStorage`), без Railway |
-| **Railway** | ваш `*.up.railway.app` | Общая PostgreSQL для всей команды |
+| **GitHub Pages** | [bolshakovin.github.io/vi_planer/](https://bolshakovin.github.io/vi_planer/) | Личная копия в браузере (`localStorage`) |
+| **Amvera / VPS** | ваш домен | Общие данные для всей команды |
 
 Сборка для Pages (`npm run deploy:pages`) **не** задаёт `VITE_API_URL` и включает `VITE_LOCAL_STORAGE_ONLY` — приложение не обращается к API.
 
@@ -37,6 +37,40 @@ npm start
 Порт и хост можно переопределить: `PORT=9000 HOST=0.0.0.0 npm start`.
 
 Без `DATABASE_URL` сервер хранит состояние в файле (`DATA_DIR`). С PostgreSQL — в общей базе.
+
+## Amvera (РФ)
+
+Платформа [amvera.ru](https://amvera.ru) — деплой из GitHub, постоянный диск `/data`, без привязки к US-регионам.
+
+1. **Создать приложение** → **Из GitHub** → `BolshakovIN/vi_planer`, ветка `master`
+2. В корне репозитория уже есть `amvera.yaml` и `Dockerfile`
+3. Переменные окружения:
+   - `NODE_ENV=production`
+   - `HOST=0.0.0.0`
+   - `DATA_DIR=/data`
+4. Включите публичный домен → проверьте `GET /api/health`
+
+Подробнее: [`deploy/amvera.md`](deploy/amvera.md)
+
+## Selectel (рекомендуется для РФ)
+
+Облачный сервер + Docker Compose + PostgreSQL.
+
+1. [my.selectel.ru](https://my.selectel.ru) → облачный сервер Ubuntu 24.04 (2 GB RAM+)
+2. User data: [`deploy/selectel-cloud-init.yaml`](deploy/selectel-cloud-init.yaml)
+3. На сервере:
+
+```bash
+git clone https://github.com/BolshakovIN/vi_planer.git && cd vi_planer
+export POSTGRES_PASSWORD='смените-пароль'
+docker compose up -d --build
+```
+
+→ `http://IP:8787`. Пошагово: [`deploy/selectel.md`](deploy/selectel.md)
+
+## VPS + Docker Compose
+
+На любом VPS (Timeweb, Hetzner…): [`deploy/vps.md`](deploy/vps.md)
 
 ## Railway — общая база для команды
 
