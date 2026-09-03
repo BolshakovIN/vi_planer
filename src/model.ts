@@ -542,15 +542,35 @@ export function ensureUniquePriorities(
   });
 }
 
+/** How Gantt / queues place work relative to team capacity */
+export type ScheduleMode = "manual" | "auto";
+
+export interface ScheduleOptions {
+  /**
+   * `auto` (default historically): queue by priority, fill free capacity, shift starts.
+   * `manual`: fix each assignment at workStartDate; concurrent work may overload capacity.
+   */
+  mode?: ScheduleMode;
+}
+
 /**
  * Schedule each team's work independently by shared priority field.
  * T-shirt on assignment → person-weeks; team capacityPw = person-weeks per calendar week.
+ *
+ * Mode `auto`: capacity queue — later items wait for free slots (no overload on load strip).
+ * Mode `manual`: user dates fixed — effort fills from workStartDate at capacityPw rate even
+ * when weeks already have other work, so overload is visible on load / bars.
+ * Does not mutate stored workStartDate values.
  */
-export function schedulePortfolio(state: AppState): {
+export function schedulePortfolio(
+  state: AppState,
+  options: ScheduleOptions = {}
+): {
   slices: ScheduledSlice[];
   rollups: ItemSchedule[];
   load: Record<string, TeamLoadWeek[]>;
 } {
+  const mode: ScheduleMode = options.mode === "manual" ? "manual" : "auto";
   const ranges = state.sizeRanges ?? DEFAULT_SIZE_RANGES;
   const active = state.items.filter((i) => i.status !== "done");
   const ordered = sortByPriority(active, ranges);
@@ -590,13 +610,18 @@ export function schedulePortfolio(state: AppState): {
     queue.forEach((entry, idx) => {
       const estimatePw = sizePlanWeeks(entry.size, ranges);
       const plannedWeek = weekIndex(state.startDate, entry.workStartDate);
-      let startWeek = Math.max(cursor, plannedWeek);
+      let startWeek: number;
 
-      while (
-        startWeek < maxWeeks &&
-        weeks[startWeek].usedPw >= team.capacityPw - 0.001
-      ) {
-        startWeek += 1;
+      if (mode === "manual") {
+        startWeek = plannedWeek;
+      } else {
+        startWeek = Math.max(cursor, plannedWeek);
+        while (
+          startWeek < maxWeeks &&
+          weeks[startWeek].usedPw >= team.capacityPw - 0.001
+        ) {
+          startWeek += 1;
+        }
       }
 
       let remaining = estimatePw;
@@ -606,15 +631,24 @@ export function schedulePortfolio(state: AppState): {
 
       while (remaining > 0.001 && endWeek < maxWeeks) {
         const slot = weeks[endWeek];
-        const free = Math.max(0, team.capacityPw - slot.usedPw);
-        if (free <= 0.001) {
-          endWeek += 1;
-          continue;
+        let take: number;
+        let offsetInWeek = 0;
+
+        if (mode === "manual") {
+          // Full rate from planned start even if week already busy → overload visible
+          take = Math.min(team.capacityPw, remaining);
+        } else {
+          const free = Math.max(0, team.capacityPw - slot.usedPw);
+          if (free <= 0.001) {
+            endWeek += 1;
+            continue;
+          }
+          take = Math.min(free, remaining);
+          offsetInWeek = (slot.usedPw / team.capacityPw) * 7;
         }
-        const take = Math.min(free, remaining);
+
         const weekStart = addWeeks(state.startDate, endWeek);
-        const daysUsed = (take / team.capacityPw) * 7;
-        const offsetInWeek = (slot.usedPw / team.capacityPw) * 7;
+        const daysUsed = (take / Math.max(team.capacityPw, 0.001)) * 7;
         endDate = addDays(weekStart, offsetInWeek + daysUsed);
 
         addLoadContribution(slot, entry.item, take);
@@ -640,15 +674,17 @@ export function schedulePortfolio(state: AppState): {
         startDate,
         endDate,
         waitWeeks: startWeek,
-        delayedByQueue: startWeek > plannedWeek,
+        delayedByQueue: mode === "auto" && startWeek > plannedWeek,
         durationWeeks,
       });
 
-      cursor = endWeek;
-      if (weeks[cursor] && weeks[cursor].usedPw >= team.capacityPw - 0.001) {
-        cursor = endWeek + 1;
-      } else {
+      if (mode === "auto") {
         cursor = endWeek;
+        if (weeks[cursor] && weeks[cursor].usedPw >= team.capacityPw - 0.001) {
+          cursor = endWeek + 1;
+        } else {
+          cursor = endWeek;
+        }
       }
     });
 

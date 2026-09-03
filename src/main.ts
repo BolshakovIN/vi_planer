@@ -9,6 +9,7 @@ import {
   TeamAssignment,
   formatDate,
   schedulePortfolio,
+  ScheduleMode,
   sortByPriority,
   totalEstimateWeeks,
   sizePlanWeeks,
@@ -74,6 +75,11 @@ interface UiState {
   ganttWeeks: number;
   /** Experimental per-team capacity / overload visualization */
   showTeamLoad: boolean;
+  /**
+   * When true: schedulePortfolio auto mode (queue by priority + capacity).
+   * When false: keep user workStartDates (manual) so overload is visible.
+   */
+  autoCapacitySchedule: boolean;
   hiddenCols: HideablePortfolioCol[];
   colPickerOpen: boolean;
 }
@@ -90,6 +96,7 @@ const ui: UiState = {
   creating: false,
   ganttWeeks: 16,
   showTeamLoad: false,
+  autoCapacitySchedule: false,
   hiddenCols: [],
   colPickerOpen: false,
 };
@@ -233,6 +240,7 @@ function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
 const COL_WIDTH_KEY = "vi-planer-col-widths";
 const COL_VISIBILITY_KEY = "vi-planer-col-hidden";
 const SHOW_TEAM_LOAD_KEY = "vi-planer-show-team-load";
+const AUTO_CAPACITY_SCHEDULE_KEY = "vi-planer-auto-capacity-schedule";
 
 type PortfolioCol =
   | "priority"
@@ -336,12 +344,46 @@ function saveShowTeamLoad(show: boolean) {
   localStorage.setItem(SHOW_TEAM_LOAD_KEY, show ? "1" : "0");
 }
 
+function loadAutoCapacitySchedule(): boolean {
+  try {
+    return localStorage.getItem(AUTO_CAPACITY_SCHEDULE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveAutoCapacitySchedule(on: boolean) {
+  localStorage.setItem(AUTO_CAPACITY_SCHEDULE_KEY, on ? "1" : "0");
+}
+
+function activeScheduleMode(): ScheduleMode {
+  return ui.autoCapacitySchedule ? "auto" : "manual";
+}
+
+function scheduleState(stateOverride?: AppState) {
+  return schedulePortfolio(stateOverride ?? state, {
+    mode: activeScheduleMode(),
+  });
+}
+
 function showTeamLoadToggleHtml(): string {
   return `
     <label class="team-load-toggle">
       <input type="checkbox" id="showTeamLoad" ${ui.showTeamLoad ? "checked" : ""} />
       Показать загрузку команд
     </label>`;
+}
+
+function autoCapacityToggleHtml(): string {
+  return `
+    <label class="team-load-toggle" title="Выкл: даты старта как заданы (видны перегрузки). Вкл: сдвиг по приоритету и ёмкости команд.">
+      <input type="checkbox" id="autoCapacitySchedule" ${ui.autoCapacitySchedule ? "checked" : ""} />
+      Автоматически сдвигать по ёмкости
+    </label>`;
+}
+
+function scheduleTogglesHtml(): string {
+  return `<div class="schedule-toggles">${showTeamLoadToggleHtml()}${autoCapacityToggleHtml()}</div>`;
 }
 
 function isColVisible(col: PortfolioCol): boolean {
@@ -755,7 +797,7 @@ function teamsHtml(
     <div class="panel">
       <div class="panel-header">
         <h2>Сквозной приоритет по командам</h2>
-        ${showTeamLoadToggleHtml()}
+        ${scheduleTogglesHtml()}
       </div>
       ${cards}
     </div>
@@ -770,6 +812,7 @@ function queuesTestHtml(
 ): string {
   const planStart = state.startDate;
   const horizon = 12;
+  const auto = ui.autoCapacitySchedule;
   const cards = state.teams
     .map((team) => {
       const queue = slices
@@ -802,8 +845,12 @@ function queuesTestHtml(
                 : "сдвиг из‑за загрузки очереди";
               takeClass = "take-queue";
             } else if (s.startDate > planStart) {
-              takeReason = `ждёт плановый старт ${formatDate(s.plannedStartDate)}`;
+              takeReason = auto
+                ? `ждёт плановый старт ${formatDate(s.plannedStartDate)}`
+                : `плановый старт ${formatDate(s.plannedStartDate)}`;
               takeClass = "take-plan";
+            } else if (!auto) {
+              takeReason = "по заданной дате старта (без сдвига очереди)";
             }
             const others = s.item.assignments
               .filter((a) => a.teamId !== team.id)
@@ -874,13 +921,17 @@ function queuesTestHtml(
   return `
     <div class="callout">
       <strong>Тест:</strong> цифра — приоритет из Портфеля (1 = выше).
-      «Может взять с …» — фактическая дата, когда команда освобождается с учётом очереди и планового старта.
+      ${
+        auto
+          ? "«Может взять с …» — фактическая дата с учётом очереди и планового старта."
+          : "Сейчас без автосдвига: даты = заданные старты; параллельная работа может перегрузить ёмкость."
+      }
       Полоска — окно работы в ближайшие 12 недель.
     </div>
     <div class="panel">
       <div class="panel-header">
         <h2>Очереди (тест) — когда команда может взять задачу</h2>
-        ${showTeamLoadToggleHtml()}
+        ${scheduleTogglesHtml()}
       </div>
       ${cards}
     </div>
@@ -908,47 +959,49 @@ function timelineHtml(
   const weekPct = 100 / weeks;
   const trackBg = `repeating-linear-gradient(90deg, #f5f5f5 0, #f5f5f5 calc(${weekPct}% - 1px), #e0e0e0 calc(${weekPct}% - 1px), #e0e0e0 ${weekPct}%)`;
 
-  // Same-team queue deps: soft cubic curves (not rigid elbows, not stretched loops)
+  // Same-team queue deps: only meaningful when auto capacity queue shifts work
   const depPaths: string[] = [];
   const depMarkers: string[] = [];
-  state.teams.forEach((team, teamIdx) => {
-    const queue = slices
-      .filter((s) => s.teamId === team.id)
-      .sort((a, b) => a.effectiveRank - b.effectiveRank);
-    if (queue.length < 2) return;
+  if (ui.autoCapacitySchedule) {
+    state.teams.forEach((team, teamIdx) => {
+      const queue = slices
+        .filter((s) => s.teamId === team.id)
+        .sort((a, b) => a.effectiveRank - b.effectiveRank);
+      if (queue.length < 2) return;
 
-    const markerId = `arrow-${team.id}`;
-    depMarkers.push(`
+      const markerId = `arrow-${team.id}`;
+      depMarkers.push(`
       <marker id="${markerId}" markerWidth="0.28" markerHeight="0.28" refX="0.22" refY="0.14" orient="auto" markerUnits="userSpaceOnUse">
-        <polygon points="0 0, 0.28 0.14, 0 0.28" fill="${team.color}" fill-opacity="0.85" />
+        <polygon points="0 0, 0.28 0.14, 0 0.28" fill="${team.color}" fill-opacity="0.95" />
       </marker>
     `);
 
-    for (let i = 1; i < queue.length; i++) {
-      const prev = queue[i - 1];
-      const curr = queue[i];
-      const y1 = (rowIndex.get(prev.item.id) ?? 0) + 0.5;
-      const y2 = (rowIndex.get(curr.item.id) ?? 0) + 0.5;
-      const x1 = Math.min(weeks - 0.05, prev.endWeek + 0.92);
-      const x2 = Math.min(weeks - 0.05, Math.max(0.08, curr.startWeek + 0.02));
-      const dx = x2 - x1;
-      const lane = ((teamIdx % 4) - 1.5) * 0.08;
+      for (let i = 1; i < queue.length; i++) {
+        const prev = queue[i - 1];
+        const curr = queue[i];
+        const y1 = (rowIndex.get(prev.item.id) ?? 0) + 0.5;
+        const y2 = (rowIndex.get(curr.item.id) ?? 0) + 0.5;
+        const x1 = Math.min(weeks - 0.05, prev.endWeek + 0.92);
+        const x2 = Math.min(weeks - 0.05, Math.max(0.08, curr.startWeek + 0.02));
+        const dx = x2 - x1;
+        const lane = ((teamIdx % 4) - 1.5) * 0.08;
 
-      // Gentle S-curve: control points stay near each endpoint's Y
-      // (avoids the "shared midX" loop that stretches under preserveAspectRatio=none)
-      const bulge = Math.max(0.35, Math.abs(dx) * 0.45) + Math.abs(lane);
-      const c1x = x1 + (dx >= 0 ? bulge : -bulge * 0.35) + lane;
-      const c2x = x2 - (dx >= 0 ? bulge : -bulge * 0.35) + lane;
-      const d =
-        Math.abs(y1 - y2) < 0.02
-          ? `M ${x1} ${y1} H ${x2}`
-          : `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2} ${y2}`;
+        // Gentle S-curve: control points stay near each endpoint's Y
+        // (avoids the "shared midX" loop that stretches under preserveAspectRatio=none)
+        const bulge = Math.max(0.35, Math.abs(dx) * 0.45) + Math.abs(lane);
+        const c1x = x1 + (dx >= 0 ? bulge : -bulge * 0.35) + lane;
+        const c2x = x2 - (dx >= 0 ? bulge : -bulge * 0.35) + lane;
+        const d =
+          Math.abs(y1 - y2) < 0.02
+            ? `M ${x1} ${y1} H ${x2}`
+            : `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2} ${y2}`;
 
-      depPaths.push(
-        `<path d="${d}" fill="none" stroke="${team.color}" stroke-width="0.05" stroke-opacity="0.65" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#${markerId})" />`
-      );
-    }
-  });
+        depPaths.push(
+          `<path d="${d}" fill="none" stroke="${team.color}" stroke-width="0.05" stroke-opacity="0.65" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#${markerId})" />`
+        );
+      }
+    });
+  }
 
   const BAR_H = 20;
   const BAR_GAP = 3;
@@ -984,22 +1037,26 @@ function timelineHtml(
 
   const rowsHtml = visible
     .map(({ item, r }) => {
-      const preds = r.slices
-        .map((s) => {
-          const teamQueue = slices
-            .filter((x) => x.teamId === s.teamId)
-            .sort((a, b) => a.effectiveRank - b.effectiveRank);
-          const idx = teamQueue.findIndex((x) => x.item.id === item.id);
-          if (idx <= 0) return null;
-          const pred = teamQueue[idx - 1];
-          const t = teamById(s.teamId);
-          return `#${pred.item.manualRank} (${t?.name ?? s.teamId})`;
-        })
-        .filter(Boolean);
-      const uniqPreds = [...new Set(preds)];
-      const depHint = uniqPreds.length
-        ? `<div class="meta gantt-dep-meta">после ${uniqPreds.join(", ")}</div>`
-        : `<div class="meta gantt-dep-meta">старт очереди</div>`;
+      const depHint = ui.autoCapacitySchedule
+        ? (() => {
+            const preds = r.slices
+              .map((s) => {
+                const teamQueue = slices
+                  .filter((x) => x.teamId === s.teamId)
+                  .sort((a, b) => a.effectiveRank - b.effectiveRank);
+                const idx = teamQueue.findIndex((x) => x.item.id === item.id);
+                if (idx <= 0) return null;
+                const pred = teamQueue[idx - 1];
+                const t = teamById(s.teamId);
+                return `#${pred.item.manualRank} (${t?.name ?? s.teamId})`;
+              })
+              .filter(Boolean);
+            const uniqPreds = [...new Set(preds)];
+            return uniqPreds.length
+              ? `<div class="meta gantt-dep-meta">после ${uniqPreds.join(", ")}</div>`
+              : `<div class="meta gantt-dep-meta">старт очереди</div>`;
+          })()
+        : `<div class="meta gantt-dep-meta">как задано · без сдвига очереди</div>`;
 
       const packed = packBarLanes(r.slices);
       const bars = packed
@@ -1010,7 +1067,14 @@ function timelineHtml(
             (Math.max(1, s.endWeek - s.startWeek + 1) / weeks) * 100;
           const isBot = s.teamId === r.bottleneckTeamId;
           const top = TRACK_PAD + barLane * (BAR_H + BAR_GAP);
-          return `<div class="gantt-bar ${isBot ? "gantt-bot" : ""}" style="left:${left}%;width:${Math.max(width, 2.5)}%;top:${top}px;height:${BAR_H}px;background:${team?.color ?? "#64748b"}" title="${escapeAttr(team?.name ?? "")}: ${formatDate(s.endDate)}">${escapeHtml(team?.name ?? "")}</div>`;
+          const teamOverflow = overflowByTeam[s.teamId] ?? new Set();
+          const barOverload = Array.from(
+            { length: Math.max(1, s.endWeek - s.startWeek + 1) },
+            (_, i) => s.startWeek + i
+          ).some((w) => teamOverflow.has(w));
+          const overloadCls = barOverload ? " gantt-bar-overload" : "";
+          const title = `${team?.name ?? ""}: ${formatDate(s.startDate)} → ${formatDate(s.endDate)}${barOverload ? " · перегруз ёмкости" : ""}`;
+          return `<div class="gantt-bar ${isBot ? "gantt-bot" : ""}${overloadCls}" style="left:${left}%;width:${Math.max(width, 2.5)}%;top:${top}px;height:${BAR_H}px;background:${team?.color ?? "#64748b"}" title="${escapeAttr(title)}">${escapeHtml(team?.name ?? "")}</div>`;
         })
         .join("");
 
@@ -1070,7 +1134,7 @@ function timelineHtml(
       <div class="panel-header">
         <h2>Сроки и зависимости по приоритету</h2>
         <div class="gantt-weeks-ctrl">
-          ${showTeamLoadToggleHtml()}
+          ${scheduleTogglesHtml()}
           <div class="gantt-weeks-ctrl-right">
             <label for="ganttWeeks">Горизонт</label>
             <input id="ganttWeeks" type="range" min="4" max="52" step="1" value="${weeks}" />
@@ -1114,7 +1178,11 @@ function timelineHtml(
             : `<div class="empty">Нет активных инициатив</div>`
         }
       </div>
-      <p class="footer-note" style="padding:0 16px 16px;margin:0">Шкала — недели от старта планирования (понедельник). Стрелки — зависимости очереди команды. ETA инициативы = конец bottleneck-полоски.${
+      <p class="footer-note" style="padding:0 16px 16px;margin:0">${
+        ui.autoCapacitySchedule
+          ? "Шкала — недели от старта планирования (понедельник). Стрелки — зависимости очереди команды. ETA инициативы = конец bottleneck-полоски."
+          : "Шкала — недели от старта планирования (понедельник). Даты полосок = заданные старты (без сдвига по ёмкости). ETA = конец bottleneck-полоски; параллельная работа может перегрузить команду."
+      }${
         ui.showTeamLoad
           ? " Красная подсветка — загрузка команды по расписанию (как на Gantt) выше ёмкости в эту неделю."
           : ""
@@ -1254,7 +1322,7 @@ function applySizeRangesFromInputs() {
   if (!next) return;
   state.sizeRanges = next;
   saveState(state);
-  const { rollups } = schedulePortfolio(state);
+  const { rollups } = scheduleState();
   patchSettingsPreview(rollups);
 
   const focused = document.activeElement as HTMLInputElement | null;
@@ -1479,7 +1547,7 @@ function previewScheduleFor(draft: WorkItem): ItemSchedule | null {
   const items = state.items.some((i) => i.id === id)
     ? state.items.map((i) => (i.id === id ? item : i))
     : [...state.items, item];
-  const { rollups } = schedulePortfolio({ ...state, items });
+  const { rollups } = scheduleState({ ...state, items });
   return rollups.find((r) => r.item.id === id) ?? null;
 }
 
@@ -1528,9 +1596,13 @@ function formatLiveEtaHtml(
     .map((a) => planOnlyEnd(a).end)
     .reduce((a, b) => (a > b ? a : b), "0000-00-00");
 
+  const modeNote = ui.autoCapacitySchedule
+    ? `ETA с учётом очереди = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`
+    : `ETA по заданным стартам = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`;
+
   return (
     lines +
-    `<div class="eta-final-line">ETA с учётом очереди = <span class="eta-final mono">${formatDate(preview.endDate)}</span></div>` +
+    `<div class="eta-final-line">${modeNote}</div>` +
     `<div class="meta">ETA только от ваших стартов/оценок (без чужого бэклога) = <strong class="mono">${formatDate(planOnlyMax)}</strong> — меняется сразу при смене даты</div>`
   );
 }
@@ -2012,7 +2084,7 @@ function render() {
   closeResetPop();
   closeColPickerOutside();
   closeOverloadPop();
-  const { slices, rollups, load } = schedulePortfolio(state);
+  const { slices, rollups, load } = scheduleState();
   const overflowByTeam = scheduledOverloadWeeks(load);
   lastScheduledLoad = load;
   lastOverflowByTeam = overflowByTeam;
@@ -2266,6 +2338,14 @@ function bind() {
     ?.addEventListener("change", (e) => {
       ui.showTeamLoad = (e.target as HTMLInputElement).checked;
       saveShowTeamLoad(ui.showTeamLoad);
+      render();
+    });
+
+  document
+    .querySelector<HTMLInputElement>("#autoCapacitySchedule")
+    ?.addEventListener("change", (e) => {
+      ui.autoCapacitySchedule = (e.target as HTMLInputElement).checked;
+      saveAutoCapacitySchedule(ui.autoCapacitySchedule);
       render();
     });
 
@@ -2925,6 +3005,7 @@ async function bootstrap() {
   state = await loadState();
   ui.hiddenCols = loadHiddenCols();
   ui.showTeamLoad = loadShowTeamLoad();
+  ui.autoCapacitySchedule = loadAutoCapacitySchedule();
   const before = state.items.map((i) => i.manualRank).join(",");
   state = { ...state, items: ensureUniquePriorities(state.items, szRanges()) };
   const after = state.items.map((i) => i.manualRank).join(",");
