@@ -179,15 +179,21 @@ export interface ItemSchedule {
   bottleneckTeamId: string;
 }
 
+export interface LoadDemandItem {
+  id: string;
+  title: string;
+  contributionPw: number;
+}
+
 export interface TeamLoadWeek {
   week: number;
   weekStart: string;
   usedPw: number;
   capacityPw: number;
-  items: string[];
+  items: LoadDemandItem[];
 }
 
-/** Scheduled week load exceeds team capacity (should not happen after queue merge). */
+/** Scheduled week load exceeds team capacity (rare after queue merge). */
 export function isTeamWeekOverloaded(lw: TeamLoadWeek): boolean {
   return lw.usedPw > lw.capacityPw + 0.001;
 }
@@ -197,43 +203,75 @@ export function utilizationPct(usedPw: number, capacityPw: number): number {
   return Math.round((usedPw / capacityPw) * 100);
 }
 
-export interface ConcurrentDemandItem {
-  id: string;
-  title: string;
-  contributionPw: number;
+function finalizeLoadWeeks(weeks: TeamLoadWeek[]) {
+  for (const week of weeks) {
+    week.usedPw = Math.round(week.usedPw * 1000) / 1000;
+    week.items.sort((a, b) => b.contributionPw - a.contributionPw);
+    for (const it of week.items) {
+      it.contributionPw = Math.round(it.contributionPw * 1000) / 1000;
+    }
+  }
 }
 
-/** Planned concurrent demand for one team-week (before queue merges slots). */
-export interface ConcurrentLoadWeek {
-  week: number;
-  weekStart: string;
-  usedPw: number;
-  capacityPw: number;
-  items: ConcurrentDemandItem[];
+function addLoadContribution(
+  slot: TeamLoadWeek,
+  item: { id: string; title: string },
+  take: number
+) {
+  slot.usedPw += take;
+  const existing = slot.items.find((x) => x.id === item.id);
+  if (existing) existing.contributionPw += take;
+  else
+    slot.items.push({
+      id: item.id,
+      title: item.title,
+      contributionPw: take,
+    });
 }
+
+/**
+ * Weeks where scheduled demand (same intervals as Gantt bars) exceeds capacity.
+ */
+export function scheduledOverloadWeeks(
+  load: Record<string, TeamLoadWeek[]>
+): Record<string, Set<number>> {
+  const result: Record<string, Set<number>> = {};
+  for (const [teamId, weeks] of Object.entries(load)) {
+    const overloaded = new Set<number>();
+    for (const lw of weeks) {
+      if (isTeamWeekOverloaded(lw)) overloaded.add(lw.week);
+    }
+    result[teamId] = overloaded;
+  }
+  return result;
+}
+
+/** @deprecated alias — use LoadDemandItem */
+export type ConcurrentDemandItem = LoadDemandItem;
+
+/** @deprecated alias — use TeamLoadWeek */
+export type ConcurrentLoadWeek = TeamLoadWeek;
 
 /**
  * Parallel planned load by team/week: each assignment from its workStartDate
  * consumes capacity week-by-week without waiting for the queue.
+ * Kept for diagnostics; UI capacity strips use schedulePortfolio load instead.
  */
 export function concurrentTeamLoad(
   state: AppState,
   maxWeeks = 52
-): Record<string, ConcurrentLoadWeek[]> {
+): Record<string, TeamLoadWeek[]> {
   const ranges = state.sizeRanges ?? DEFAULT_SIZE_RANGES;
-  const result: Record<string, ConcurrentLoadWeek[]> = {};
+  const result: Record<string, TeamLoadWeek[]> = {};
 
   for (const team of state.teams) {
-    const weeks: ConcurrentLoadWeek[] = Array.from(
-      { length: maxWeeks },
-      (_, w) => ({
-        week: w,
-        weekStart: addWeeks(state.startDate, w),
-        usedPw: 0,
-        capacityPw: team.capacityPw,
-        items: [],
-      })
-    );
+    const weeks: TeamLoadWeek[] = Array.from({ length: maxWeeks }, (_, w) => ({
+      week: w,
+      weekStart: addWeeks(state.startDate, w),
+      usedPw: 0,
+      capacityPw: team.capacityPw,
+      items: [],
+    }));
 
     for (const item of state.items) {
       if (item.status === "done") continue;
@@ -244,29 +282,14 @@ export function concurrentTeamLoad(
         let w = weekIndex(state.startDate, a.workStartDate);
         while (rem > 0.001 && w < maxWeeks) {
           const take = Math.min(team.capacityPw, rem);
-          const slot = weeks[w];
-          slot.usedPw += take;
-          const existing = slot.items.find((x) => x.id === item.id);
-          if (existing) existing.contributionPw += take;
-          else
-            slot.items.push({
-              id: item.id,
-              title: item.title,
-              contributionPw: take,
-            });
+          addLoadContribution(weeks[w], item, take);
           rem -= take;
           w += 1;
         }
       }
     }
 
-    for (const week of weeks) {
-      week.usedPw = Math.round(week.usedPw * 1000) / 1000;
-      week.items.sort((a, b) => b.contributionPw - a.contributionPw);
-      for (const it of week.items) {
-        it.contributionPw = Math.round(it.contributionPw * 1000) / 1000;
-      }
-    }
+    finalizeLoadWeeks(weeks);
     result[team.id] = weeks;
   }
   return result;
@@ -280,16 +303,7 @@ export function concurrentOverloadWeeks(
   state: AppState,
   maxWeeks = 52
 ): Record<string, Set<number>> {
-  const load = concurrentTeamLoad(state, maxWeeks);
-  const result: Record<string, Set<number>> = {};
-  for (const team of state.teams) {
-    const overloaded = new Set<number>();
-    for (const lw of load[team.id] ?? []) {
-      if (lw.usedPw > lw.capacityPw + 0.001) overloaded.add(lw.week);
-    }
-    result[team.id] = overloaded;
-  }
-  return result;
+  return scheduledOverloadWeeks(concurrentTeamLoad(state, maxWeeks));
 }
 
 export function wsjf(item: WorkItem): number {
@@ -603,10 +617,7 @@ export function schedulePortfolio(state: AppState): {
         const offsetInWeek = (slot.usedPw / team.capacityPw) * 7;
         endDate = addDays(weekStart, offsetInWeek + daysUsed);
 
-        slot.usedPw += take;
-        if (!slot.items.includes(entry.item.id)) {
-          slot.items.push(entry.item.id);
-        }
+        addLoadContribution(slot, entry.item, take);
         remaining -= take;
         if (remaining > 0.001) endWeek += 1;
       }
@@ -641,6 +652,7 @@ export function schedulePortfolio(state: AppState): {
       }
     });
 
+    finalizeLoadWeeks(weeks);
     load[team.id] = weeks;
   }
 

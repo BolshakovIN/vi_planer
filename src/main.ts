@@ -33,8 +33,7 @@ import {
   reorderVisiblePriority,
   TeamLoadWeek,
   Team,
-  ConcurrentLoadWeek,
-  concurrentTeamLoad,
+  scheduledOverloadWeeks,
   isTeamWeekOverloaded,
   utilizationPct,
 } from "./model";
@@ -96,8 +95,8 @@ const ui: UiState = {
 };
 
 let state: AppState = structuredClone(SEED);
-/** Latest concurrent load snapshot for overload explain popovers */
-let lastConcurrentLoad: Record<string, ConcurrentLoadWeek[]> = {};
+/** Latest scheduled load snapshot for overload explain popovers (same weeks as Gantt) */
+let lastScheduledLoad: Record<string, TeamLoadWeek[]> = {};
 let lastOverflowByTeam: Record<string, Set<number>> = {};
 let overloadHoverTimer: number | null = null;
 let overloadPinned = false;
@@ -720,7 +719,7 @@ function teamsHtml(
           ${
             ui.showTeamLoad
               ? `<div class="cap-strip-wrap">
-            <div class="cap-strip-label meta">Загрузка по неделям (эксп.) — наведите или нажмите на красную клетку</div>
+            <div class="cap-strip-label meta">Загрузка по расписанию (эксп.) — красный = перегруз ёмкости; наведите или нажмите</div>
             ${teamCapacityStripHtml(
               team,
               load[team.id] ?? [],
@@ -856,7 +855,7 @@ function queuesTestHtml(
           ${
             ui.showTeamLoad
               ? `<div class="cap-strip-wrap">
-            <div class="cap-strip-label meta">Загрузка по неделям (эксп.) — наведите или нажмите на красную клетку</div>
+            <div class="cap-strip-label meta">Загрузка по расписанию (эксп.) — красный = перегруз ёмкости; наведите или нажмите</div>
             ${teamCapacityStripHtml(
               team,
               load[team.id] ?? [],
@@ -1073,7 +1072,7 @@ function timelineHtml(
             ${
               ui.showTeamLoad
                 ? `<div class="gantt-capacity-block">
-              <div class="gantt-capacity-head meta">Загрузка команд (эксперимент) — красный = перегруз; наведите или нажмите для расшифровки</div>
+              <div class="gantt-capacity-head meta">Загрузка команд по расписанию (эксперимент) — те же недели, что полоски Gantt; красный = перегруз ёмкости</div>
               <div class="gantt-capacity-rows">${capacityRows}</div>
             </div>`
                 : ""
@@ -1085,7 +1084,7 @@ function timelineHtml(
       </div>
       <p class="footer-note" style="padding:0 16px 16px;margin:0">Шкала — недели от старта планирования (понедельник). Стрелки — зависимости очереди команды. ETA инициативы = конец bottleneck-полоски.${
         ui.showTeamLoad
-          ? " Красная подсветка — плановый спрос команды в неделю выше ёмкости (очередь сдвигает старт)."
+          ? " Красная подсветка — загрузка команды по расписанию (как на Gantt) выше ёмкости в эту неделю."
           : ""
       }</p>
     </div>
@@ -1552,7 +1551,7 @@ function overloadWeekLabel(week: number): string {
 function overloadExplainBodyHtml(
   team: Team,
   week: number,
-  slot: ConcurrentLoadWeek | undefined
+  slot: TeamLoadWeek | undefined
 ): string {
   const used = slot?.usedPw ?? 0;
   const cap = slot?.capacityPw ?? team.capacityPw;
@@ -1574,7 +1573,7 @@ function overloadExplainBodyHtml(
     </div>
     <div class="meta">${overloadWeekLabel(week)}</div>
     <div class="overload-load mono">Загрузка <strong>${used.toFixed(1)}</strong> / ${cap} чел·нед</div>
-    <p class="overload-why">Параллельный плановый спрос (старты без учёта очереди) превышает ёмкость команды (${cap} чел·нед/нед). Очередь сдвигает фактические старты.</p>
+    <p class="overload-why">По расписанию (те же интервалы, что полоски Gantt) спрос команды на этой неделе превышает ёмкость (${cap} чел·нед/нед).</p>
     <div class="overload-contrib-label meta">Вклад инициатив</div>
     ${itemList}
   `;
@@ -1587,7 +1586,7 @@ function overloadAxisBodyHtml(week: number): string {
   }
   const rows = teams
     .map((team) => {
-      const slot = lastConcurrentLoad[team.id]?.[week];
+      const slot = lastScheduledLoad[team.id]?.[week];
       const used = slot?.usedPw ?? 0;
       const cap = slot?.capacityPw ?? team.capacityPw;
       const top = (slot?.items ?? [])
@@ -1608,7 +1607,7 @@ function overloadAxisBodyHtml(week: number): string {
 
   return `
     <div class="meta">${overloadWeekLabel(week)}</div>
-    <p class="overload-why">На этой неделе плановый параллельный спрос превышает ёмкость у ${teams.length}&nbsp;${
+    <p class="overload-why">На этой неделе загрузка по расписанию превышает ёмкость у ${teams.length}&nbsp;${
       teams.length === 1 ? "команды" : "команд"
     }.</p>
     ${rows}
@@ -1647,7 +1646,7 @@ function showOverloadExplain(
           return overloadExplainBodyHtml(
             team,
             week,
-            lastConcurrentLoad[teamId]?.[week]
+            lastScheduledLoad[teamId]?.[week]
           );
         })()
       : overloadAxisBodyHtml(week);
@@ -1982,16 +1981,8 @@ function render() {
   closeColPickerOutside();
   closeOverloadPop();
   const { slices, rollups, load } = schedulePortfolio(state);
-  const concurrentLoad = concurrentTeamLoad(state);
-  const overflowByTeam: Record<string, Set<number>> = {};
-  for (const team of state.teams) {
-    const overloaded = new Set<number>();
-    for (const lw of concurrentLoad[team.id] ?? []) {
-      if (lw.usedPw > lw.capacityPw + 0.001) overloaded.add(lw.week);
-    }
-    overflowByTeam[team.id] = overloaded;
-  }
-  lastConcurrentLoad = concurrentLoad;
+  const overflowByTeam = scheduledOverloadWeeks(load);
+  lastScheduledLoad = load;
   lastOverflowByTeam = overflowByTeam;
   const root = document.querySelector("#app");
   if (!root) return;
