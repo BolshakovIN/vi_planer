@@ -332,6 +332,30 @@ textarea {
   overflow: hidden;
 }
 
+/* Sticky toolbar needs a visible overflow ancestor; clip only via radius on other panels */
+.portfolio-panel {
+  overflow: visible;
+}
+
+.portfolio-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow: 0 1px 0 var(--line);
+}
+
+.portfolio-sticky .panel-header {
+  border-bottom: none;
+}
+
+.portfolio-sticky .table-scroll-top {
+  margin: 0 16px 6px;
+  background: var(--surface);
+}
+
 .panel-header {
   display: flex;
   flex-wrap: wrap;
@@ -340,6 +364,7 @@ textarea {
   align-items: center;
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .panel-header h2 {
@@ -353,6 +378,15 @@ textarea {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+
+/* thead sticks under the filter bar when possible (page scroll) */
+.portfolio-table thead th {
+  position: sticky;
+  top: var(--portfolio-sticky-h, 0px);
+  z-index: 6;
+  background: var(--surface-2);
+  box-shadow: inset 0 -1px 0 var(--line);
 }
 
 .filters select,

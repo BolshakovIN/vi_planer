@@ -123,32 +123,34 @@ ${_}`}class z extends Error{constructor({message:e,code:s,cause:r,name:n}){var i
         </tr>
       `}).join("");return`
     ${pl()}
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Единый портфель (проекты + продукты)</h2>
-        <div class="filters">
-          <input id="q" placeholder="Поиск…" value="${Ee(g.query)}" />
-          <select id="typeFilter">
-            <option value="all" ${g.typeFilter==="all"?"selected":""}>Все типы</option>
-            <option value="product" ${g.typeFilter==="product"?"selected":""}>Продукты</option>
-            <option value="project" ${g.typeFilter==="project"?"selected":""}>Проекты</option>
-          </select>
-          <select id="teamFilter">
-            <option value="all">Все команды</option>
-            ${w.teams.map(a=>`<option value="${a.id}" ${g.teamFilter===a.id?"selected":""}>${N(a.name)}</option>`).join("")}
-          </select>
-          <select id="statusFilter">
-            <option value="all">Все статусы</option>
-            ${["idea","ready","in_progress","blocked","done"].map(a=>`<option value="${a}" ${g.statusFilter===a?"selected":""}>${Ps(a)}</option>`).join("")}
-          </select>
-          ${dl()}
-          <button class="btn" id="resetFilters" title="Сбросить фильтры, сортировку и колонки">Сбросить фильтры</button>
-          <button class="btn btn-primary" id="addItem">+ Инициатива</button>
+    <div class="panel portfolio-panel">
+      <div class="portfolio-sticky">
+        <div class="panel-header">
+          <h2>Единый портфель (проекты + продукты)</h2>
+          <div class="filters">
+            <input id="q" placeholder="Поиск…" value="${Ee(g.query)}" />
+            <select id="typeFilter">
+              <option value="all" ${g.typeFilter==="all"?"selected":""}>Все типы</option>
+              <option value="product" ${g.typeFilter==="product"?"selected":""}>Продукты</option>
+              <option value="project" ${g.typeFilter==="project"?"selected":""}>Проекты</option>
+            </select>
+            <select id="teamFilter">
+              <option value="all">Все команды</option>
+              ${w.teams.map(a=>`<option value="${a.id}" ${g.teamFilter===a.id?"selected":""}>${N(a.name)}</option>`).join("")}
+            </select>
+            <select id="statusFilter">
+              <option value="all">Все статусы</option>
+              ${["idea","ready","in_progress","blocked","done"].map(a=>`<option value="${a}" ${g.statusFilter===a?"selected":""}>${Ps(a)}</option>`).join("")}
+            </select>
+            ${dl()}
+            <button class="btn" id="resetFilters" title="Сбросить фильтры, сортировку и колонки">Сбросить фильтры</button>
+            <button class="btn btn-primary" id="addItem">+ Инициатива</button>
+          </div>
         </div>
+        <div class="table-scroll-top" aria-hidden="true"><div class="table-scroll-top-inner"></div></div>
       </div>
       ${n?"":'<p class="sort-prio-hint">Сейчас сортировка не по приоритету — перестановка строк отключена, приоритеты не меняются. Верните сортировку по «Приоритет», чтобы двигать строки.</p>'}
       <div class="table-scroll-wrap">
-        <div class="table-scroll-top" aria-hidden="true"><div class="table-scroll-top-inner"></div></div>
         <div class="table-scroll">
           <table class="portfolio-table">
             <thead>
@@ -573,4 +575,4 @@ ${_}`}class z extends Error{constructor({message:e,code:s,cause:r,name:n}){var i
       <button type="button" class="btn" id="resetCancelBtn">Нет</button>
       <button type="button" class="btn btn-danger" id="resetConfirmBtn">Да</button>
     </div>
-  `,document.body.appendChild(e);const s=()=>{const c=t.getBoundingClientRect(),u=e.offsetWidth,d=e.offsetHeight;let h=c.right-u,f=c.bottom+6;h<8&&(h=8),h+u>window.innerWidth-8&&(h=window.innerWidth-u-8),f+d>window.innerHeight-8&&(f=c.top-d-6),e.style.left=`${Math.max(8,h)}px`,e.style.top=`${Math.max(8,f)}px`};s();const r=()=>s();window.addEventListener("scroll",r,!0),window.addEventListener("resize",r);const n=()=>{window.removeEventListener("scroll",r,!0),window.removeEventListener("resize",r),window.removeEventListener("keydown",i),document.removeEventListener("mousedown",a)},i=c=>{c.key==="Escape"&&(n(),He())},a=c=>{const u=c.target;e.contains(u)||t.contains(u)||(n(),He())};(o=e.querySelector("#resetCancelBtn"))==null||o.addEventListener("click",()=>{n(),He()}),(l=e.querySelector("#resetConfirmBtn"))==null||l.addEventListener("click",()=>{n(),He(),w=structuredClone(ns),le()}),window.addEventListener("keydown",i),window.setTimeout(()=>document.addEventListener("mousedown",a),0)}function Il(){const t=document.querySelector(".table-scroll-wrap");if(!t)return;const e=t.querySelector(".table-scroll-top"),s=t.querySelector(".table-scroll"),r=t.querySelector(".table-scroll-top-inner"),n=t.querySelector(".portfolio-table");if(!e||!s||!r||!n)return;let i=!1;const a=()=>{r.style.width=`${n.offsetWidth}px`;const u=n.offsetWidth>s.clientWidth+1;e.style.display=u?"":"none",u&&!i&&(i=!0,e.scrollLeft=s.scrollLeft,i=!1)},o=()=>{i||(i=!0,e.scrollLeft=s.scrollLeft,i=!1)},l=()=>{i||(i=!0,s.scrollLeft=e.scrollLeft,i=!1)};a(),s.addEventListener("scroll",o),e.addEventListener("scroll",l);const c=new ResizeObserver(a);c.observe(n),c.observe(s),window.addEventListener("resize",a)}function jl(){const t=document.querySelector(".portfolio-table");t&&t.querySelectorAll("[data-col-resize]").forEach(e=>{e.addEventListener("pointerdown",s=>{s.preventDefault(),s.stopPropagation();const r=e.dataset.colResize;if(!r)return;const n=e.closest("th");if(!n)return;const i=gn(Cs[r],r),a=s.clientX,o=n.getBoundingClientRect().width,l=s.pointerId;e.setPointerCapture(l),document.body.classList.add("col-resizing");const c=d=>{const h=Math.max(i,Math.round(o+(d.clientX-a)));n.style.width=`${h}px`,n.style.minWidth=`${i}px`},u=d=>{e.releasePointerCapture(l),e.removeEventListener("pointermove",c),e.removeEventListener("pointerup",u),e.removeEventListener("pointercancel",u),document.body.classList.remove("col-resizing");const h=Math.max(i,Math.round(n.getBoundingClientRect().width)),f=pn();f[r]=h,rl(f),n.style.width=`${h}px`};e.addEventListener("pointermove",c),e.addEventListener("pointerup",u),e.addEventListener("pointercancel",u)})})}async function xl(){const t="/vi_planer/",e=new URL("VI-Planer-requirements.md",new URL(t,window.location.href)).href;try{const s=await fetch(e);if(!s.ok)throw new Error(String(s.status));const r=await s.text(),n=new Blob([r],{type:"text/markdown;charset=utf-8"}),i=URL.createObjectURL(n),a=document.createElement("a");a.href=i,a.download="VI-Planer-requirements.md",a.click(),URL.revokeObjectURL(i)}catch(s){console.error(s),alert("Не удалось скачать файл требований")}}async function Ll(){const t=document.querySelector("#exportPdfBtn"),e=document.querySelector("#pdfCapture");if(!e){alert("Не удалось найти содержимое для экспорта");return}const s=(t==null?void 0:t.textContent)??"Экспорт PDF";t&&(t.disabled=!0,t.textContent="PDF…");const r=new Date().toISOString().slice(0,10),n=`VI Planer — ${As[g.tab]} · ${r}`,i=`VI-Planer-${As[g.tab]}-${r}.pdf`.replaceAll(" ","_");document.body.classList.add("pdf-capturing");try{await Jo(e,i,n)}catch(a){console.error(a),alert("Не удалось создать PDF. Проверьте интернет (нужны библиотеки с CDN).")}finally{document.body.classList.remove("pdf-capturing"),t&&(t.disabled=!1,t.textContent=s)}}async function Dl(){w=await Ko(),g.hiddenCols=il(),g.showTeamLoad=al();const t=w.items.map(s=>s.manualRank).join(",");w={...w,items:Ae(w.items,X())};const e=w.items.map(s=>s.manualRank).join(",");t!==e&&zt(w),Mo(s=>{const r=document.querySelector("#syncStatus");r&&(r.dataset.status=s,r.textContent=ln(s))}),W()}Dl()})();
+  `,document.body.appendChild(e);const s=()=>{const c=t.getBoundingClientRect(),u=e.offsetWidth,d=e.offsetHeight;let h=c.right-u,f=c.bottom+6;h<8&&(h=8),h+u>window.innerWidth-8&&(h=window.innerWidth-u-8),f+d>window.innerHeight-8&&(f=c.top-d-6),e.style.left=`${Math.max(8,h)}px`,e.style.top=`${Math.max(8,f)}px`};s();const r=()=>s();window.addEventListener("scroll",r,!0),window.addEventListener("resize",r);const n=()=>{window.removeEventListener("scroll",r,!0),window.removeEventListener("resize",r),window.removeEventListener("keydown",i),document.removeEventListener("mousedown",a)},i=c=>{c.key==="Escape"&&(n(),He())},a=c=>{const u=c.target;e.contains(u)||t.contains(u)||(n(),He())};(o=e.querySelector("#resetCancelBtn"))==null||o.addEventListener("click",()=>{n(),He()}),(l=e.querySelector("#resetConfirmBtn"))==null||l.addEventListener("click",()=>{n(),He(),w=structuredClone(ns),le()}),window.addEventListener("keydown",i),window.setTimeout(()=>document.addEventListener("mousedown",a),0)}function Il(){const t=document.querySelector(".portfolio-panel"),e=document.querySelector(".table-scroll-wrap");if(!t||!e)return;const s=t.querySelector(".portfolio-sticky"),r=t.querySelector(".table-scroll-top"),n=e.querySelector(".table-scroll"),i=t.querySelector(".table-scroll-top-inner"),a=e.querySelector(".portfolio-table");if(!r||!n||!i||!a)return;const o=()=>{s&&t.style.setProperty("--portfolio-sticky-h",`${s.offsetHeight}px`)};let l=!1;const c=()=>{i.style.width=`${a.offsetWidth}px`;const f=a.offsetWidth>n.clientWidth+1;r.style.display=f?"":"none",f&&!l&&(l=!0,r.scrollLeft=n.scrollLeft,l=!1)},u=()=>{l||(l=!0,r.scrollLeft=n.scrollLeft,l=!1)},d=()=>{l||(l=!0,n.scrollLeft=r.scrollLeft,l=!1)};c(),o(),n.addEventListener("scroll",u),r.addEventListener("scroll",d);const h=new ResizeObserver(()=>{c(),o()});h.observe(a),h.observe(n),s&&h.observe(s),window.addEventListener("resize",()=>{c(),o()})}function jl(){const t=document.querySelector(".portfolio-table");t&&t.querySelectorAll("[data-col-resize]").forEach(e=>{e.addEventListener("pointerdown",s=>{s.preventDefault(),s.stopPropagation();const r=e.dataset.colResize;if(!r)return;const n=e.closest("th");if(!n)return;const i=gn(Cs[r],r),a=s.clientX,o=n.getBoundingClientRect().width,l=s.pointerId;e.setPointerCapture(l),document.body.classList.add("col-resizing");const c=d=>{const h=Math.max(i,Math.round(o+(d.clientX-a)));n.style.width=`${h}px`,n.style.minWidth=`${i}px`},u=d=>{e.releasePointerCapture(l),e.removeEventListener("pointermove",c),e.removeEventListener("pointerup",u),e.removeEventListener("pointercancel",u),document.body.classList.remove("col-resizing");const h=Math.max(i,Math.round(n.getBoundingClientRect().width)),f=pn();f[r]=h,rl(f),n.style.width=`${h}px`};e.addEventListener("pointermove",c),e.addEventListener("pointerup",u),e.addEventListener("pointercancel",u)})})}async function xl(){const t="/vi_planer/",e=new URL("VI-Planer-requirements.md",new URL(t,window.location.href)).href;try{const s=await fetch(e);if(!s.ok)throw new Error(String(s.status));const r=await s.text(),n=new Blob([r],{type:"text/markdown;charset=utf-8"}),i=URL.createObjectURL(n),a=document.createElement("a");a.href=i,a.download="VI-Planer-requirements.md",a.click(),URL.revokeObjectURL(i)}catch(s){console.error(s),alert("Не удалось скачать файл требований")}}async function Ll(){const t=document.querySelector("#exportPdfBtn"),e=document.querySelector("#pdfCapture");if(!e){alert("Не удалось найти содержимое для экспорта");return}const s=(t==null?void 0:t.textContent)??"Экспорт PDF";t&&(t.disabled=!0,t.textContent="PDF…");const r=new Date().toISOString().slice(0,10),n=`VI Planer — ${As[g.tab]} · ${r}`,i=`VI-Planer-${As[g.tab]}-${r}.pdf`.replaceAll(" ","_");document.body.classList.add("pdf-capturing");try{await Jo(e,i,n)}catch(a){console.error(a),alert("Не удалось создать PDF. Проверьте интернет (нужны библиотеки с CDN).")}finally{document.body.classList.remove("pdf-capturing"),t&&(t.disabled=!1,t.textContent=s)}}async function Dl(){w=await Ko(),g.hiddenCols=il(),g.showTeamLoad=al();const t=w.items.map(s=>s.manualRank).join(",");w={...w,items:Ae(w.items,X())};const e=w.items.map(s=>s.manualRank).join(",");t!==e&&zt(w),Mo(s=>{const r=document.querySelector("#syncStatus");r&&(r.dataset.status=s,r.textContent=ln(s))}),W()}Dl()})();

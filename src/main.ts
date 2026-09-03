@@ -603,38 +603,41 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
 
   return `
     ${columnsHelpHtml()}
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Единый портфель (проекты + продукты)</h2>
-        <div class="filters">
-          <input id="q" placeholder="Поиск…" value="${escapeAttr(ui.query)}" />
-          <select id="typeFilter">
-            <option value="all" ${ui.typeFilter === "all" ? "selected" : ""}>Все типы</option>
-            <option value="product" ${ui.typeFilter === "product" ? "selected" : ""}>Продукты</option>
-            <option value="project" ${ui.typeFilter === "project" ? "selected" : ""}>Проекты</option>
-          </select>
-          <select id="teamFilter">
-            <option value="all">Все команды</option>
-            ${state.teams
-              .map(
-                (t) =>
-                  `<option value="${t.id}" ${ui.teamFilter === t.id ? "selected" : ""}>${escapeHtml(t.name)}</option>`
-              )
-              .join("")}
-          </select>
-          <select id="statusFilter">
-            <option value="all">Все статусы</option>
-            ${(["idea", "ready", "in_progress", "blocked", "done"] as ItemStatus[])
-              .map(
-                (s) =>
-                  `<option value="${s}" ${ui.statusFilter === s ? "selected" : ""}>${statusLabel(s)}</option>`
-              )
-              .join("")}
-          </select>
-          ${portfolioColPickerHtml()}
-          <button class="btn" id="resetFilters" title="Сбросить фильтры, сортировку и колонки">Сбросить фильтры</button>
-          <button class="btn btn-primary" id="addItem">+ Инициатива</button>
+    <div class="panel portfolio-panel">
+      <div class="portfolio-sticky">
+        <div class="panel-header">
+          <h2>Единый портфель (проекты + продукты)</h2>
+          <div class="filters">
+            <input id="q" placeholder="Поиск…" value="${escapeAttr(ui.query)}" />
+            <select id="typeFilter">
+              <option value="all" ${ui.typeFilter === "all" ? "selected" : ""}>Все типы</option>
+              <option value="product" ${ui.typeFilter === "product" ? "selected" : ""}>Продукты</option>
+              <option value="project" ${ui.typeFilter === "project" ? "selected" : ""}>Проекты</option>
+            </select>
+            <select id="teamFilter">
+              <option value="all">Все команды</option>
+              ${state.teams
+                .map(
+                  (t) =>
+                    `<option value="${t.id}" ${ui.teamFilter === t.id ? "selected" : ""}>${escapeHtml(t.name)}</option>`
+                )
+                .join("")}
+            </select>
+            <select id="statusFilter">
+              <option value="all">Все статусы</option>
+              ${(["idea", "ready", "in_progress", "blocked", "done"] as ItemStatus[])
+                .map(
+                  (s) =>
+                    `<option value="${s}" ${ui.statusFilter === s ? "selected" : ""}>${statusLabel(s)}</option>`
+                )
+                .join("")}
+            </select>
+            ${portfolioColPickerHtml()}
+            <button class="btn" id="resetFilters" title="Сбросить фильтры, сортировку и колонки">Сбросить фильтры</button>
+            <button class="btn btn-primary" id="addItem">+ Инициатива</button>
+          </div>
         </div>
+        <div class="table-scroll-top" aria-hidden="true"><div class="table-scroll-top-inner"></div></div>
       </div>
       ${
         canDrag
@@ -642,7 +645,6 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           : `<p class="sort-prio-hint">Сейчас сортировка не по приоритету — перестановка строк отключена, приоритеты не меняются. Верните сортировку по «Приоритет», чтобы двигать строки.</p>`
       }
       <div class="table-scroll-wrap">
-        <div class="table-scroll-top" aria-hidden="true"><div class="table-scroll-top-inner"></div></div>
         <div class="table-scroll">
           <table class="portfolio-table">
             <thead>
@@ -2469,14 +2471,21 @@ function askResetConfirm(anchor: HTMLElement) {
 }
 
 function bindPortfolioTableScroll() {
+  const panel = document.querySelector<HTMLElement>(".portfolio-panel");
   const wrap = document.querySelector<HTMLElement>(".table-scroll-wrap");
-  if (!wrap) return;
+  if (!panel || !wrap) return;
 
-  const top = wrap.querySelector<HTMLElement>(".table-scroll-top");
+  const sticky = panel.querySelector<HTMLElement>(".portfolio-sticky");
+  const top = panel.querySelector<HTMLElement>(".table-scroll-top");
   const main = wrap.querySelector<HTMLElement>(".table-scroll");
-  const inner = wrap.querySelector<HTMLElement>(".table-scroll-top-inner");
+  const inner = panel.querySelector<HTMLElement>(".table-scroll-top-inner");
   const table = wrap.querySelector<HTMLTableElement>(".portfolio-table");
   if (!top || !main || !inner || !table) return;
+
+  const syncStickyOffset = () => {
+    if (!sticky) return;
+    panel.style.setProperty("--portfolio-sticky-h", `${sticky.offsetHeight}px`);
+  };
 
   let syncing = false;
 
@@ -2506,13 +2515,21 @@ function bindPortfolioTableScroll() {
   };
 
   update();
+  syncStickyOffset();
   main.addEventListener("scroll", syncFromMain);
   top.addEventListener("scroll", syncFromTop);
 
-  const ro = new ResizeObserver(update);
+  const ro = new ResizeObserver(() => {
+    update();
+    syncStickyOffset();
+  });
   ro.observe(table);
   ro.observe(main);
-  window.addEventListener("resize", update);
+  if (sticky) ro.observe(sticky);
+  window.addEventListener("resize", () => {
+    update();
+    syncStickyOffset();
+  });
 }
 
 function bindPortfolioColResize() {
