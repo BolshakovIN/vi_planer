@@ -290,13 +290,16 @@ textarea {
 }
 
 .tabs {
+  position: sticky;
+  top: 0;
+  z-index: 45;
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
   align-items: center;
   margin-bottom: 14px;
   padding: 8px 10px;
-  background: var(--surface);
+  background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
@@ -339,7 +342,7 @@ textarea {
 
 .portfolio-sticky {
   position: sticky;
-  top: 0;
+  top: var(--tabs-sticky-h, 54px);
   z-index: 40;
   background: var(--surface);
   border-bottom: 1px solid var(--line);

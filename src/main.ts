@@ -2356,6 +2356,7 @@ function bind() {
 
   bindPortfolioColResize();
   bindPortfolioTableScroll();
+  bindStickyTabsOffset();
 
   const close = () => {
     ui.creating = false;
@@ -2712,6 +2713,23 @@ function askResetConfirm(anchor: HTMLElement) {
 
   window.addEventListener("keydown", onKey);
   window.setTimeout(() => document.addEventListener("mousedown", onDoc), 0);
+}
+
+function bindStickyTabsOffset() {
+  const tabs = document.querySelector<HTMLElement>(".tabs");
+  if (!tabs) return;
+
+  const sync = () => {
+    document.documentElement.style.setProperty(
+      "--tabs-sticky-h",
+      `${tabs.offsetHeight}px`
+    );
+  };
+
+  sync();
+  const ro = new ResizeObserver(sync);
+  ro.observe(tabs);
+  window.addEventListener("resize", sync);
 }
 
 function bindPortfolioTableScroll() {
