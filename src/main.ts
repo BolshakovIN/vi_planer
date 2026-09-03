@@ -2728,17 +2728,11 @@ function bindPortfolioTableScroll() {
   const wrap = document.querySelector<HTMLElement>(".table-scroll-wrap");
   if (!panel || !wrap) return;
 
-  const sticky = panel.querySelector<HTMLElement>(".portfolio-sticky");
   const top = panel.querySelector<HTMLElement>(".table-scroll-top");
   const main = wrap.querySelector<HTMLElement>(".table-scroll");
   const inner = panel.querySelector<HTMLElement>(".table-scroll-top-inner");
   const table = wrap.querySelector<HTMLTableElement>(".portfolio-table");
   if (!top || !main || !inner || !table) return;
-
-  const syncStickyOffset = () => {
-    if (!sticky) return;
-    panel.style.setProperty("--portfolio-sticky-h", `${sticky.offsetHeight}px`);
-  };
 
   let syncing = false;
 
@@ -2768,21 +2762,13 @@ function bindPortfolioTableScroll() {
   };
 
   update();
-  syncStickyOffset();
   main.addEventListener("scroll", syncFromMain);
   top.addEventListener("scroll", syncFromTop);
 
-  const ro = new ResizeObserver(() => {
-    update();
-    syncStickyOffset();
-  });
+  const ro = new ResizeObserver(update);
   ro.observe(table);
   ro.observe(main);
-  if (sticky) ro.observe(sticky);
-  window.addEventListener("resize", () => {
-    update();
-    syncStickyOffset();
-  });
+  window.addEventListener("resize", update);
 }
 
 function bindPortfolioColResize() {

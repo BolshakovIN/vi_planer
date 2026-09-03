@@ -380,14 +380,7 @@ textarea {
   align-items: center;
 }
 
-/* thead sticks under the filter bar when possible (page scroll) */
-.portfolio-table thead th {
-  position: sticky;
-  top: var(--portfolio-sticky-h, 0px);
-  z-index: 6;
-  background: var(--surface-2);
-  box-shadow: inset 0 -1px 0 var(--line);
-}
+/* thead sticky is incompatible with .table-scroll overflow-x (wrong containing block) */
 
 .filters select,
 .filters input,
