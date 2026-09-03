@@ -897,7 +897,14 @@ function timelineHtml(
   const weeks = Math.max(4, Math.min(52, Math.round(ui.ganttWeeks) || 16));
   ui.ganttWeeks = weeks;
   const ordered = sortByPriority(state.items.filter((i) => i.status !== "done"));
-  const rowIndex = new Map(ordered.map((item, i) => [item.id, i]));
+  const visible = ordered
+    .map((item) => {
+      const r = rollups.find((x) => x.item.id === item.id);
+      return r ? { item, r } : null;
+    })
+    .filter((x): x is { item: (typeof ordered)[number]; r: ItemSchedule } => !!x);
+  const rowIndex = new Map(visible.map(({ item }, i) => [item.id, i]));
+  const n = Math.max(1, visible.length);
   const weekPct = 100 / weeks;
   const trackBg = `repeating-linear-gradient(90deg, #f5f5f5 0, #f5f5f5 calc(${weekPct}% - 1px), #e0e0e0 calc(${weekPct}% - 1px), #e0e0e0 ${weekPct}%)`;
 
@@ -943,53 +950,81 @@ function timelineHtml(
     }
   });
 
-  const labels: string[] = [];
-  const tracks: string[] = [];
+  const BAR_H = 20;
+  const BAR_GAP = 3;
+  const TRACK_PAD = 6;
 
-  for (const item of ordered) {
-    const r = rollups.find((x) => x.item.id === item.id);
-    if (!r) continue;
-    const preds = r.slices
-      .map((s) => {
-        const teamQueue = slices
-          .filter((x) => x.teamId === s.teamId)
-          .sort((a, b) => a.effectiveRank - b.effectiveRank);
-        const idx = teamQueue.findIndex((x) => x.item.id === item.id);
-        if (idx <= 0) return null;
-        const pred = teamQueue[idx - 1];
-        const t = teamById(s.teamId);
-        return `#${pred.item.manualRank} (${t?.name ?? s.teamId})`;
-      })
-      .filter(Boolean);
-    const uniqPreds = [...new Set(preds)];
-    const depHint = uniqPreds.length
-      ? `<div class="meta gantt-dep-meta">после ${uniqPreds.join(", ")}</div>`
-      : `<div class="meta gantt-dep-meta">старт очереди</div>`;
-
-    const bars = r.slices
-      .map((s) => {
-        const team = teamById(s.teamId);
-        const left = (s.startWeek / weeks) * 100;
-        const width =
-          (Math.max(1, s.endWeek - s.startWeek + 1) / weeks) * 100;
-        const isBot = s.teamId === r.bottleneckTeamId;
-        return `<div class="gantt-bar ${isBot ? "gantt-bot" : ""}" style="left:${left}%;width:${Math.max(width, 2.5)}%;background:${team?.color ?? "#64748b"}" title="${escapeAttr(team?.name ?? "")}: ${formatDate(s.endDate)}">${escapeHtml(team?.name ?? "")}</div>`;
-      })
-      .join("");
-
-    labels.push(`
-      <div class="gantt-label">
-        <div class="name"><span class="prio-mini">${item.manualRank ?? "—"}</span> ${escapeHtml(item.title)}</div>
-        <div class="meta">${item.type === "product" ? "Продукт" : "Проект"} · ETA ${formatDate(r.endDate)}</div>
-        ${depHint}
-      </div>
-    `);
-    tracks.push(
-      `<div class="gantt-track gantt-track-multi" style="background:${trackBg}">${bars}</div>`
+  /** Pack overlapping team bars into vertical lanes within one item row */
+  const packBarLanes = (itemSlices: ScheduledSlice[]) => {
+    const sorted = [...itemSlices].sort(
+      (a, b) => a.startWeek - b.startWeek || a.endWeek - b.endWeek
     );
-  }
+    const laneEnds: number[] = [];
+    return sorted.map((slice) => {
+      let lane = laneEnds.findIndex((end) => end < slice.startWeek);
+      if (lane < 0) {
+        lane = laneEnds.length;
+        laneEnds.push(slice.endWeek);
+      } else {
+        laneEnds[lane] = slice.endWeek;
+      }
+      return { slice, lane };
+    });
+  };
 
-  const n = Math.max(1, ordered.length);
+  const rowLaneCounts = visible.map(({ r }) => {
+    const packed = packBarLanes(r.slices);
+    return packed.length ? Math.max(...packed.map((p) => p.lane)) + 1 : 1;
+  });
+  const maxLanes = Math.max(1, ...rowLaneCounts);
+  // Equal row height keeps dep SVG Y mapping (0..n) aligned with DOM rows
+  const trackH =
+    TRACK_PAD * 2 + maxLanes * BAR_H + Math.max(0, maxLanes - 1) * BAR_GAP;
+  const rowH = Math.max(58, trackH);
+
+  const rowsHtml = visible
+    .map(({ item, r }) => {
+      const preds = r.slices
+        .map((s) => {
+          const teamQueue = slices
+            .filter((x) => x.teamId === s.teamId)
+            .sort((a, b) => a.effectiveRank - b.effectiveRank);
+          const idx = teamQueue.findIndex((x) => x.item.id === item.id);
+          if (idx <= 0) return null;
+          const pred = teamQueue[idx - 1];
+          const t = teamById(s.teamId);
+          return `#${pred.item.manualRank} (${t?.name ?? s.teamId})`;
+        })
+        .filter(Boolean);
+      const uniqPreds = [...new Set(preds)];
+      const depHint = uniqPreds.length
+        ? `<div class="meta gantt-dep-meta">после ${uniqPreds.join(", ")}</div>`
+        : `<div class="meta gantt-dep-meta">старт очереди</div>`;
+
+      const packed = packBarLanes(r.slices);
+      const bars = packed
+        .map(({ slice: s, lane: barLane }) => {
+          const team = teamById(s.teamId);
+          const left = (s.startWeek / weeks) * 100;
+          const width =
+            (Math.max(1, s.endWeek - s.startWeek + 1) / weeks) * 100;
+          const isBot = s.teamId === r.bottleneckTeamId;
+          const top = TRACK_PAD + barLane * (BAR_H + BAR_GAP);
+          return `<div class="gantt-bar ${isBot ? "gantt-bot" : ""}" style="left:${left}%;width:${Math.max(width, 2.5)}%;top:${top}px;height:${BAR_H}px;background:${team?.color ?? "#64748b"}" title="${escapeAttr(team?.name ?? "")}: ${formatDate(s.endDate)}">${escapeHtml(team?.name ?? "")}</div>`;
+        })
+        .join("");
+
+      return `
+      <div class="gantt-row" style="--gantt-row-h:${rowH}px;--gantt-track-h:${trackH}px">
+        <div class="gantt-label">
+          <div class="name"><span class="prio-mini">${item.manualRank ?? "—"}</span> ${escapeHtml(item.title)}</div>
+          <div class="meta">${item.type === "product" ? "Продукт" : "Проект"} · ETA ${formatDate(r.endDate)}</div>
+          ${depHint}
+        </div>
+        <div class="gantt-track gantt-track-multi" style="background:${trackBg}">${bars}</div>
+      </div>`;
+    })
+    .join("");
 
   const tickStep =
     weeks <= 12 ? 1 : weeks <= 24 ? 2 : weeks <= 36 ? 3 : 4;
@@ -1050,34 +1085,31 @@ function timelineHtml(
       </div>
       <div class="timeline">
         ${
-          ordered.length
+          visible.length
             ? `<div class="gantt-layout">
-          <div class="gantt-labels-col">
+          <div class="gantt-axis-row">
             <div class="gantt-axis-spacer">
               <span class="meta">нед. с ${formatDate(state.startDate)}</span>
             </div>
-            ${labels.join("")}
-          </div>
-          <div class="gantt-tracks-wrap">
             <div class="gantt-axis">${axisTicks}</div>
-            <div class="gantt-tracks-col">
-              <svg class="gantt-dep-layer" viewBox="0 0 ${weeks} ${n}" preserveAspectRatio="none" aria-hidden="true">
-                <defs>
-                  ${depMarkers.join("")}
-                </defs>
-                ${depPaths.join("")}
-              </svg>
-              ${tracks.join("")}
-            </div>
-            ${
-              ui.showTeamLoad
-                ? `<div class="gantt-capacity-block">
-              <div class="gantt-capacity-head meta">Загрузка команд по расписанию (эксперимент) — те же недели, что полоски Gantt; красный = перегруз ёмкости</div>
-              <div class="gantt-capacity-rows">${capacityRows}</div>
-            </div>`
-                : ""
-            }
           </div>
+          <div class="gantt-rows">
+            <svg class="gantt-dep-layer" viewBox="0 0 ${weeks} ${n}" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                ${depMarkers.join("")}
+              </defs>
+              ${depPaths.join("")}
+            </svg>
+            ${rowsHtml}
+          </div>
+          ${
+            ui.showTeamLoad
+              ? `<div class="gantt-capacity-block">
+            <div class="gantt-capacity-head meta">Загрузка команд по расписанию (эксперимент) — те же недели, что полоски Gantt; красный = перегруз ёмкости</div>
+            <div class="gantt-capacity-rows">${capacityRows}</div>
+          </div>`
+              : ""
+          }
         </div>`
             : `<div class="empty">Нет активных инициатив</div>`
         }
