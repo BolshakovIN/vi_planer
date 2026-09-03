@@ -293,7 +293,13 @@ textarea {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  align-items: center;
   margin-bottom: 14px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 .tab {
@@ -308,10 +314,10 @@ textarea {
 }
 
 .tab.active {
-  background: var(--surface);
+  background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent);
-  box-shadow: var(--shadow);
+  box-shadow: none;
 }
 
 .tab-settings {
