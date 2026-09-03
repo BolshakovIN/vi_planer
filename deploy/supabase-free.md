@@ -11,31 +11,46 @@
 
 ## 1. Supabase (5 минут)
 
-1. Зарегистрируйтесь на [supabase.com](https://supabase.com) (бесплатный план).
-2. **New project** → имя, пароль БД, регион (ближайший доступный).
-3. **SQL Editor** → New query → вставьте весь файл [`supabase/schema.sql`](../supabase/schema.sql) → **Run**.
-4. **Project Settings** → **API**:
-   - **Project URL** → `https://xxxx.supabase.co`
-   - **anon public** key → `eyJ...`
+Проект **уже создан**: `vi_planer` (`hmqajjxjnxbrgrvfkegv`).
+SQL-схема уже применена — **повторно запускать не нужно** (скрипт идемпотентный: `IF NOT EXISTS`).
 
-> Схема открывает read/write для всех с anon-ключом — подходит для внутренней команды. Не храните секреты в портфеле.
+Если с нуля на новом проекте:
+1. [supabase.com](https://supabase.com) → **New project**.
+2. **SQL Editor** → вставьте [`supabase/schema.sql`](../supabase/schema.sql) → **Run**.
+
+**Нужен только anon key:**
+1. Откройте проект → **Project Settings** → **API**.
+2. Скопируйте **anon public** (`eyJ...`).
+3. URL уже известен: `https://hmqajjxjnxbrgrvfkegv.supabase.co`.
+
+> Схема открывает read/write для всех с anon-ключом — для внутренней команды. Не храните секреты в портфеле.
 
 ## 2. Сборка и деплой на Pages
 
-На своём компьютере (ключи **не коммитьте** в git):
+На своём компьютере (ключи **не коммитьте** в git).
+
+Проект уже создан: `hmqajjxjnxbrgrvfkegv` → URL `https://hmqajjxjnxbrgrvfkegv.supabase.co`.
 
 ```bash
-cd vi_planer
+cd /Users/ivanbolsakov/vi_planer
 npm install
 
-export VITE_SUPABASE_URL='https://xxxx.supabase.co'
-export VITE_SUPABASE_ANON_KEY='eyJ...'
+# Вариант A: .env.local (Vite подхватит сам)
+cp .env.local.example .env.local
+# Откройте .env.local и вставьте anon public key из Supabase → Project Settings → API
+
+# Вариант B: export в терминале
+export VITE_SUPABASE_URL='https://hmqajjxjnxbrgrvfkegv.supabase.co'
+export VITE_SUPABASE_ANON_KEY='eyJ...'   # anon public из Settings → API
 
 npm run deploy:pages:shared
 git add docs
 git commit -m "Enable shared Supabase storage on GitHub Pages"
 git push origin master
 ```
+
+`deploy:pages:shared` **не** ставит `VITE_LOCAL_STORAGE_ONLY` — собирается с Supabase.
+`deploy:pages` — только localStorage (личный режим).
 
 Через 1–2 минуты откройте https://bolshakovin.github.io/vi_planer/ — внизу/в статусе должно быть **«Сохранено в облаке»**.
 
