@@ -504,7 +504,16 @@ table {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding-right: 8px;
+  /* symmetric inset so centered headers (e.g. priority) stay over column content */
+  padding: 0 8px;
+}
+
+.portfolio-table thead th.prio-cell {
+  text-align: center;
+}
+
+.portfolio-table thead th.prio-cell .th-label {
+  text-align: center;
 }
 
 .col-resize {

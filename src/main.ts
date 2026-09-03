@@ -697,7 +697,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           <table class="portfolio-table">
             <thead>
               <tr>
-                ${sortHeader("Приоритет", "priority")}
+                ${sortHeader("Приоритет", "priority", "prio-cell")}
                 ${resizableTh("Тип", "type", "type-cell")}
                 ${resizableTh("Инициатива / исходный бэклог", "title", "title-cell")}
                 ${resizableTh("Команды (оценка · старт)", "teams")}

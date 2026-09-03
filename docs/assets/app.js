@@ -159,7 +159,7 @@ ${b}`}class F extends Error{constructor({message:e,code:s,cause:r,name:n}){var i
           <table class="portfolio-table">
             <thead>
               <tr>
-                ${Qt("Приоритет","priority")}
+                ${Qt("Приоритет","priority","prio-cell")}
                 ${vt("Тип","type","type-cell")}
                 ${vt("Инициатива / исходный бэклог","title","title-cell")}
                 ${vt("Команды (оценка · старт)","teams")}
