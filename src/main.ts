@@ -33,7 +33,8 @@ import {
   reorderVisiblePriority,
   TeamLoadWeek,
   Team,
-  concurrentOverloadWeeks,
+  ConcurrentLoadWeek,
+  concurrentTeamLoad,
   isTeamWeekOverloaded,
   utilizationPct,
 } from "./model";
@@ -95,6 +96,11 @@ const ui: UiState = {
 };
 
 let state: AppState = structuredClone(SEED);
+/** Latest concurrent load snapshot for overload explain popovers */
+let lastConcurrentLoad: Record<string, ConcurrentLoadWeek[]> = {};
+let lastOverflowByTeam: Record<string, Set<number>> = {};
+let overloadHoverTimer: number | null = null;
+let overloadPinned = false;
 
 function szRanges(): SizeRanges {
   return state.sizeRanges;
@@ -124,9 +130,10 @@ function teamCapacityStripHtml(
     ]
       .filter(Boolean)
       .join(" ");
-    const title = `Н${w + 1}: ${used.toFixed(1)}/${cap} чел·нед${
-      isOverflow ? " · превышение" : ""
-    }`;
+    if (isOverflow) {
+      return `<button type="button" class="${cls}" style="width:${weekPct}%" data-overload-team="${escapeAttr(team.id)}" data-overload-week="${w}" aria-label="Перегруз Н${w + 1}: расшифровка"><span style="height:${Math.min(100, pct)}%"></span></button>`;
+    }
+    const title = `Н${w + 1}: ${used.toFixed(1)}/${cap} чел·нед`;
     return `<div class="${cls}" style="width:${weekPct}%" title="${escapeAttr(title)}"><span style="height:${Math.min(100, pct)}%"></span></div>`;
   }).join("");
   return `<div class="cap-strip" style="--team-color:${team.color}">${cells}</div>`;
@@ -713,7 +720,7 @@ function teamsHtml(
           ${
             ui.showTeamLoad
               ? `<div class="cap-strip-wrap">
-            <div class="cap-strip-label meta">Загрузка по неделям (эксп.)</div>
+            <div class="cap-strip-label meta">Загрузка по неделям (эксп.) — наведите или нажмите на красную клетку</div>
             ${teamCapacityStripHtml(
               team,
               load[team.id] ?? [],
@@ -849,7 +856,7 @@ function queuesTestHtml(
           ${
             ui.showTeamLoad
               ? `<div class="cap-strip-wrap">
-            <div class="cap-strip-label meta">Загрузка по неделям (эксп.)</div>
+            <div class="cap-strip-label meta">Загрузка по неделям (эксп.) — наведите или нажмите на красную клетку</div>
             ${teamCapacityStripHtml(
               team,
               load[team.id] ?? [],
@@ -992,14 +999,17 @@ function timelineHtml(
 
   const axisTicks = Array.from({ length: weeks }, (_, w) => {
     const show = w % tickStep === 0 || w === weeks - 1;
-    const overflowCls =
-      ui.showTeamLoad && anyOverflowWeek(w) ? " gantt-axis-tick-overflow" : "";
+    const isOverflow = ui.showTeamLoad && anyOverflowWeek(w);
+    const overflowCls = isOverflow ? " gantt-axis-tick-overflow" : "";
+    const overloadAttrs = isOverflow
+      ? ` data-overload-week="${w}" role="button" tabindex="0" aria-label="Перегруз Н${w + 1}: расшифровка"`
+      : "";
     if (!show) {
-      return `<div class="gantt-axis-tick gantt-axis-tick-empty${overflowCls}" style="width:${weekPct}%"></div>`;
+      return `<div class="gantt-axis-tick gantt-axis-tick-empty${overflowCls}" style="width:${weekPct}%"${overloadAttrs}></div>`;
     }
     const monday = addWeeks(state.startDate, w);
     const [, m, d] = monday.split("-");
-    return `<div class="gantt-axis-tick${overflowCls}" style="width:${weekPct}%">
+    return `<div class="gantt-axis-tick${overflowCls}" style="width:${weekPct}%"${overloadAttrs}>
       <span class="gantt-axis-w">Н${w + 1}</span>
       <span class="gantt-axis-d">${d}.${m}</span>
     </div>`;
@@ -1063,7 +1073,7 @@ function timelineHtml(
             ${
               ui.showTeamLoad
                 ? `<div class="gantt-capacity-block">
-              <div class="gantt-capacity-head meta">Загрузка команд (эксперимент) — оранжевый/красный = перегруз по плановым стартам</div>
+              <div class="gantt-capacity-head meta">Загрузка команд (эксперимент) — красный = перегруз; наведите или нажмите для расшифровки</div>
               <div class="gantt-capacity-rows">${capacityRows}</div>
             </div>`
                 : ""
@@ -1522,6 +1532,236 @@ function closePrioPop() {
   closeAppPop();
 }
 
+function closeOverloadPop() {
+  if (overloadHoverTimer != null) {
+    window.clearTimeout(overloadHoverTimer);
+    overloadHoverTimer = null;
+  }
+  overloadPinned = false;
+  document.querySelectorAll(".overload-ask").forEach((el) => {
+    el.classList.remove("overload-ask");
+  });
+  document.querySelector("#overloadExplainPop")?.remove();
+}
+
+function overloadWeekLabel(week: number): string {
+  const monday = addWeeks(state.startDate, week);
+  return `Н${week + 1} (${formatDate(monday)})`;
+}
+
+function overloadExplainBodyHtml(
+  team: Team,
+  week: number,
+  slot: ConcurrentLoadWeek | undefined
+): string {
+  const used = slot?.usedPw ?? 0;
+  const cap = slot?.capacityPw ?? team.capacityPw;
+  const items = slot?.items ?? [];
+  const itemList =
+    items.length > 0
+      ? `<ul class="overload-items">${items
+          .map(
+            (it) =>
+              `<li><span class="overload-item-title">${escapeHtml(it.title)}</span> <span class="meta mono">${it.contributionPw.toFixed(1)} чел·нед</span></li>`
+          )
+          .join("")}</ul>`
+      : `<p class="meta">Нет детализации инициатив за эту неделю.</p>`;
+
+  return `
+    <div class="overload-pop-head">
+      <span class="team-dot" style="background:${team.color}"></span>
+      <strong>${escapeHtml(team.name)}</strong>
+    </div>
+    <div class="meta">${overloadWeekLabel(week)}</div>
+    <div class="overload-load mono">Загрузка <strong>${used.toFixed(1)}</strong> / ${cap} чел·нед</div>
+    <p class="overload-why">Параллельный плановый спрос (старты без учёта очереди) превышает ёмкость команды (${cap} чел·нед/нед). Очередь сдвигает фактические старты.</p>
+    <div class="overload-contrib-label meta">Вклад инициатив</div>
+    ${itemList}
+  `;
+}
+
+function overloadAxisBodyHtml(week: number): string {
+  const teams = state.teams.filter((t) => lastOverflowByTeam[t.id]?.has(week));
+  if (!teams.length) {
+    return `<p class="meta">На ${overloadWeekLabel(week)} перегруза нет.</p>`;
+  }
+  const rows = teams
+    .map((team) => {
+      const slot = lastConcurrentLoad[team.id]?.[week];
+      const used = slot?.usedPw ?? 0;
+      const cap = slot?.capacityPw ?? team.capacityPw;
+      const top = (slot?.items ?? [])
+        .slice(0, 3)
+        .map((it) => escapeHtml(it.title))
+        .join(", ");
+      return `
+        <div class="overload-axis-row">
+          <div class="overload-pop-head">
+            <span class="team-dot" style="background:${team.color}"></span>
+            <strong>${escapeHtml(team.name)}</strong>
+            <span class="mono">${used.toFixed(1)}/${cap}</span>
+          </div>
+          ${top ? `<div class="meta">${top}${(slot?.items.length ?? 0) > 3 ? "…" : ""}</div>` : ""}
+        </div>`;
+    })
+    .join("");
+
+  return `
+    <div class="meta">${overloadWeekLabel(week)}</div>
+    <p class="overload-why">На этой неделе плановый параллельный спрос превышает ёмкость у ${teams.length}&nbsp;${
+      teams.length === 1 ? "команды" : "команд"
+    }.</p>
+    ${rows}
+  `;
+}
+
+function placeOverloadPop(anchor: HTMLElement, pop: HTMLElement) {
+  const rect = anchor.getBoundingClientRect();
+  const popRect = pop.getBoundingClientRect();
+  let left = rect.left + rect.width / 2 - popRect.width / 2;
+  let top = rect.bottom + 8;
+  if (left < 8) left = 8;
+  if (left + popRect.width > window.innerWidth - 8) {
+    left = Math.max(8, window.innerWidth - popRect.width - 8);
+  }
+  if (top + popRect.height > window.innerHeight - 8) {
+    top = Math.max(8, rect.top - popRect.height - 8);
+  }
+  pop.style.left = `${left}px`;
+  pop.style.top = `${top}px`;
+}
+
+function showOverloadExplain(
+  anchor: HTMLElement,
+  opts: { teamId?: string; week: number; pin?: boolean }
+) {
+  if (!ui.showTeamLoad) return;
+
+  const week = opts.week;
+  const teamId = opts.teamId;
+  const body =
+    teamId != null
+      ? (() => {
+          const team = teamById(teamId);
+          if (!team) return null;
+          return overloadExplainBodyHtml(
+            team,
+            week,
+            lastConcurrentLoad[teamId]?.[week]
+          );
+        })()
+      : overloadAxisBodyHtml(week);
+  if (body == null) return;
+
+  closeOverloadPop();
+  if (opts.pin) overloadPinned = true;
+  anchor.classList.add("overload-ask");
+
+  const pop = document.createElement("div");
+  pop.id = "overloadExplainPop";
+  pop.className = "overload-explain-pop";
+  pop.setAttribute("data-stop-edit", "");
+  pop.innerHTML = `
+    <div class="overload-explain-body">${body}</div>
+    <div class="prio-confirm-actions">
+      <button type="button" class="btn btn-primary" data-overload-close>Понятно</button>
+    </div>
+  `;
+  document.body.appendChild(pop);
+  placeOverloadPop(anchor, pop);
+
+  const onScroll = () => placeOverloadPop(anchor, pop);
+  window.addEventListener("scroll", onScroll, true);
+  window.addEventListener("resize", onScroll);
+
+  const cleanup = () => {
+    window.removeEventListener("scroll", onScroll, true);
+    window.removeEventListener("resize", onScroll);
+    document.removeEventListener("mousedown", onDoc, true);
+    window.removeEventListener("keydown", onKey);
+  };
+
+  const dismiss = () => {
+    cleanup();
+    closeOverloadPop();
+  };
+
+  const onDoc = (e: MouseEvent) => {
+    const t = e.target as Node;
+    if (pop.contains(t) || anchor.contains(t)) return;
+    dismiss();
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") dismiss();
+  };
+
+  document.addEventListener("mousedown", onDoc, true);
+  window.addEventListener("keydown", onKey);
+  pop.querySelector("[data-overload-close]")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    dismiss();
+  });
+
+  pop.addEventListener("mouseenter", () => {
+    if (overloadHoverTimer != null) {
+      window.clearTimeout(overloadHoverTimer);
+      overloadHoverTimer = null;
+    }
+  });
+  pop.addEventListener("mouseleave", () => {
+    if (overloadPinned) return;
+    overloadHoverTimer = window.setTimeout(() => dismiss(), 180);
+  });
+}
+
+function bindOverloadExplain() {
+  if (!ui.showTeamLoad) return;
+
+  const openFromEl = (el: HTMLElement, pin: boolean) => {
+    const weekRaw = el.dataset.overloadWeek;
+    if (weekRaw == null || weekRaw === "") return;
+    const week = Number(weekRaw);
+    if (!Number.isFinite(week)) return;
+    const teamId = el.dataset.overloadTeam;
+    showOverloadExplain(el, {
+      week,
+      teamId: teamId || undefined,
+      pin,
+    });
+  };
+
+  document
+    .querySelectorAll<HTMLElement>("[data-overload-week]")
+    .forEach((el) => {
+      el.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openFromEl(el, true);
+      });
+      el.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        openFromEl(el, true);
+      });
+      el.addEventListener("mouseenter", () => {
+        if (overloadPinned) return;
+        if (overloadHoverTimer != null) {
+          window.clearTimeout(overloadHoverTimer);
+          overloadHoverTimer = null;
+        }
+        openFromEl(el, false);
+      });
+      el.addEventListener("mouseleave", () => {
+        if (overloadPinned) return;
+        overloadHoverTimer = window.setTimeout(() => {
+          const pop = document.querySelector("#overloadExplainPop");
+          if (pop?.matches(":hover")) return;
+          closeOverloadPop();
+        }, 180);
+      });
+    });
+}
+
 function confirmPopHtml(textHtml: string): string {
   return `
     <div class="prio-confirm-text">${textHtml}</div>
@@ -1740,8 +1980,19 @@ function render() {
   closePrioPop();
   closeResetPop();
   closeColPickerOutside();
+  closeOverloadPop();
   const { slices, rollups, load } = schedulePortfolio(state);
-  const overflowByTeam = concurrentOverloadWeeks(state);
+  const concurrentLoad = concurrentTeamLoad(state);
+  const overflowByTeam: Record<string, Set<number>> = {};
+  for (const team of state.teams) {
+    const overloaded = new Set<number>();
+    for (const lw of concurrentLoad[team.id] ?? []) {
+      if (lw.usedPw > lw.capacityPw + 0.001) overloaded.add(lw.week);
+    }
+    overflowByTeam[team.id] = overloaded;
+  }
+  lastConcurrentLoad = concurrentLoad;
+  lastOverflowByTeam = overflowByTeam;
   const root = document.querySelector("#app");
   if (!root) return;
 
@@ -1994,6 +2245,8 @@ function bind() {
       saveShowTeamLoad(ui.showTeamLoad);
       render();
     });
+
+  bindOverloadExplain();
 
   document.querySelector("#addItem")?.addEventListener("click", () => {
     ui.creating = true;

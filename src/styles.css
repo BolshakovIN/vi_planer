@@ -1559,6 +1559,26 @@ body.prio-dragging {
   min-width: 0;
 }
 
+button.cap-cell {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  border-top: none;
+  border-bottom: none;
+  border-left: none;
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+button.cap-cell:last-child {
+  border-right: none;
+}
+
 .cap-cell:last-child {
   border-right: none;
 }
@@ -1569,6 +1589,7 @@ body.prio-dragging {
   background: color-mix(in srgb, var(--team-color, var(--accent)) 55%, transparent);
   border-radius: 2px 2px 0 0;
   min-height: 2px;
+  pointer-events: none;
 }
 
 .cap-cell-full {
@@ -1581,6 +1602,15 @@ body.prio-dragging {
 
 .cap-cell-overflow {
   background: rgba(220, 38, 38, 0.18);
+  cursor: pointer;
+}
+
+.cap-cell-overflow:hover,
+.cap-cell-overflow.overload-ask {
+  background: rgba(220, 38, 38, 0.28);
+  outline: 1px solid rgba(185, 28, 28, 0.45);
+  outline-offset: -1px;
+  z-index: 1;
 }
 
 .cap-cell-overflow > span {
@@ -1589,10 +1619,91 @@ body.prio-dragging {
 
 .gantt-axis-tick-overflow {
   background: rgba(220, 38, 38, 0.12);
+  cursor: pointer;
+}
+
+.gantt-axis-tick-overflow:hover,
+.gantt-axis-tick-overflow.overload-ask {
+  background: rgba(220, 38, 38, 0.22);
 }
 
 .gantt-axis-tick-overflow .gantt-axis-w {
   color: #b91c1c;
+}
+
+.overload-explain-pop {
+  position: fixed;
+  z-index: 60;
+  width: min(320px, calc(100vw - 16px));
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
+  text-align: left;
+}
+
+.overload-explain-body {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink);
+  margin-bottom: 10px;
+}
+
+.overload-pop-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.overload-pop-head .mono {
+  margin-left: auto;
+  font-size: 11px;
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.overload-load {
+  margin: 6px 0 4px;
+  font-size: 13px;
+}
+
+.overload-load strong {
+  color: #b91c1c;
+}
+
+.overload-why {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.overload-contrib-label {
+  margin-bottom: 4px;
+}
+
+.overload-items {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.overload-item-title {
+  font-weight: 600;
+}
+
+.overload-axis-row {
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+
+.overload-axis-row:first-of-type {
+  border-top: none;
+  padding-top: 0;
 }
 
 .gantt-capacity-block {

@@ -197,19 +197,44 @@ export function utilizationPct(usedPw: number, capacityPw: number): number {
   return Math.round((usedPw / capacityPw) * 100);
 }
 
+export interface ConcurrentDemandItem {
+  id: string;
+  title: string;
+  contributionPw: number;
+}
+
+/** Planned concurrent demand for one team-week (before queue merges slots). */
+export interface ConcurrentLoadWeek {
+  week: number;
+  weekStart: string;
+  usedPw: number;
+  capacityPw: number;
+  items: ConcurrentDemandItem[];
+}
+
 /**
- * Weeks where parallel planned work (each assignment from its workStartDate)
- * would exceed team capacity before the queue merges slots.
+ * Parallel planned load by team/week: each assignment from its workStartDate
+ * consumes capacity week-by-week without waiting for the queue.
  */
-export function concurrentOverloadWeeks(
+export function concurrentTeamLoad(
   state: AppState,
   maxWeeks = 52
-): Record<string, Set<number>> {
+): Record<string, ConcurrentLoadWeek[]> {
   const ranges = state.sizeRanges ?? DEFAULT_SIZE_RANGES;
-  const result: Record<string, Set<number>> = {};
+  const result: Record<string, ConcurrentLoadWeek[]> = {};
 
   for (const team of state.teams) {
-    const used = Array.from({ length: maxWeeks }, () => 0);
+    const weeks: ConcurrentLoadWeek[] = Array.from(
+      { length: maxWeeks },
+      (_, w) => ({
+        week: w,
+        weekStart: addWeeks(state.startDate, w),
+        usedPw: 0,
+        capacityPw: team.capacityPw,
+        items: [],
+      })
+    );
+
     for (const item of state.items) {
       if (item.status === "done") continue;
       for (const a of item.assignments) {
@@ -219,16 +244,49 @@ export function concurrentOverloadWeeks(
         let w = weekIndex(state.startDate, a.workStartDate);
         while (rem > 0.001 && w < maxWeeks) {
           const take = Math.min(team.capacityPw, rem);
-          used[w] += take;
+          const slot = weeks[w];
+          slot.usedPw += take;
+          const existing = slot.items.find((x) => x.id === item.id);
+          if (existing) existing.contributionPw += take;
+          else
+            slot.items.push({
+              id: item.id,
+              title: item.title,
+              contributionPw: take,
+            });
           rem -= take;
           w += 1;
         }
       }
     }
+
+    for (const week of weeks) {
+      week.usedPw = Math.round(week.usedPw * 1000) / 1000;
+      week.items.sort((a, b) => b.contributionPw - a.contributionPw);
+      for (const it of week.items) {
+        it.contributionPw = Math.round(it.contributionPw * 1000) / 1000;
+      }
+    }
+    result[team.id] = weeks;
+  }
+  return result;
+}
+
+/**
+ * Weeks where parallel planned work (each assignment from its workStartDate)
+ * would exceed team capacity before the queue merges slots.
+ */
+export function concurrentOverloadWeeks(
+  state: AppState,
+  maxWeeks = 52
+): Record<string, Set<number>> {
+  const load = concurrentTeamLoad(state, maxWeeks);
+  const result: Record<string, Set<number>> = {};
+  for (const team of state.teams) {
     const overloaded = new Set<number>();
-    used.forEach((pw, w) => {
-      if (pw > team.capacityPw + 0.001) overloaded.add(w);
-    });
+    for (const lw of load[team.id] ?? []) {
+      if (lw.usedPw > lw.capacityPw + 0.001) overloaded.add(lw.week);
+    }
     result[team.id] = overloaded;
   }
   return result;
