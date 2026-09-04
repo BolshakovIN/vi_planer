@@ -2193,6 +2193,38 @@ body.pdf-capturing .print-only p {
   color: var(--muted);
 }
 
+/* html2canvas mishandles sticky + overflow:auto (Gantt/queues look empty). */
+body.pdf-capturing #pdfCapture,
+body.pdf-capturing #tabPrintRoot,
+body.pdf-capturing .panel,
+body.pdf-capturing .panel-sticky-host,
+body.pdf-capturing .portfolio-panel,
+body.pdf-capturing .timeline,
+body.pdf-capturing .table-scroll,
+body.pdf-capturing .table-scroll-wrap,
+body.pdf-capturing .table-scroll-top,
+body.pdf-capturing .gantt-layout,
+body.pdf-capturing .gantt-rows {
+  overflow: visible !important;
+  max-height: none !important;
+}
+
+body.pdf-capturing .panel-sticky,
+body.pdf-capturing .portfolio-sticky {
+  position: static !important;
+  top: auto !important;
+  box-shadow: none !important;
+}
+
+body.pdf-capturing .filters .btn,
+body.pdf-capturing .schedule-toggles,
+body.pdf-capturing .col-picker,
+body.pdf-capturing .drag-handle,
+body.pdf-capturing .col-resize,
+body.pdf-capturing .table-scroll-top {
+  display: none !important;
+}
+
 @media print {
   @page {
     size: A4 landscape;
@@ -2281,9 +2313,18 @@ body.pdf-capturing .print-only p {
     print-color-adjust: exact !important;
   }
 
-  .gantt-wrap,
-  .table-wrap {
+  .timeline,
+  .table-scroll,
+  .table-scroll-wrap,
+  .panel,
+  .gantt-layout {
     overflow: visible !important;
+  }
+
+  .panel-sticky,
+  .portfolio-sticky {
+    position: static !important;
+    top: auto !important;
   }
 
   a[href]::after {

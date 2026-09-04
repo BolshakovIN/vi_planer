@@ -3106,9 +3106,18 @@ async function exportCurrentTabPdf() {
     "_",
   );
 
+  window.scrollTo(0, 0);
   document.body.classList.add("pdf-capturing");
+  // Let sticky/tabs layout settle after pdf-capturing CSS applies.
+  await new Promise<void>((r) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => r())),
+  );
 
   try {
+    const tabRoot = document.querySelector<HTMLElement>("#tabPrintRoot");
+    if (!tabRoot || tabRoot.childElementCount === 0) {
+      throw new Error("Active tab content is empty");
+    }
     await downloadElementPdf(capture, filename, title);
   } catch (err) {
     console.error(err);
