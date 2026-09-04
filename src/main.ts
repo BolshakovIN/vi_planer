@@ -2852,14 +2852,14 @@ function closeResetPop() {
   document.querySelector("#resetBtn")?.classList.remove("reset-ask");
 }
 
-function askResetConfirm(anchor: HTMLElement, step: 1 | 2 = 1) {
+function askResetConfirm(anchor: HTMLElement, step: 1 | 2 | 3 = 1) {
   closeResetPop();
   closePrioPop();
   anchor.classList.add("reset-ask");
 
   const pop = document.createElement("div");
   pop.id = "resetPop";
-  pop.className = `reset-confirm${step === 2 ? " reset-confirm-step2" : ""}`;
+  pop.className = `reset-confirm${step >= 2 ? " reset-confirm-step2" : ""}`;
   pop.innerHTML =
     step === 1
       ? `
@@ -2869,10 +2869,17 @@ function askResetConfirm(anchor: HTMLElement, step: 1 | 2 = 1) {
       <button type="button" class="btn btn-danger" id="resetConfirmBtn">Да</button>
     </div>
   `
-      : `
+      : step === 2
+        ? `
     <div class="reset-confirm-text">Подумай еще раз, уверен?</div>
     <div class="reset-confirm-actions">
       <button type="button" class="btn btn-danger" id="resetFinalBtn">Ок, напишу разработчику</button>
+    </div>
+  `
+        : `
+    <div class="reset-confirm-text">Спасибо тебе</div>
+    <div class="reset-confirm-actions">
+      <button type="button" class="btn" id="resetThanksBtn">Ок</button>
     </div>
   `;
   document.body.appendChild(pop);
@@ -2929,8 +2936,12 @@ function askResetConfirm(anchor: HTMLElement, step: 1 | 2 = 1) {
   pop.querySelector("#resetFinalBtn")?.addEventListener("click", () => {
     cleanup();
     closeResetPop();
-    state = structuredClone(SEED);
-    persist();
+    askResetConfirm(anchor, 3);
+  });
+
+  pop.querySelector("#resetThanksBtn")?.addEventListener("click", () => {
+    cleanup();
+    closeResetPop();
   });
 
   window.addEventListener("keydown", onKey);
