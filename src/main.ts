@@ -3185,7 +3185,7 @@ async function exportCurrentTabPdf() {
     await downloadElementPdf(capture, filename, title);
   } catch (err) {
     console.error(err);
-    alert("Не удалось создать PDF. Проверьте интернет (нужны библиотеки с CDN).");
+    alert("Не удалось создать PDF. Попробуйте ещё раз или обновите страницу.");
   } finally {
     document.body.classList.remove("pdf-capturing");
     if (btn) {
