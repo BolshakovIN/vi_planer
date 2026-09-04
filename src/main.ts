@@ -956,6 +956,144 @@ function queuesTestHtml(
   `;
 }
 
+/**
+ * Smooth FS link: cubic/quadratic from pred bar end → succ bar start.
+ * routeBias fans control points so links never share one vertical trunk.
+ */
+function ganttDepPathD(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  routeBias = 0,
+  xMax = 52
+): string {
+  const x1c = Math.min(xMax - 0.02, Math.max(0.02, x1));
+  const x2c = Math.min(xMax - 0.02, Math.max(0.02, x2));
+  const spread = Math.max(-1.05, Math.min(1.05, routeBias * 0.2));
+
+  if (Math.abs(y1 - y2) < 0.01) {
+    if (Math.abs(spread) < 0.02) {
+      return `M ${x1c} ${y1} H ${x2c}`;
+    }
+    const midX = (x1c + x2c) / 2 + spread * 0.25;
+    return `M ${x1c} ${y1} Q ${midX} ${y1 + spread * 0.08}, ${x2c} ${y2}`;
+  }
+
+  const dx = x2c - x1c;
+  if (dx >= 0.45) {
+    const reach = Math.max(
+      0.32,
+      Math.min(Math.abs(dx) * 0.38, Math.abs(dx) - 0.12)
+    );
+    const c1x = x1c + reach + spread;
+    const c2x = x2c - reach + spread;
+    return `M ${x1c} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2c} ${y2}`;
+  }
+
+  const jogX = Math.min(
+    xMax - 0.05,
+    Math.max(x1c, x2c) + 0.42 + Math.abs(spread)
+  );
+  return `M ${x1c} ${y1} C ${jogX} ${y1}, ${jogX} ${y2}, ${x2c} ${y2}`;
+}
+
+function clientPointToSvg(
+  svg: SVGSVGElement,
+  clientX: number,
+  clientY: number
+): { x: number; y: number } | null {
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return null;
+  const pt = svg.createSVGPoint();
+  pt.x = clientX;
+  pt.y = clientY;
+  const p = pt.matrixTransform(ctm.inverse());
+  return { x: p.x, y: p.y };
+}
+
+/**
+ * Snap queue FS arrows to real bar edges (right of pred → left of succ),
+ * using DOM rects mapped into the stretched SVG viewBox. Arrowheads are
+ * drawn in user space sized by screen pixels so preserveAspectRatio=none
+ * does not distort marker tips away from the bar.
+ */
+function layoutGanttDepArrows() {
+  const svg = document.querySelector<SVGSVGElement>(".gantt-dep-layer");
+  if (!svg) return;
+  const vb = svg.viewBox.baseVal;
+  const weeks = vb.width || 1;
+  const rows = vb.height || 1;
+  const svgRect = svg.getBoundingClientRect();
+  if (svgRect.width < 2 || svgRect.height < 2) return;
+
+  const tipW = Math.min(0.55, Math.max(0.12, 7 / (svgRect.width / weeks)));
+  const tipH = Math.min(0.55, Math.max(0.1, 8 / (svgRect.height / rows)));
+  const heads = svg.querySelector(".gantt-dep-heads");
+  if (heads) heads.replaceChildren();
+
+  svg.querySelectorAll<SVGPathElement>("path.gantt-dep-link").forEach((path) => {
+    const fromItem = path.dataset.fromItem;
+    const fromTeam = path.dataset.fromTeam;
+    const toItem = path.dataset.toItem;
+    const toTeam = path.dataset.toTeam;
+    const bias = Number(path.dataset.bias || 0);
+    if (!fromItem || !fromTeam || !toItem || !toTeam) return;
+
+    const fromBar = document.querySelector<HTMLElement>(
+      `.gantt-bar[data-item-id="${fromItem}"][data-team-id="${fromTeam}"]`
+    );
+    const toBar = document.querySelector<HTMLElement>(
+      `.gantt-bar[data-item-id="${toItem}"][data-team-id="${toTeam}"]`
+    );
+    if (!fromBar || !toBar) {
+      path.setAttribute("visibility", "hidden");
+      return;
+    }
+    path.removeAttribute("visibility");
+
+    const fr = fromBar.getBoundingClientRect();
+    const tr = toBar.getBoundingClientRect();
+    if (fr.width < 1 || tr.width < 1) return;
+
+    const p1 = clientPointToSvg(svg, fr.right, fr.top + fr.height / 2);
+    const p2 = clientPointToSvg(svg, tr.left, tr.top + tr.height / 2);
+    if (!p1 || !p2) return;
+
+    // Path ends just before the tip apex so the head sits on the bar's left edge
+    const endX = p2.x - tipW * 0.95;
+    path.setAttribute("d", ganttDepPathD(p1.x, p1.y, endX, p2.y, bias, weeks));
+
+    if (!heads) return;
+    const color = path.getAttribute("stroke") || "#64748b";
+    const poly = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "polygon"
+    );
+    const half = tipH / 2;
+    poly.setAttribute(
+      "points",
+      `${p2.x},${p2.y} ${p2.x - tipW},${p2.y - half} ${p2.x - tipW},${p2.y + half}`
+    );
+    poly.setAttribute("fill", color);
+    poly.setAttribute("fill-opacity", "0.92");
+    heads.appendChild(poly);
+  });
+}
+
+function bindGanttDepArrowLayout() {
+  const rows = document.querySelector<HTMLElement>(".gantt-rows");
+  if (!rows) return;
+
+  const snap = () => layoutGanttDepArrows();
+  requestAnimationFrame(() => requestAnimationFrame(snap));
+
+  const ro = new ResizeObserver(() => snap());
+  ro.observe(rows);
+  const svg = rows.querySelector(".gantt-dep-layer");
+  if (svg) ro.observe(svg);
+}
+
 function timelineHtml(
   rollups: ItemSchedule[],
   slices: ScheduledSlice[],
@@ -980,8 +1118,6 @@ function timelineHtml(
   const BAR_H = 20;
   const BAR_GAP = 3;
   const TRACK_PAD = 6;
-  /** `.gantt-track` border (border-box); absolute bars sit inside the padding edge */
-  const TRACK_BORDER = 1;
   /** Must match `.gantt-rows { gap }` — SVG Y must include flex gaps */
   const ROW_GAP = 8;
 
@@ -1030,58 +1166,14 @@ function timelineHtml(
     );
     const lane = found?.lane ?? 0;
     const barCenterInTrack =
-      TRACK_BORDER + TRACK_PAD + lane * (BAR_H + BAR_GAP) + BAR_H / 2;
+      TRACK_PAD + lane * (BAR_H + BAR_GAP) + BAR_H / 2;
     const yPx = rowIdx * (rowH + ROW_GAP) + trackOffsetY + barCenterInTrack;
     return (yPx / Math.max(1, totalRowsPx)) * n;
   };
 
-  /**
-   * Smooth FS link: cubic/quadratic from pred bar end → succ bar start.
-   * routeBias fans control points so links never share one vertical trunk.
-   */
-  const depPathD = (
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number,
-    routeBias = 0
-  ): string => {
-    const x1c = Math.min(weeks - 0.02, Math.max(0.02, x1));
-    const x2c = Math.min(weeks - 0.02, Math.max(0.02, x2));
-    const spread = Math.max(-1.05, Math.min(1.05, routeBias * 0.2));
-
-    if (Math.abs(y1 - y2) < 0.01) {
-      if (Math.abs(spread) < 0.02) {
-        return `M ${x1c} ${y1} H ${x2c}`;
-      }
-      // Slight bow so co-linear links stay visually separable
-      const midX = (x1c + x2c) / 2 + spread * 0.25;
-      return `M ${x1c} ${y1} Q ${midX} ${y1 + spread * 0.08}, ${x2c} ${y2}`;
-    }
-
-    const dx = x2c - x1c;
-    if (dx >= 0.45) {
-      // Forward: S-curve with controls locked to endpoint Y (stable under stretch)
-      const reach = Math.max(
-        0.32,
-        Math.min(Math.abs(dx) * 0.38, Math.abs(dx) - 0.12)
-      );
-      const c1x = x1c + reach + spread;
-      const c2x = x2c - reach + spread;
-      return `M ${x1c} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2c} ${y2}`;
-    }
-
-    // Tight / backwards: unique side-jog per link, then smooth into target
-    const jogX = Math.min(
-      weeks - 0.05,
-      Math.max(x1c, x2c) + 0.42 + Math.abs(spread)
-    );
-    return `M ${x1c} ${y1} C ${jogX} ${y1}, ${jogX} ${y2}, ${x2c} ${y2}`;
-  };
-
-  // Same-team queue deps: only meaningful when auto capacity queue shifts work
+  // Same-team queue deps: only meaningful when auto capacity queue shifts work.
+  // Endpoints are approximate here; layoutGanttDepArrows() snaps to real bar rects.
   const depPaths: string[] = [];
-  const depMarkers: string[] = [];
   if (ui.autoCapacitySchedule) {
     state.teams.forEach((team) => {
       const queue = slices
@@ -1089,30 +1181,23 @@ function timelineHtml(
         .sort((a, b) => a.effectiveRank - b.effectiveRank);
       if (queue.length < 2) return;
 
-      const markerId = `arrow-${team.id}`;
-      depMarkers.push(`
-      <marker id="${markerId}" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto" markerUnits="strokeWidth">
-        <polygon points="0 0, 6 3, 0 6" fill="${team.color}" fill-opacity="0.9" />
-      </marker>
-    `);
-
       const linkCount = queue.length - 1;
       for (let i = 1; i < queue.length; i++) {
         const prev = queue[i - 1];
         const curr = queue[i];
         if (!rowIndex.has(prev.item.id) || !rowIndex.has(curr.item.id)) continue;
         // Inclusive week bars: right edge at endWeek+1, left at startWeek
-        const x1 = prev.endWeek + 1 - 0.06;
-        const x2 = curr.startWeek + 0.1;
+        const x1 = prev.endWeek + 1;
+        const x2 = curr.startWeek;
         const y1 = sliceCenterY(prev);
         const y2 = sliceCenterY(curr);
         // Centered fan so consecutive queue links don't merge into one corridor
         const routeBias =
           linkCount <= 1 ? 0 : i - 1 - (linkCount - 1) / 2;
-        const d = depPathD(x1, y1, x2, y2, routeBias);
+        const d = ganttDepPathD(x1, y1, x2, y2, routeBias, weeks);
 
         depPaths.push(
-          `<path d="${d}" fill="none" stroke="${team.color}" stroke-width="0.0425" stroke-opacity="0.78" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#${markerId})" />`
+          `<path class="gantt-dep-link" data-from-item="${escapeAttr(prev.item.id)}" data-from-team="${escapeAttr(prev.teamId)}" data-to-item="${escapeAttr(curr.item.id)}" data-to-team="${escapeAttr(curr.teamId)}" data-bias="${routeBias}" d="${d}" fill="none" stroke="${team.color}" stroke-width="0.0425" stroke-opacity="0.78" stroke-linecap="round" stroke-linejoin="round" />`
         );
       }
     });
@@ -1136,7 +1221,7 @@ function timelineHtml(
               .filter(Boolean);
             const uniqPreds = [...new Set(preds)];
             return uniqPreds.length
-              ? `<div class="meta gantt-dep-meta">после ${uniqPreds.join(", ")}</div>`
+              ? `<div class="meta gantt-dep-meta" title="Очередь той же команды по приоритету (Finish-to-Start)">после ${uniqPreds.join(", ")}</div>`
               : `<div class="meta gantt-dep-meta">старт очереди</div>`;
           })()
         : `<div class="meta gantt-dep-meta">как задано · без сдвига очереди</div>`;
@@ -1157,7 +1242,7 @@ function timelineHtml(
           ).some((w) => teamOverflow.has(w));
           const overloadCls = barOverload ? " gantt-bar-overload" : "";
           const title = `${team?.name ?? ""}: ${formatDate(s.startDate)} → ${formatDate(s.endDate)}${barOverload ? " · перегруз ёмкости" : ""}`;
-          return `<div class="gantt-bar ${isBot ? "gantt-bot" : ""}${overloadCls}" style="left:${left}%;width:${Math.max(width, 2.5)}%;top:${top}px;height:${BAR_H}px;background:${team?.color ?? "#64748b"}" title="${escapeAttr(title)}">${escapeHtml(team?.name ?? "")}</div>`;
+          return `<div class="gantt-bar ${isBot ? "gantt-bot" : ""}${overloadCls}" data-item-id="${escapeAttr(item.id)}" data-team-id="${escapeAttr(s.teamId)}" style="left:${left}%;width:${Math.max(width, 2.5)}%;top:${top}px;height:${BAR_H}px;background:${team?.color ?? "#64748b"}" title="${escapeAttr(title)}">${escapeHtml(team?.name ?? "")}</div>`;
         })
         .join("");
 
@@ -1217,6 +1302,13 @@ function timelineHtml(
       <div class="panel-sticky">
         <div class="panel-header">
           <h2>Сроки и зависимости по приоритету</h2>
+          <p class="meta gantt-dep-legend" style="margin:0;flex-basis:100%">
+            ${
+              ui.autoCapacitySchedule
+                ? "Стрелки: очередь одной команды (цвет = команда), от конца полоски к началу следующей — не кросс-командные зависимости инициативы."
+                : "Включите «Автоматически сдвигать по ёмкости», чтобы увидеть стрелки очереди команды."
+            }
+          </p>
           <div class="gantt-weeks-ctrl">
             ${scheduleTogglesHtml()}
             <div class="gantt-weeks-ctrl-right">
@@ -1244,10 +1336,8 @@ function timelineHtml(
           </div>
           <div class="gantt-rows" style="--gantt-row-gap:${ROW_GAP}px">
             <svg class="gantt-dep-layer" viewBox="0 0 ${weeks} ${n}" preserveAspectRatio="none" aria-hidden="true">
-              <defs>
-                ${depMarkers.join("")}
-              </defs>
               ${depPaths.join("")}
+              <g class="gantt-dep-heads"></g>
             </svg>
             ${rowsHtml}
           </div>
@@ -1265,8 +1355,8 @@ function timelineHtml(
       </div>
       <p class="footer-note" style="padding:0 16px 16px;margin:0">${
         ui.autoCapacitySchedule
-          ? "Шкала — недели от старта планирования (понедельник). Стрелки — зависимости очереди команды. ETA инициативы = конец bottleneck-полоски."
-          : "Шкала — недели от старта планирования (понедельник). Даты полосок = заданные старты (без сдвига по ёмкости). ETA = конец bottleneck-полоски; параллельная работа может перегрузить команду."
+          ? "Шкала — недели от старта планирования (понедельник). Стрелки FS одной команды: правый край полоски → левый край следующей работы этой же команды в очереди по приоритету (цвет = команда; не связи между разными командами одной инициативы). Подпись «после #N (команда)» — кто стоит перед этой полоской в очереди. ETA = конец bottleneck-полоски."
+          : "Шкала — недели от старта планирования (понедельник). Даты полосок = заданные старты (без сдвига по ёмкости); стрелки очереди скрыты. ETA = конец bottleneck-полоски; параллельная работа может перегрузить команду."
       }${
         ui.showTeamLoad
           ? " Красная подсветка — загрузка команды по расписанию (как на Gantt) выше ёмкости в эту неделю."
@@ -2558,6 +2648,7 @@ function bind() {
   bindPortfolioColResize();
   bindPortfolioTableScroll();
   bindStickyTabsOffset();
+  bindGanttDepArrowLayout();
 
   const close = () => {
     ui.creating = false;
