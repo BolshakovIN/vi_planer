@@ -1021,21 +1021,48 @@ function timelineHtml(
     return (yPx / Math.max(1, totalRowsPx)) * n;
   };
 
-  /** Orthogonal FS link: end of pred → start of succ (short elbows, no wide sweeps) */
-  const depPathD = (x1: number, y1: number, x2: number, y2: number): string => {
+  /**
+   * Smooth FS link: cubic/quadratic from pred bar end → succ bar start.
+   * routeBias fans control points so links never share one vertical trunk.
+   */
+  const depPathD = (
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    routeBias = 0
+  ): string => {
     const x1c = Math.min(weeks - 0.02, Math.max(0.02, x1));
     const x2c = Math.min(weeks - 0.02, Math.max(0.02, x2));
+    const spread = Math.max(-1.05, Math.min(1.05, routeBias * 0.2));
+
     if (Math.abs(y1 - y2) < 0.01) {
-      return `M ${x1c} ${y1} H ${x2c}`;
+      if (Math.abs(spread) < 0.02) {
+        return `M ${x1c} ${y1} H ${x2c}`;
+      }
+      // Slight bow so co-linear links stay visually separable
+      const midX = (x1c + x2c) / 2 + spread * 0.25;
+      return `M ${x1c} ${y1} Q ${midX} ${y1 + spread * 0.08}, ${x2c} ${y2}`;
     }
-    const stub = 0.22;
-    if (x2c >= x1c + stub * 2) {
-      const midX = x1c + (x2c - x1c) / 2;
-      return `M ${x1c} ${y1} H ${midX} V ${y2} H ${x2c}`;
+
+    const dx = x2c - x1c;
+    if (dx >= 0.45) {
+      // Forward: S-curve with controls locked to endpoint Y (stable under stretch)
+      const reach = Math.max(
+        0.32,
+        Math.min(Math.abs(dx) * 0.38, Math.abs(dx) - 0.12)
+      );
+      const c1x = x1c + reach + spread;
+      const c2x = x2c - reach + spread;
+      return `M ${x1c} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2c} ${y2}`;
     }
-    // Tight / backwards: jog right of both bars, then drop/raise into target
-    const jogX = Math.min(weeks - 0.05, Math.max(x1c, x2c) + stub);
-    return `M ${x1c} ${y1} H ${jogX} V ${y2} H ${x2c}`;
+
+    // Tight / backwards: unique side-jog per link, then smooth into target
+    const jogX = Math.min(
+      weeks - 0.05,
+      Math.max(x1c, x2c) + 0.42 + Math.abs(spread)
+    );
+    return `M ${x1c} ${y1} C ${jogX} ${y1}, ${jogX} ${y2}, ${x2c} ${y2}`;
   };
 
   // Same-team queue deps: only meaningful when auto capacity queue shifts work
@@ -1050,11 +1077,12 @@ function timelineHtml(
 
       const markerId = `arrow-${team.id}`;
       depMarkers.push(`
-      <marker id="${markerId}" markerWidth="5" markerHeight="5" refX="4.2" refY="2.5" orient="auto" markerUnits="strokeWidth">
-        <polygon points="0 0, 5 2.5, 0 5" fill="${team.color}" fill-opacity="0.95" />
+      <marker id="${markerId}" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto" markerUnits="strokeWidth">
+        <polygon points="0 0, 6 3, 0 6" fill="${team.color}" fill-opacity="0.9" />
       </marker>
     `);
 
+      const linkCount = queue.length - 1;
       for (let i = 1; i < queue.length; i++) {
         const prev = queue[i - 1];
         const curr = queue[i];
@@ -1064,10 +1092,13 @@ function timelineHtml(
         const x2 = curr.startWeek + 0.1;
         const y1 = sliceCenterY(prev);
         const y2 = sliceCenterY(curr);
-        const d = depPathD(x1, y1, x2, y2);
+        // Centered fan so consecutive queue links don't merge into one corridor
+        const routeBias =
+          linkCount <= 1 ? 0 : i - 1 - (linkCount - 1) / 2;
+        const d = depPathD(x1, y1, x2, y2, routeBias);
 
         depPaths.push(
-          `<path d="${d}" fill="none" stroke="${team.color}" stroke-width="0.085" stroke-opacity="0.88" stroke-linecap="square" stroke-linejoin="miter" marker-end="url(#${markerId})" />`
+          `<path d="${d}" fill="none" stroke="${team.color}" stroke-width="0.0425" stroke-opacity="0.78" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#${markerId})" />`
         );
       }
     });
