@@ -23,7 +23,6 @@ import {
   hasTeam,
   uid,
   wsjf,
-  normalizeState,
   snapToMonday,
   addDays,
   addWeeks,
@@ -2323,8 +2322,6 @@ function render() {
         <div class="top-actions">
           <span class="sync-badge" id="syncStatus" data-status="${getSyncStatus()}">${syncStatusLabel(getSyncStatus())}</span>
           <button class="btn" id="exportPdfBtn">Экспорт PDF</button>
-          <button class="btn" id="exportBtn">Экспорт JSON</button>
-          <button class="btn" id="importBtn">Импорт JSON</button>
           <button class="btn" id="resetBtn">Сбросить демо</button>
         </div>
         <p class="subtitle">
@@ -2364,7 +2361,6 @@ function render() {
       <button type="button" class="req-dl-btn" id="downloadReqsBtn" title="Скачать требования">Требования (BR / UC / FR / NFR)</button>
     </div>
     ${ui.creating || editing ? editorHtml(editing) : ""}
-    <input type="file" id="fileInput" accept="application/json,.json" hidden />
   `;
 
   bind();
@@ -2926,40 +2922,6 @@ function bind() {
     void downloadRequirementsDoc();
   });
 
-  document.querySelector("#exportBtn")?.addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify(state, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `vi-planer-${state.startDate}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  });
-
-  document.querySelector("#importBtn")?.addEventListener("click", () => {
-    document.querySelector<HTMLInputElement>("#fileInput")?.click();
-  });
-
-  document
-    .querySelector<HTMLInputElement>("#fileInput")
-    ?.addEventListener("change", async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      try {
-        const text = await file.text();
-        const normalized = normalizeState(JSON.parse(text));
-        if (!normalized) {
-          alert("Неверный формат файла");
-          return;
-        }
-        state = normalized;
-        persist();
-      } catch {
-        alert("Не удалось прочитать JSON");
-      }
-    });
 
   document.querySelector("#resetBtn")?.addEventListener("click", (e) => {
     e.stopPropagation();
