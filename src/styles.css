@@ -775,6 +775,16 @@ th.sortable.sorted {
   text-align: right;
 }
 
+.settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-stack > .callout {
+  margin-bottom: 0;
+}
+
 .settings-preview {
   margin: 0 16px 16px;
   padding: 14px 16px;

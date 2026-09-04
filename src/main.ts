@@ -48,7 +48,7 @@ import {
 } from "./storage";
 import { downloadElementPdf } from "./pdfExport";
 
-type Tab = "portfolio" | "teams" | "timeline" | "capacity" | "queuesTest" | "settings";
+type Tab = "portfolio" | "teams" | "timeline" | "queuesTest" | "settings";
 type SortKey = "priority" | "wsjf" | "estimate" | "eta";
 type SortDir = "asc" | "desc";
 
@@ -57,9 +57,23 @@ const TAB_LABELS: Record<Tab, string> = {
   teams: "Очереди команд",
   queuesTest: "Очереди (тест)",
   timeline: "Сроки / Gantt",
-  capacity: "Команды",
   settings: "Настройки",
 };
+
+/** Legacy deep-link / tab id `capacity` → Settings (teams live there now). */
+function normalizeTab(tab: string | undefined | null): Tab {
+  if (tab === "capacity") return "settings";
+  if (
+    tab === "portfolio" ||
+    tab === "teams" ||
+    tab === "timeline" ||
+    tab === "queuesTest" ||
+    tab === "settings"
+  ) {
+    return tab;
+  }
+  return "portfolio";
+}
 
 interface UiState {
   tab: Tab;
@@ -1283,6 +1297,62 @@ function nextTeamColor(): string {
   );
 }
 
+function teamsManageHtml(): string {
+  const rows = state.teams
+    .map(
+      (t) => `
+      <div class="capacity-row" data-team-row="${t.id}">
+        <span class="team-dot" style="background:${t.color}"></span>
+        <input
+          class="team-name-input"
+          type="text"
+          data-team-name="${t.id}"
+          value="${escapeAttr(t.name)}"
+          aria-label="Название команды"
+        />
+        <label class="team-capacity-field">
+          <span class="meta">Ёмкость, чел·нед/нед</span>
+          <div class="team-capacity-slider">
+            <input type="range" min="1" max="8" step="0.5" value="${t.capacityPw}" data-cap="${t.id}" />
+            <span class="mono capacity-label" data-cap-label="${t.id}">${t.capacityPw}</span>
+          </div>
+        </label>
+        <button
+          type="button"
+          class="btn btn-ghost team-delete-btn"
+          data-team-delete="${t.id}"
+          title="Удалить команду"
+          ${state.teams.length <= 1 ? "disabled" : ""}
+        >Удалить</button>
+      </div>
+    `
+    )
+    .join("");
+
+  return `
+    <div class="callout">
+      <strong>Ёмкость</strong> — сколько человеко-недель команда может отдать за календарную неделю.
+      Оценки инициатив задаются майками (недели — в блоке ниже).
+    </div>
+    <div class="panel panel-sticky-host">
+      <div class="panel-sticky">
+        <div class="panel-header">
+          <h2>Команды</h2>
+        </div>
+      </div>
+      <div id="teamsManageList">
+        ${rows || `<div class="empty">Нет команд — добавьте первую ниже</div>`}
+      </div>
+      <div class="team-add-bar" id="teamAddBar">
+        <span class="team-dot" id="newTeamDot" style="background:${nextTeamColor()}"></span>
+        <input id="newTeamName" type="text" placeholder="Название новой команды" />
+        <button class="btn btn-primary" id="saveNewTeam">+ Команда</button>
+        <button class="btn" id="cancelNewTeam">Отмена</button>
+      </div>
+    </div>
+  `;
+}
+
 function settingsHtml(rollups: ItemSchedule[]): string {
   const r = state.sizeRanges;
   const active = state.items.filter((i) => i.status !== "done");
@@ -1328,31 +1398,34 @@ function settingsHtml(rollups: ItemSchedule[]): string {
   ).join("");
 
   return `
-    <div class="callout">
-      Диапазоны майок — <strong>сколько недель</strong> заложено в оценке проекта (S / M / L). Для плана берётся середина диапазона.
-      Изменения сразу перестраивают ETA и Gantt.
-    </div>
-    <div class="panel panel-sticky-host">
-      <div class="panel-sticky">
-        <div class="panel-header">
-          <h2>Майки (S / M / L)</h2>
-          <button type="button" class="btn" id="resetSizeRanges">Сбросить по умолчанию</button>
-        </div>
+    <div class="settings-stack">
+      ${teamsManageHtml()}
+      <div class="callout">
+        Диапазоны майок — <strong>сколько недель</strong> заложено в оценке проекта (S / M / L). Для плана берётся середина диапазона.
+        Изменения сразу перестраивают ETA и Gantt.
       </div>
-      <div class="size-ranges-grid">${rows}</div>
-      <div class="settings-preview" id="settingsSchedPreview">
-        <div><span class="meta">Сейчас в плане</span></div>
-        <div class="settings-preview-row">
-          <span>Горизонт портфеля</span>
-          <strong class="mono" id="settingsHorizon">${horizon} нед.</strong>
+      <div class="panel panel-sticky-host">
+        <div class="panel-sticky">
+          <div class="panel-header">
+            <h2>Майки (S / M / L)</h2>
+            <button type="button" class="btn" id="resetSizeRanges">Сбросить по умолчанию</button>
+          </div>
         </div>
-        <div class="settings-preview-row">
-          <span>Активных инициатив</span>
-          <strong class="mono">${active.length}</strong>
-        </div>
-        <div class="settings-preview-row">
-          <span>Шкала майок</span>
-          <strong id="settingsRangesSummary">${sizeRangesSummary(r)}</strong>
+        <div class="size-ranges-grid">${rows}</div>
+        <div class="settings-preview" id="settingsSchedPreview">
+          <div><span class="meta">Сейчас в плане</span></div>
+          <div class="settings-preview-row">
+            <span>Горизонт портфеля</span>
+            <strong class="mono" id="settingsHorizon">${horizon} нед.</strong>
+          </div>
+          <div class="settings-preview-row">
+            <span>Активных инициатив</span>
+            <strong class="mono">${active.length}</strong>
+          </div>
+          <div class="settings-preview-row">
+            <span>Шкала майок</span>
+            <strong id="settingsRangesSummary">${sizeRangesSummary(r)}</strong>
+          </div>
         </div>
       </div>
     </div>
@@ -1410,62 +1483,6 @@ function applySizeRangesFromInputs() {
       el?.select();
     }
   }, 200);
-}
-
-function capacityHtml(): string {
-  const rows = state.teams
-    .map(
-      (t) => `
-      <div class="capacity-row" data-team-row="${t.id}">
-        <span class="team-dot" style="background:${t.color}"></span>
-        <input
-          class="team-name-input"
-          type="text"
-          data-team-name="${t.id}"
-          value="${escapeAttr(t.name)}"
-          aria-label="Название команды"
-        />
-        <label class="team-capacity-field">
-          <span class="meta">Ёмкость, чел·нед/нед</span>
-          <div class="team-capacity-slider">
-            <input type="range" min="1" max="8" step="0.5" value="${t.capacityPw}" data-cap="${t.id}" />
-            <span class="mono capacity-label" data-cap-label="${t.id}">${t.capacityPw}</span>
-          </div>
-        </label>
-        <button
-          type="button"
-          class="btn btn-ghost team-delete-btn"
-          data-team-delete="${t.id}"
-          title="Удалить команду"
-          ${state.teams.length <= 1 ? "disabled" : ""}
-        >Удалить</button>
-      </div>
-    `
-    )
-    .join("");
-
-  return `
-    <div class="callout">
-      <strong>Ёмкость</strong> — сколько человеко-недель команда может отдать за календарную неделю.
-      Оценки инициатив задаются майками (недели — в <a href="#" data-tab-jump="settings">Настройках</a>).
-    </div>
-    <div class="panel panel-sticky-host">
-      <div class="panel-sticky">
-        <div class="panel-header">
-          <h2>Команды</h2>
-        </div>
-      </div>
-      <div id="teamsManageList">
-        ${rows || `<div class="empty">Нет команд — добавьте первую ниже</div>`}
-      </div>
-      <div class="team-add-bar" id="teamAddBar">
-        <span class="team-dot" id="newTeamDot" style="background:${nextTeamColor()}"></span>
-        <input id="newTeamName" type="text" placeholder="Название новой команды" />
-        <button class="btn btn-primary" id="saveNewTeam">+ Команда</button>
-        <button class="btn" id="cancelNewTeam">Отмена</button>
-      </div>
-    </div>
-  `;
 }
 
 function editorHtml(item: WorkItem | null): string {
@@ -2200,7 +2217,6 @@ function render() {
         <button class="tab ${ui.tab === "teams" ? "active" : ""}" data-tab="teams">Очереди команд</button>
         <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очереди (тест)</button>
         <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Сроки / Gantt</button>
-        <button class="tab ${ui.tab === "capacity" ? "active" : ""}" data-tab="capacity">Команды</button>
         <button class="tab tab-settings ${ui.tab === "settings" ? "active" : ""}" data-tab="settings">Настройки</button>
       </div>
       <div class="tab-print-root" id="tabPrintRoot">
@@ -2213,9 +2229,7 @@ function render() {
               ? queuesTestHtml(slices, load, overflowByTeam)
               : ui.tab === "timeline"
                 ? timelineHtml(rollups, slices, load, overflowByTeam)
-                : ui.tab === "settings"
-                  ? settingsHtml(rollups)
-                  : capacityHtml()
+                : settingsHtml(rollups)
       }
       </div>
       </div>
@@ -2372,7 +2386,7 @@ function persist() {
 function bind() {
   document.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      ui.tab = btn.dataset.tab as Tab;
+      ui.tab = normalizeTab(btn.dataset.tab);
       render();
     });
   });
@@ -2726,10 +2740,10 @@ function bind() {
     input.addEventListener("change", () => render());
   });
 
-  document.querySelectorAll<HTMLButtonElement>("[data-tab-jump]").forEach((btn) => {
+  document.querySelectorAll<HTMLAnchorElement | HTMLButtonElement>("[data-tab-jump]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.preventDefault();
-      ui.tab = btn.dataset.tabJump as Tab;
+      ui.tab = normalizeTab(btn.dataset.tabJump);
       render();
     });
   });
