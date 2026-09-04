@@ -30,6 +30,7 @@
   --gantt-line: #e0e0e0;
   --gantt-label-col: 240px;
   --gantt-col-gap: 12px;
+  --gantt-row-gap: 8px;
   --radius: 6px;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   font-family: "IBM Plex Sans", system-ui, sans-serif;
@@ -1368,7 +1369,7 @@ body.prio-dragging {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--gantt-row-gap, 8px);
   min-width: 0;
 }
 

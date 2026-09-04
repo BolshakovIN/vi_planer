@@ -963,53 +963,13 @@ function timelineHtml(
   const weekPct = 100 / weeks;
   const trackBg = `repeating-linear-gradient(90deg, #f5f5f5 0, #f5f5f5 calc(${weekPct}% - 1px), #e0e0e0 calc(${weekPct}% - 1px), #e0e0e0 ${weekPct}%)`;
 
-  // Same-team queue deps: only meaningful when auto capacity queue shifts work
-  const depPaths: string[] = [];
-  const depMarkers: string[] = [];
-  if (ui.autoCapacitySchedule) {
-    state.teams.forEach((team, teamIdx) => {
-      const queue = slices
-        .filter((s) => s.teamId === team.id)
-        .sort((a, b) => a.effectiveRank - b.effectiveRank);
-      if (queue.length < 2) return;
-
-      const markerId = `arrow-${team.id}`;
-      depMarkers.push(`
-      <marker id="${markerId}" markerWidth="0.28" markerHeight="0.28" refX="0.22" refY="0.14" orient="auto" markerUnits="userSpaceOnUse">
-        <polygon points="0 0, 0.28 0.14, 0 0.28" fill="${team.color}" fill-opacity="0.95" />
-      </marker>
-    `);
-
-      for (let i = 1; i < queue.length; i++) {
-        const prev = queue[i - 1];
-        const curr = queue[i];
-        const y1 = (rowIndex.get(prev.item.id) ?? 0) + 0.5;
-        const y2 = (rowIndex.get(curr.item.id) ?? 0) + 0.5;
-        const x1 = Math.min(weeks - 0.05, prev.endWeek + 0.92);
-        const x2 = Math.min(weeks - 0.05, Math.max(0.08, curr.startWeek + 0.02));
-        const dx = x2 - x1;
-        const lane = ((teamIdx % 4) - 1.5) * 0.08;
-
-        // Gentle S-curve: control points stay near each endpoint's Y
-        // (avoids the "shared midX" loop that stretches under preserveAspectRatio=none)
-        const bulge = Math.max(0.35, Math.abs(dx) * 0.45) + Math.abs(lane);
-        const c1x = x1 + (dx >= 0 ? bulge : -bulge * 0.35) + lane;
-        const c2x = x2 - (dx >= 0 ? bulge : -bulge * 0.35) + lane;
-        const d =
-          Math.abs(y1 - y2) < 0.02
-            ? `M ${x1} ${y1} H ${x2}`
-            : `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2} ${y2}`;
-
-        depPaths.push(
-          `<path d="${d}" fill="none" stroke="${team.color}" stroke-width="0.05" stroke-opacity="0.65" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#${markerId})" />`
-        );
-      }
-    });
-  }
-
   const BAR_H = 20;
   const BAR_GAP = 3;
   const TRACK_PAD = 6;
+  /** `.gantt-track` border (border-box); absolute bars sit inside the padding edge */
+  const TRACK_BORDER = 1;
+  /** Must match `.gantt-rows { gap }` — SVG Y must include flex gaps */
+  const ROW_GAP = 8;
 
   /** Pack overlapping team bars into vertical lanes within one item row */
   const packBarLanes = (itemSlices: ScheduledSlice[]) => {
@@ -1029,15 +989,89 @@ function timelineHtml(
     });
   };
 
-  const rowLaneCounts = visible.map(({ r }) => {
-    const packed = packBarLanes(r.slices);
+  const packedByItem = new Map(
+    visible.map(({ item, r }) => [item.id, packBarLanes(r.slices)] as const)
+  );
+  const rowLaneCounts = visible.map(({ item }) => {
+    const packed = packedByItem.get(item.id) ?? [];
     return packed.length ? Math.max(...packed.map((p) => p.lane)) + 1 : 1;
   });
   const maxLanes = Math.max(1, ...rowLaneCounts);
-  // Equal row height keeps dep SVG Y mapping (0..n) aligned with DOM rows
+  // Equal row height keeps dep SVG Y mapping aligned with DOM rows
   const trackH =
     TRACK_PAD * 2 + maxLanes * BAR_H + Math.max(0, maxLanes - 1) * BAR_GAP;
   const rowH = Math.max(58, trackH);
+  const totalRowsPx = n * rowH + Math.max(0, n - 1) * ROW_GAP;
+  const trackOffsetY = (rowH - trackH) / 2;
+
+  /** Bar vertical center in SVG viewBox Y (0..n), matching DOM incl. row gaps + lane */
+  const sliceCenterY = (slice: ScheduledSlice): number => {
+    const rowIdx = rowIndex.get(slice.item.id) ?? 0;
+    const packed = packedByItem.get(slice.item.id) ?? [];
+    const found = packed.find(
+      (p) =>
+        p.slice.teamId === slice.teamId &&
+        p.slice.startWeek === slice.startWeek &&
+        p.slice.endWeek === slice.endWeek
+    );
+    const lane = found?.lane ?? 0;
+    const barCenterInTrack =
+      TRACK_BORDER + TRACK_PAD + lane * (BAR_H + BAR_GAP) + BAR_H / 2;
+    const yPx = rowIdx * (rowH + ROW_GAP) + trackOffsetY + barCenterInTrack;
+    return (yPx / Math.max(1, totalRowsPx)) * n;
+  };
+
+  /** Orthogonal FS link: end of pred → start of succ (short elbows, no wide sweeps) */
+  const depPathD = (x1: number, y1: number, x2: number, y2: number): string => {
+    const x1c = Math.min(weeks - 0.02, Math.max(0.02, x1));
+    const x2c = Math.min(weeks - 0.02, Math.max(0.02, x2));
+    if (Math.abs(y1 - y2) < 0.01) {
+      return `M ${x1c} ${y1} H ${x2c}`;
+    }
+    const stub = 0.22;
+    if (x2c >= x1c + stub * 2) {
+      const midX = x1c + (x2c - x1c) / 2;
+      return `M ${x1c} ${y1} H ${midX} V ${y2} H ${x2c}`;
+    }
+    // Tight / backwards: jog right of both bars, then drop/raise into target
+    const jogX = Math.min(weeks - 0.05, Math.max(x1c, x2c) + stub);
+    return `M ${x1c} ${y1} H ${jogX} V ${y2} H ${x2c}`;
+  };
+
+  // Same-team queue deps: only meaningful when auto capacity queue shifts work
+  const depPaths: string[] = [];
+  const depMarkers: string[] = [];
+  if (ui.autoCapacitySchedule) {
+    state.teams.forEach((team) => {
+      const queue = slices
+        .filter((s) => s.teamId === team.id)
+        .sort((a, b) => a.effectiveRank - b.effectiveRank);
+      if (queue.length < 2) return;
+
+      const markerId = `arrow-${team.id}`;
+      depMarkers.push(`
+      <marker id="${markerId}" markerWidth="5" markerHeight="5" refX="4.2" refY="2.5" orient="auto" markerUnits="strokeWidth">
+        <polygon points="0 0, 5 2.5, 0 5" fill="${team.color}" fill-opacity="0.95" />
+      </marker>
+    `);
+
+      for (let i = 1; i < queue.length; i++) {
+        const prev = queue[i - 1];
+        const curr = queue[i];
+        if (!rowIndex.has(prev.item.id) || !rowIndex.has(curr.item.id)) continue;
+        // Inclusive week bars: right edge at endWeek+1, left at startWeek
+        const x1 = prev.endWeek + 1 - 0.06;
+        const x2 = curr.startWeek + 0.1;
+        const y1 = sliceCenterY(prev);
+        const y2 = sliceCenterY(curr);
+        const d = depPathD(x1, y1, x2, y2);
+
+        depPaths.push(
+          `<path d="${d}" fill="none" stroke="${team.color}" stroke-width="0.085" stroke-opacity="0.88" stroke-linecap="square" stroke-linejoin="miter" marker-end="url(#${markerId})" />`
+        );
+      }
+    });
+  }
 
   const rowsHtml = visible
     .map(({ item, r }) => {
@@ -1062,7 +1096,7 @@ function timelineHtml(
           })()
         : `<div class="meta gantt-dep-meta">как задано · без сдвига очереди</div>`;
 
-      const packed = packBarLanes(r.slices);
+      const packed = packedByItem.get(item.id) ?? [];
       const bars = packed
         .map(({ slice: s, lane: barLane }) => {
           const team = teamById(s.teamId);
@@ -1163,7 +1197,7 @@ function timelineHtml(
             </div>
             <div class="gantt-axis">${axisTicks}</div>
           </div>
-          <div class="gantt-rows">
+          <div class="gantt-rows" style="--gantt-row-gap:${ROW_GAP}px">
             <svg class="gantt-dep-layer" viewBox="0 0 ${weeks} ${n}" preserveAspectRatio="none" aria-hidden="true">
               <defs>
                 ${depMarkers.join("")}
