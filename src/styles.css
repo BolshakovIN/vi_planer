@@ -338,10 +338,12 @@ textarea {
 }
 
 /* Sticky toolbar needs a visible overflow ancestor; clip only via radius on other panels */
+.panel-sticky-host,
 .portfolio-panel {
   overflow: visible;
 }
 
+.panel-sticky,
 .portfolio-sticky {
   position: sticky;
   top: var(--tabs-sticky-h, 54px);
@@ -352,6 +354,7 @@ textarea {
   box-shadow: 0 1px 0 var(--line);
 }
 
+.panel-sticky .panel-header,
 .portfolio-sticky .panel-header {
   border-bottom: none;
 }

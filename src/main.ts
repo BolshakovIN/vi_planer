@@ -794,10 +794,12 @@ function teamsHtml(
     .join("");
 
   return `
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Сквозной приоритет по командам</h2>
-        ${scheduleTogglesHtml()}
+    <div class="panel panel-sticky-host">
+      <div class="panel-sticky">
+        <div class="panel-header">
+          <h2>Сквозной приоритет по командам</h2>
+          ${scheduleTogglesHtml()}
+        </div>
       </div>
       ${cards}
     </div>
@@ -928,10 +930,12 @@ function queuesTestHtml(
       }
       Полоска — окно работы в ближайшие 12 недель.
     </div>
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Очереди (тест) — когда команда может взять задачу</h2>
-        ${scheduleTogglesHtml()}
+    <div class="panel panel-sticky-host">
+      <div class="panel-sticky">
+        <div class="panel-header">
+          <h2>Очереди (тест) — когда команда может взять задачу</h2>
+          ${scheduleTogglesHtml()}
+        </div>
       </div>
       ${cards}
     </div>
@@ -1130,20 +1134,22 @@ function timelineHtml(
     .join("");
 
   return `
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Сроки и зависимости по приоритету</h2>
-        <div class="gantt-weeks-ctrl">
-          ${scheduleTogglesHtml()}
-          <div class="gantt-weeks-ctrl-right">
-            <label for="ganttWeeks">Горизонт</label>
-            <input id="ganttWeeks" type="range" min="4" max="52" step="1" value="${weeks}" />
-            <span class="mono" id="ganttWeeksLabel">${weeks} нед.</span>
-            ${
-              needed > weeks
-                ? `<span class="meta">часть работ за горизонтом (нужно ~${needed})</span>`
-                : ""
-            }
+    <div class="panel panel-sticky-host">
+      <div class="panel-sticky">
+        <div class="panel-header">
+          <h2>Сроки и зависимости по приоритету</h2>
+          <div class="gantt-weeks-ctrl">
+            ${scheduleTogglesHtml()}
+            <div class="gantt-weeks-ctrl-right">
+              <label for="ganttWeeks">Горизонт</label>
+              <input id="ganttWeeks" type="range" min="4" max="52" step="1" value="${weeks}" />
+              <span class="mono" id="ganttWeeksLabel">${weeks} нед.</span>
+              ${
+                needed > weeks
+                  ? `<span class="meta">часть работ за горизонтом (нужно ~${needed})</span>`
+                  : ""
+              }
+            </div>
           </div>
         </div>
       </div>
@@ -1261,10 +1267,12 @@ function settingsHtml(rollups: ItemSchedule[]): string {
       Диапазоны майок — <strong>сколько недель</strong> заложено в оценке проекта (S / M / L). Для плана берётся середина диапазона.
       Изменения сразу перестраивают ETA и Gantt.
     </div>
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Майки (S / M / L)</h2>
-        <button type="button" class="btn" id="resetSizeRanges">Сбросить по умолчанию</button>
+    <div class="panel panel-sticky-host">
+      <div class="panel-sticky">
+        <div class="panel-header">
+          <h2>Майки (S / M / L)</h2>
+          <button type="button" class="btn" id="resetSizeRanges">Сбросить по умолчанию</button>
+        </div>
       </div>
       <div class="size-ranges-grid">${rows}</div>
       <div class="settings-preview" id="settingsSchedPreview">
@@ -1376,9 +1384,11 @@ function capacityHtml(): string {
       <strong>Ёмкость</strong> — сколько человеко-недель команда может отдать за календарную неделю.
       Оценки инициатив задаются майками (недели — в <a href="#" data-tab-jump="settings">Настройках</a>).
     </div>
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Команды</h2>
+    <div class="panel panel-sticky-host">
+      <div class="panel-sticky">
+        <div class="panel-header">
+          <h2>Команды</h2>
+        </div>
       </div>
       <div id="teamsManageList">
         ${rows || `<div class="empty">Нет команд — добавьте первую ниже</div>`}

@@ -204,10 +204,12 @@ ${b}`}class F extends Error{constructor({message:e,code:s,cause:r,name:n}){var i
           `}).join("")||'<div class="empty">Очередь пуста</div>'}
         </div>
       `}).join("");return`
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Сквозной приоритет по командам</h2>
-        ${Fs()}
+    <div class="panel panel-sticky-host">
+      <div class="panel-sticky">
+        <div class="panel-header">
+          <h2>Сквозной приоритет по командам</h2>
+          ${Fs()}
+        </div>
       </div>
       ${n}
     </div>
@@ -262,10 +264,12 @@ ${b}`}class F extends Error{constructor({message:e,code:s,cause:r,name:n}){var i
       ${i?"«Может взять с …» — фактическая дата с учётом очереди и планового старта.":"Сейчас без автосдвига: даты = заданные старты; параллельная работа может перегрузить ёмкость."}
       Полоска — окно работы в ближайшие 12 недель.
     </div>
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Очереди (тест) — когда команда может взять задачу</h2>
-        ${Fs()}
+    <div class="panel panel-sticky-host">
+      <div class="panel-sticky">
+        <div class="panel-header">
+          <h2>Очереди (тест) — когда команда может взять задачу</h2>
+          ${Fs()}
+        </div>
       </div>
       ${a}
     </div>
@@ -293,16 +297,18 @@ ${b}`}class F extends Error{constructor({message:e,code:s,cause:r,name:n}){var i
           </div>
           ${Ns(C,s[C.id]??[],j,i)}
         </div>`}).join("");return`
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Сроки и зависимости по приоритету</h2>
-        <div class="gantt-weeks-ctrl">
-          ${Fs()}
-          <div class="gantt-weeks-ctrl-right">
-            <label for="ganttWeeks">Горизонт</label>
-            <input id="ganttWeeks" type="range" min="4" max="52" step="1" value="${i}" />
-            <span class="mono" id="ganttWeeksLabel">${i} нед.</span>
-            ${n>i?`<span class="meta">часть работ за горизонтом (нужно ~${n})</span>`:""}
+    <div class="panel panel-sticky-host">
+      <div class="panel-sticky">
+        <div class="panel-header">
+          <h2>Сроки и зависимости по приоритету</h2>
+          <div class="gantt-weeks-ctrl">
+            ${Fs()}
+            <div class="gantt-weeks-ctrl-right">
+              <label for="ganttWeeks">Горизонт</label>
+              <input id="ganttWeeks" type="range" min="4" max="52" step="1" value="${i}" />
+              <span class="mono" id="ganttWeeksLabel">${i} нед.</span>
+              ${n>i?`<span class="meta">часть работ за горизонтом (нужно ~${n})</span>`:""}
+            </div>
           </div>
         </div>
       </div>
@@ -336,10 +342,12 @@ ${b}`}class F extends Error{constructor({message:e,code:s,cause:r,name:n}){var i
       Диапазоны майок — <strong>сколько недель</strong> заложено в оценке проекта (S / M / L). Для плана берётся середина диапазона.
       Изменения сразу перестраивают ETA и Gantt.
     </div>
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Майки (S / M / L)</h2>
-        <button type="button" class="btn" id="resetSizeRanges">Сбросить по умолчанию</button>
+    <div class="panel panel-sticky-host">
+      <div class="panel-sticky">
+        <div class="panel-header">
+          <h2>Майки (S / M / L)</h2>
+          <button type="button" class="btn" id="resetSizeRanges">Сбросить по умолчанию</button>
+        </div>
       </div>
       <div class="size-ranges-grid">${Ie.map(a=>`
     <div class="size-range-row">
@@ -397,9 +405,11 @@ ${b}`}class F extends Error{constructor({message:e,code:s,cause:r,name:n}){var i
       <strong>Ёмкость</strong> — сколько человеко-недель команда может отдать за календарную неделю.
       Оценки инициатив задаются майками (недели — в <a href="#" data-tab-jump="settings">Настройках</a>).
     </div>
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Команды</h2>
+    <div class="panel panel-sticky-host">
+      <div class="panel-sticky">
+        <div class="panel-header">
+          <h2>Команды</h2>
+        </div>
       </div>
       <div id="teamsManageList">
         ${w.teams.map(e=>`
