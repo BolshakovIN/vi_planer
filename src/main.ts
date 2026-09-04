@@ -47,24 +47,23 @@ import {
 } from "./storage";
 import { downloadElementPdf } from "./pdfExport";
 
-type Tab = "portfolio" | "teams" | "timeline" | "queuesTest" | "settings";
+type Tab = "portfolio" | "timeline" | "queuesTest" | "settings";
 type SortKey = "priority" | "wsjf" | "estimate" | "eta";
 type SortDir = "asc" | "desc";
 
 const TAB_LABELS: Record<Tab, string> = {
   portfolio: "Портфель",
-  teams: "Очереди команд",
-  queuesTest: "Очереди (тест)",
   timeline: "Gantt/Сроки",
+  queuesTest: "Очередь команд",
   settings: "Настройки",
 };
 
-/** Legacy deep-link / tab id `capacity` → Settings (teams live there now). */
+/** Legacy deep-link / tab ids: `capacity` → Settings; `teams` → Очередь команд. */
 function normalizeTab(tab: string | undefined | null): Tab {
   if (tab === "capacity") return "settings";
+  if (tab === "teams") return "queuesTest";
   if (
     tab === "portfolio" ||
-    tab === "teams" ||
     tab === "timeline" ||
     tab === "queuesTest" ||
     tab === "settings"
@@ -730,96 +729,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
   `;
 }
 
-function teamsHtml(
-  slices: ScheduledSlice[],
-  load: Record<string, TeamLoadWeek[]>,
-  overflowByTeam: Record<string, Set<number>>
-): string {
-  const horizon = 12;
-  const cards = state.teams
-    .map((team) => {
-      const queue = slices
-        .filter((s) => s.teamId === team.id)
-        .sort((a, b) => a.effectiveRank - b.effectiveRank);
-      const demand = queue.reduce((sum, s) => sum + s.estimatePw, 0);
-      const weeksToClear = team.capacityPw > 0 ? demand / team.capacityPw : 0;
-      const util8 = Math.min(
-        100,
-        Math.round(
-          (queue
-            .filter((s) => s.startWeek < 8)
-            .reduce((sum, s) => {
-              const overlap = Math.min(s.endWeek + 1, 8) - s.startWeek;
-              return (
-                sum +
-                Math.max(0, overlap) *
-                  (s.estimatePw / Math.max(1, s.endWeek - s.startWeek + 1))
-              );
-            }, 0) /
-            (team.capacityPw * 8)) *
-            100
-        )
-      );
-
-      return `
-        <div class="team-card">
-          <div class="team-card-head">
-            <div>
-              <h3><span class="team-dot" style="background:${team.color}"></span>${escapeHtml(team.name)}</h3>
-              <div class="meta">Ёмкость ${team.capacityPw} чел·нед/нед · спрос ${demand.toFixed(1)} · ~${weeksToClear.toFixed(1)} нед. до очистки</div>
-            </div>
-            <div class="mono" style="font-weight:700">${util8}% / 8 нед.</div>
-          </div>
-          <div class="bar"><span style="width:${Math.min(100, util8)}%;background:${team.color}"></span></div>
-          ${
-            ui.showTeamLoad
-              ? `<div class="cap-strip-wrap">
-            <div class="cap-strip-label meta">Загрузка по расписанию (эксп.) — красный = перегруз ёмкости; наведите или нажмите</div>
-            ${teamCapacityStripHtml(
-              team,
-              load[team.id] ?? [],
-              overflowByTeam[team.id] ?? new Set(),
-              horizon
-            )}
-          </div>`
-              : ""
-          }
-          ${queue
-            .map((s) => {
-              const others = s.item.assignments.length - 1;
-              return `
-            <div class="queue-item">
-              <div class="rank">${s.effectiveRank}</div>
-              <div>
-                <div><span class="badge badge-${s.item.type}">${s.item.type === "product" ? "П" : "Пр"}</span> ${escapeHtml(s.item.title)}</div>
-                <div class="meta">WSJF ${s.wsjf} · ${s.size} (${s.estimatePw} чел·нед) · план ${formatDate(s.plannedStartDate)}${s.delayedByQueue ? " → сдвиг" : ""}${others > 0 ? ` · ещё ${others} ком.` : ""}</div>
-              </div>
-              <div class="mono" style="text-align:right">
-                ${formatDate(s.startDate)} →<br/>${formatDate(s.endDate)}
-              </div>
-            </div>
-          `;
-            })
-            .join("") || `<div class="empty">Очередь пуста</div>`}
-        </div>
-      `;
-    })
-    .join("");
-
-  return `
-    <div class="panel panel-sticky-host">
-      <div class="panel-sticky">
-        <div class="panel-header">
-          <h2>Сквозной приоритет по командам</h2>
-          ${scheduleTogglesHtml()}
-        </div>
-      </div>
-      ${cards}
-    </div>
-  `;
-}
-
-/** Test view: portfolio priority + when the team can pick up the task */
+/** Portfolio priority + when the team can pick up the task */
 function queuesTestHtml(
   slices: ScheduledSlice[],
   load: Record<string, TeamLoadWeek[]>,
@@ -935,7 +845,7 @@ function queuesTestHtml(
 
   return `
     <div class="callout">
-      <strong>Тест:</strong> цифра — приоритет из Портфеля (1 = выше).
+      Цифра — приоритет из Портфеля (1 = выше).
       ${
         auto
           ? "«Может взять с …» — фактическая дата с учётом очереди и планового старта."
@@ -946,7 +856,7 @@ function queuesTestHtml(
     <div class="panel panel-sticky-host">
       <div class="panel-sticky">
         <div class="panel-header">
-          <h2>Очереди (тест) — когда команда может взять задачу</h2>
+          <h2>Очередь команд — когда команда может взять задачу</h2>
           ${scheduleTogglesHtml()}
         </div>
       </div>
@@ -2349,21 +2259,18 @@ function render() {
       <div class="tabs no-print">
         <button class="tab ${ui.tab === "portfolio" ? "active" : ""}" data-tab="portfolio">Портфель</button>
         <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Gantt/Сроки</button>
-        <button class="tab ${ui.tab === "teams" ? "active" : ""}" data-tab="teams">Очереди команд</button>
-        <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очереди (тест)</button>
+        <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очередь команд</button>
         <button class="tab tab-settings ${ui.tab === "settings" ? "active" : ""}" data-tab="settings">Настройки</button>
       </div>
       <div class="tab-print-root" id="tabPrintRoot">
       ${
         ui.tab === "portfolio"
           ? portfolioHtml(rollups, slices)
-          : ui.tab === "teams"
-            ? teamsHtml(slices, load, overflowByTeam)
-            : ui.tab === "queuesTest"
-              ? queuesTestHtml(slices, load, overflowByTeam)
-              : ui.tab === "timeline"
-                ? timelineHtml(rollups, slices, load, overflowByTeam)
-                : settingsHtml(rollups)
+          : ui.tab === "queuesTest"
+            ? queuesTestHtml(slices, load, overflowByTeam)
+            : ui.tab === "timeline"
+              ? timelineHtml(rollups, slices, load, overflowByTeam)
+              : settingsHtml(rollups)
       }
       </div>
       </div>
