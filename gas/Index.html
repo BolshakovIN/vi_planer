@@ -409,9 +409,9 @@
       ${_t(t,e)}
       <div class="tabs">
         <button class="tab ${u.tab==="portfolio"?"active":""}" data-tab="portfolio">Портфель</button>
+        <button class="tab ${u.tab==="timeline"?"active":""}" data-tab="timeline">Gantt/Сроки</button>
         <button class="tab ${u.tab==="teams"?"active":""}" data-tab="teams">Очереди команд</button>
         <button class="tab ${u.tab==="queuesTest"?"active":""}" data-tab="queuesTest">Очереди (тест)</button>
-        <button class="tab ${u.tab==="timeline"?"active":""}" data-tab="timeline">Сроки / Gantt</button>
         <button class="tab ${u.tab==="capacity"?"active":""}" data-tab="capacity">Команды</button>
       </div>
       ${u.tab==="portfolio"?Ct(t):u.tab==="teams"?At(e):u.tab==="queuesTest"?Wt(e):u.tab==="timeline"?Ft(t,e):Nt()}

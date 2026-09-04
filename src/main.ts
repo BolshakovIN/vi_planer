@@ -56,7 +56,7 @@ const TAB_LABELS: Record<Tab, string> = {
   portfolio: "Портфель",
   teams: "Очереди команд",
   queuesTest: "Очереди (тест)",
-  timeline: "Сроки / Gantt",
+  timeline: "Gantt/Сроки",
   settings: "Настройки",
 };
 
@@ -2214,9 +2214,9 @@ function render() {
       ${metricsHtml(rollups, slices)}
       <div class="tabs no-print">
         <button class="tab ${ui.tab === "portfolio" ? "active" : ""}" data-tab="portfolio">Портфель</button>
+        <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Gantt/Сроки</button>
         <button class="tab ${ui.tab === "teams" ? "active" : ""}" data-tab="teams">Очереди команд</button>
         <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очереди (тест)</button>
-        <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Сроки / Gantt</button>
         <button class="tab tab-settings ${ui.tab === "settings" ? "active" : ""}" data-tab="settings">Настройки</button>
       </div>
       <div class="tab-print-root" id="tabPrintRoot">
