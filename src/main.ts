@@ -957,9 +957,10 @@ function queuesTestHtml(
 }
 
 /**
- * Elegant FS curve: horizontal exit from pred bar → horizontal entry into succ.
- * Cascading queue links (dx short / negative) swoop left then into the target —
- * matching the soft S/C arcs on the Gantt screenshot. routeBias fans siblings.
+ * Elegant FS curve: always exit RIGHT of pred bar first, then soft S/C into
+ * succ from the left. Never doubles back through the source bar. Tight /
+ * reverse (dx ≤ 0) still leaves eastward via a short stub, then elbows down.
+ * routeBias fans sibling queue links.
  */
 function ganttDepPathD(
   x1: number,
@@ -987,29 +988,50 @@ function ganttDepPathD(
     return `M ${x1c} ${y1} Q ${midX} ${y1 + fan * 0.55}, ${x2c} ${y2}`;
   }
 
-  // Reach grows with vertical span → longer, more graceful arcs
-  const elegance = Math.max(0.95, Math.min(3.2, absDy * 1.45 + 0.55));
+  // Short rightward exit clears the source bar without a balloon loop.
+  // Scale slightly with |dy| so tall spans stay graceful, but stay modest.
+  const exitStub = Math.max(0.32, Math.min(0.72, 0.28 + absDy * 0.1));
+  const entryStub = Math.max(0.32, Math.min(0.9, 0.28 + absDy * 0.14));
 
   let c1x: number;
   let c2x: number;
 
-  if (dx > elegance * 1.15) {
+  if (dx > exitStub + entryStub + 0.45) {
     // Forward in time: balanced S with long horizontal tangents
-    const r = Math.min(elegance * 1.05, dx * 0.48);
+    const r = Math.min(Math.max(exitStub, absDy * 0.5 + 0.35), dx * 0.42);
     c1x = x1c + r + fan;
     c2x = x2c - r + fan;
   } else {
-    // Overlap / reverse / tight gap: leftward swoop then into target
-    // (Platform cascade look — exit east, arc west, enter from west)
-    const pull = elegance * 0.82;
-    c1x = x1c - pull + fan;
-    c2x = x2c - pull + fan;
-    // Keep a little room so the curve doesn't pinch against the bar
-    if (c1x > x1c - 0.35) c1x = x1c - 0.35 + fan * 0.5;
-    if (c2x > x2c - 0.35) c2x = x2c - 0.35 + fan * 0.5;
+    // Overlap / reverse / tight: stub east of source, then elbow down-left
+    // into the successor (western approach). Keep exit short to avoid the
+    // exaggerated rightward loop that large elegance pulls produced.
+    c1x = x1c + exitStub + fan * 0.3;
+    const reverseSpan = Math.max(0, x1c - x2c);
+    const entryPull =
+      entryStub + Math.min(0.85, reverseSpan * 0.18 + absDy * 0.12);
+    c2x = x2c - entryPull + fan * 0.3;
   }
 
-  return `M ${x1c} ${y1} C ${clampX(c1x)} ${y1}, ${clampX(c2x)} ${y2}, ${x2c} ${y2}`;
+  // Hard guarantees: first control east of start, second west of end.
+  // (clampX alone can collapse a stub near the chart edge.)
+  if (c1x < x1c + 0.28) c1x = x1c + 0.28;
+  if (c2x > x2c - 0.28) c2x = x2c - 0.28;
+
+  // Preserve eastward exit after clamp (clamp alone can pin c1 on x1 near
+  // the right chart edge). Fall back to an explicit L-stub when no room.
+  const roomRight = xMax - 0.04 - x1c;
+  const c1Out = Math.min(xMax - 0.04, Math.max(x1c + 0.28, clampX(c1x)));
+  const c2Out = clampX(Math.min(x2c - 0.28, c2x));
+
+  if (c1Out <= x1c + 0.05 || roomRight < 0.22) {
+    const stubX = Math.min(
+      xMax - 0.04,
+      x1c + Math.max(0.12, Math.min(exitStub, roomRight * 0.9))
+    );
+    return `M ${x1c} ${y1} L ${stubX} ${y1} C ${stubX} ${y1}, ${c2Out} ${y2}, ${x2c} ${y2}`;
+  }
+
+  return `M ${x1c} ${y1} C ${c1Out} ${y1}, ${c2Out} ${y2}, ${x2c} ${y2}`;
 }
 
 function clientPointToSvg(
@@ -2950,19 +2972,27 @@ function closeResetPop() {
   document.querySelector("#resetBtn")?.classList.remove("reset-ask");
 }
 
-function askResetConfirm(anchor: HTMLElement) {
+function askResetConfirm(anchor: HTMLElement, step: 1 | 2 = 1) {
   closeResetPop();
   closePrioPop();
   anchor.classList.add("reset-ask");
 
   const pop = document.createElement("div");
   pop.id = "resetPop";
-  pop.className = "reset-confirm";
-  pop.innerHTML = `
+  pop.className = `reset-confirm${step === 2 ? " reset-confirm-step2" : ""}`;
+  pop.innerHTML =
+    step === 1
+      ? `
     <div class="reset-confirm-text">Сбросить к демо?<br>Текущие данные пропадут.</div>
     <div class="reset-confirm-actions">
       <button type="button" class="btn" id="resetCancelBtn">Нет</button>
       <button type="button" class="btn btn-danger" id="resetConfirmBtn">Да</button>
+    </div>
+  `
+      : `
+    <div class="reset-confirm-text">Подумай еще раз, уверен?</div>
+    <div class="reset-confirm-actions">
+      <button type="button" class="btn btn-danger" id="resetFinalBtn">Ок, напишу разработчику</button>
     </div>
   `;
   document.body.appendChild(pop);
@@ -3011,6 +3041,12 @@ function askResetConfirm(anchor: HTMLElement) {
   });
 
   pop.querySelector("#resetConfirmBtn")?.addEventListener("click", () => {
+    cleanup();
+    closeResetPop();
+    askResetConfirm(anchor, 2);
+  });
+
+  pop.querySelector("#resetFinalBtn")?.addEventListener("click", () => {
     cleanup();
     closeResetPop();
     state = structuredClone(SEED);
