@@ -28,6 +28,8 @@
   --row-hover: #f5f5f5;
   --gantt-bg: #f5f5f5;
   --gantt-line: #e0e0e0;
+  --gantt-label-col: 240px;
+  --gantt-col-gap: 12px;
   --radius: 6px;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   font-family: "IBM Plex Sans", system-ui, sans-serif;
@@ -1350,10 +1352,11 @@ body.prio-dragging {
 }
 
 .gantt-axis-row,
-.gantt-row {
+.gantt-row,
+.gantt-cap-row {
   display: grid;
-  grid-template-columns: 240px 1fr;
-  gap: 12px;
+  grid-template-columns: var(--gantt-label-col) 1fr;
+  gap: var(--gantt-col-gap);
   align-items: center;
   min-width: 0;
 }
@@ -1422,8 +1425,8 @@ body.prio-dragging {
 
 .gantt-dep-layer {
   position: absolute;
-  /* Overlay only the tracks column (label 240px + gap 12px) */
-  left: calc(240px + 12px);
+  /* Overlay only the tracks column (label + gap) */
+  left: calc(var(--gantt-label-col) + var(--gantt-col-gap));
   top: 0;
   right: 0;
   bottom: 0;
@@ -1728,9 +1731,11 @@ button.cap-cell:last-child {
 
 .gantt-capacity-block {
   margin-top: 12px;
-  margin-left: calc(240px + 12px);
   padding-top: 10px;
   border-top: 1px dashed var(--line);
+  /* Same full-width grid as Gantt rows so week columns stay continuous */
+  width: 100%;
+  min-width: 0;
 }
 
 .gantt-capacity-head {
@@ -1744,13 +1749,6 @@ button.cap-cell:last-child {
   gap: 6px;
 }
 
-.gantt-cap-row {
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 8px;
-  align-items: center;
-}
-
 .gantt-cap-label {
   display: flex;
   align-items: center;
@@ -1758,6 +1756,7 @@ button.cap-cell:last-child {
   font-size: 11px;
   font-weight: 600;
   min-width: 0;
+  overflow: hidden;
 }
 
 .cap-overflow-badge {
