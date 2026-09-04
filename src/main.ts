@@ -957,8 +957,9 @@ function queuesTestHtml(
 }
 
 /**
- * Smooth FS link: cubic/quadratic from pred bar end → succ bar start.
- * routeBias fans control points so links never share one vertical trunk.
+ * Elegant FS curve: horizontal exit from pred bar → horizontal entry into succ.
+ * Cascading queue links (dx short / negative) swoop left then into the target —
+ * matching the soft S/C arcs on the Gantt screenshot. routeBias fans siblings.
  */
 function ganttDepPathD(
   x1: number,
@@ -968,34 +969,47 @@ function ganttDepPathD(
   routeBias = 0,
   xMax = 52
 ): string {
-  const x1c = Math.min(xMax - 0.02, Math.max(0.02, x1));
-  const x2c = Math.min(xMax - 0.02, Math.max(0.02, x2));
-  const spread = Math.max(-1.05, Math.min(1.05, routeBias * 0.2));
+  const clampX = (x: number) =>
+    Math.min(xMax - 0.04, Math.max(0.04, x));
+  const x1c = clampX(x1);
+  const x2c = clampX(x2);
+  const dy = y2 - y1;
+  const dx = x2c - x1c;
+  const absDy = Math.abs(dy);
+  const fan = Math.max(-0.55, Math.min(0.55, routeBias * 0.14));
 
-  if (Math.abs(y1 - y2) < 0.01) {
-    if (Math.abs(spread) < 0.02) {
+  // Same row: straight or a soft horizontal bow
+  if (absDy < 0.02) {
+    if (Math.abs(fan) < 0.03) {
       return `M ${x1c} ${y1} H ${x2c}`;
     }
-    const midX = (x1c + x2c) / 2 + spread * 0.25;
-    return `M ${x1c} ${y1} Q ${midX} ${y1 + spread * 0.08}, ${x2c} ${y2}`;
+    const midX = (x1c + x2c) / 2;
+    return `M ${x1c} ${y1} Q ${midX} ${y1 + fan * 0.55}, ${x2c} ${y2}`;
   }
 
-  const dx = x2c - x1c;
-  if (dx >= 0.45) {
-    const reach = Math.max(
-      0.32,
-      Math.min(Math.abs(dx) * 0.38, Math.abs(dx) - 0.12)
-    );
-    const c1x = x1c + reach + spread;
-    const c2x = x2c - reach + spread;
-    return `M ${x1c} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2c} ${y2}`;
+  // Reach grows with vertical span → longer, more graceful arcs
+  const elegance = Math.max(0.95, Math.min(3.2, absDy * 1.45 + 0.55));
+
+  let c1x: number;
+  let c2x: number;
+
+  if (dx > elegance * 1.15) {
+    // Forward in time: balanced S with long horizontal tangents
+    const r = Math.min(elegance * 1.05, dx * 0.48);
+    c1x = x1c + r + fan;
+    c2x = x2c - r + fan;
+  } else {
+    // Overlap / reverse / tight gap: leftward swoop then into target
+    // (Platform cascade look — exit east, arc west, enter from west)
+    const pull = elegance * 0.82;
+    c1x = x1c - pull + fan;
+    c2x = x2c - pull + fan;
+    // Keep a little room so the curve doesn't pinch against the bar
+    if (c1x > x1c - 0.35) c1x = x1c - 0.35 + fan * 0.5;
+    if (c2x > x2c - 0.35) c2x = x2c - 0.35 + fan * 0.5;
   }
 
-  const jogX = Math.min(
-    xMax - 0.05,
-    Math.max(x1c, x2c) + 0.42 + Math.abs(spread)
-  );
-  return `M ${x1c} ${y1} C ${jogX} ${y1}, ${jogX} ${y2}, ${x2c} ${y2}`;
+  return `M ${x1c} ${y1} C ${clampX(c1x)} ${y1}, ${clampX(c2x)} ${y2}, ${x2c} ${y2}`;
 }
 
 function clientPointToSvg(
