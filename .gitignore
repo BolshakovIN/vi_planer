@@ -9,3 +9,7 @@ data/
 .env.*
 !.env.example
 !.env.local.example
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/

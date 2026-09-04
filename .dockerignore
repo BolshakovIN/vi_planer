@@ -6,6 +6,9 @@ data
 .git
 .env
 .env.*
+.venv
+__pycache__
+*.pyc
 *.md
 !README.md
 .cursor

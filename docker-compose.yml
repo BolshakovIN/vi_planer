@@ -20,9 +20,9 @@ services:
     ports:
       - "${APP_PORT:-8787}:3000"
     environment:
-      NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 3000
+      DATA_DIR: /data
       DATABASE_URL: postgres://viplaner:${POSTGRES_PASSWORD:-change-me-in-production}@db:5432/viplaner
       PGSSLMODE: disable
     depends_on:
