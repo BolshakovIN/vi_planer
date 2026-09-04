@@ -227,6 +227,12 @@ textarea {
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
 }
 
+.reset-confirm.reset-confirm-step2 {
+  width: auto;
+  min-width: 220px;
+  max-width: min(280px, calc(100vw - 16px));
+}
+
 .reset-confirm-text {
   font-size: 11px;
   line-height: 1.35;
