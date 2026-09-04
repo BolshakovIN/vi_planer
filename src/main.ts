@@ -1553,6 +1553,18 @@ function settingsHtml(rollups: ItemSchedule[]): string {
           </div>
         </div>
       </div>
+      <div class="panel settings-danger-zone">
+        <div class="panel-header">
+          <h2>Данные</h2>
+        </div>
+        <div class="settings-danger-body">
+          <p class="settings-danger-warn">
+            Сброс заменит весь текущий портфель демо-набором. Несохранённые изменения
+            и правки команд пропадут без возможности отменить.
+          </p>
+          <button type="button" class="btn btn-danger" id="resetBtn">Сбросить демо</button>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -2322,7 +2334,6 @@ function render() {
         <div class="top-actions">
           <span class="sync-badge" id="syncStatus" data-status="${getSyncStatus()}">${syncStatusLabel(getSyncStatus())}</span>
           <button class="btn" id="exportPdfBtn">Экспорт PDF</button>
-          <button class="btn" id="resetBtn">Сбросить демо</button>
         </div>
         <p class="subtitle">
           Единый портфель проектов и продуктов: сквозной WSJF, несколько команд на инициативу

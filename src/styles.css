@@ -258,6 +258,26 @@ textarea {
   color: var(--bad);
 }
 
+.settings-danger-zone {
+  border-color: color-mix(in srgb, var(--bad) 28%, var(--line));
+}
+
+.settings-danger-body {
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.settings-danger-warn {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+  max-width: 42rem;
+}
+
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -445,6 +445,18 @@ ${y}`}class Mr extends Error{constructor({message:e,code:t,cause:A,name:n}){var 
           </div>
         </div>
       </div>
+      <div class="panel settings-danger-zone">
+        <div class="panel-header">
+          <h2>Данные</h2>
+        </div>
+        <div class="settings-danger-body">
+          <p class="settings-danger-warn">
+            Сброс заменит весь текущий портфель демо-набором. Несохранённые изменения
+            и правки команд пропадут без возможности отменить.
+          </p>
+          <button type="button" class="btn btn-danger" id="resetBtn">Сбросить демо</button>
+        </div>
+      </div>
     </div>
   `}function lT(){const r={};for(const e of Aa){const t=document.querySelector(`#set_${e}_min`),A=document.querySelector(`#set_${e}_max`);if(!t||!A)return null;r[e]={min:Math.round(Number(t.value)),max:Math.round(Number(A.value))}}return Hn(r)}function cT(r){var s;const e=ke.sizeRanges;for(const a of Aa)(s=document.querySelector(`[data-plan="${a}"]`))==null||s.replaceChildren(document.createTextNode(`${Mn(a,e)} нед.`));const t=r.map(a=>a.endWeek),A=t.length?Math.max(...t)+1:0,n=document.querySelector("#settingsHorizon");n&&(n.textContent=`${A} нед.`);const i=document.querySelector("#settingsSchedPreview #settingsRangesSummary");i&&(i.textContent=Uf(e))}let R1;function uT(){const r=lT();if(!r)return;ke.sizeRanges=r,vu(ke);const{rollups:e}=ud();cT(e);const t=document.activeElement,A=t!=null&&t.classList.contains("set-range")?t.id:null;clearTimeout(R1),R1=setTimeout(()=>{if(jr(),A){const n=document.querySelector(`#${A}`);n==null||n.focus(),n==null||n.select()}},200)}function hT(r){var l;const e=r??{id:"",title:"",type:"product",backlog:"Product backlog",assignments:[{teamId:((l=ke.teams[0])==null?void 0:l.id)??"",size:"M",workStartDate:ke.startDate}],status:"idea",owner:"",businessValue:5,timeCriticality:5,riskReduction:5,jobSize:5,notes:"",manualRank:ol(ke.items)},t=jn(e),A=new Set(e.assignments.map(c=>c.teamId)),n=new Map(e.assignments.map(c=>[c.teamId,c.size])),i=new Map(e.assignments.map(c=>[c.teamId,c.workStartDate])),s=N1(e),a=s?D1(s,e.assignments):'<div class="meta">Отметьте команду, чтобы увидеть расчёт ETA</div>',o=ke.teams.map(c=>{const h=A.has(c.id),d=n.get(c.id)??"M",u=i.get(c.id)??ke.startDate;return`
         <div class="team-assign-row">
@@ -576,7 +588,6 @@ ${y}`}class Mr extends Error{constructor({message:e,code:t,cause:A,name:n}){var 
         <div class="top-actions">
           <span class="sync-badge" id="syncStatus" data-status="${m1()}">${B1(m1())}</span>
           <button class="btn" id="exportPdfBtn">Экспорт PDF</button>
-          <button class="btn" id="resetBtn">Сбросить демо</button>
         </div>
         <p class="subtitle">
           Единый портфель проектов и продуктов: сквозной WSJF, несколько команд на инициативу
