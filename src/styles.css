@@ -187,7 +187,7 @@ textarea {
   cursor: pointer;
 }
 
-.btn:hover {
+.btn:hover:not(.btn-primary):not(.btn-danger) {
   background: var(--surface-2);
 }
 
@@ -200,6 +200,7 @@ textarea {
 .btn-primary:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
+  color: #fff;
 }
 
 .btn-ghost {
@@ -213,7 +214,10 @@ textarea {
 }
 
 .btn-danger:hover {
-  filter: brightness(1.05);
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #fff;
+  filter: brightness(1.08);
 }
 
 .reset-confirm {
@@ -256,6 +260,13 @@ textarea {
   border-color: var(--bad);
   background: var(--bad-soft);
   color: var(--bad);
+}
+
+#resetBtn.reset-ask:hover {
+  background: color-mix(in srgb, var(--bad-soft) 80%, var(--bad));
+  border-color: var(--bad);
+  color: var(--bad);
+  filter: none;
 }
 
 .settings-danger-zone {
