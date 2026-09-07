@@ -79,12 +79,23 @@ textarea {
   min-width: 0;
 }
 
-.topbar h1 {
+.topbar h1,
+.topbar .brand-home {
   margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
   font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.topbar .brand-home:hover {
+  color: var(--accent);
 }
 
 .topbar .subtitle {
@@ -141,7 +152,8 @@ textarea {
     gap: 6px 8px;
   }
 
-  .topbar h1 {
+  .topbar h1,
+  .topbar .brand-home {
     font-size: 20px;
   }
 
@@ -2286,7 +2298,8 @@ body.pdf-capturing .table-scroll-top {
     display: none;
   }
 
-  .topbar h1 {
+  .topbar h1,
+  .topbar .brand-home {
     display: none;
   }
 

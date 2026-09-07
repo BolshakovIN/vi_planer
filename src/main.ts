@@ -2239,7 +2239,7 @@ function render() {
     <div class="app-shell">
       <div class="topbar">
         <div class="topbar-brand">
-          <h1>VI Planer</h1>
+          <button type="button" class="brand-home" id="brandHomeBtn" title="На главную">VI Planer</button>
         </div>
         <div class="top-actions">
           <span class="sync-badge" id="syncStatus" data-status="${getSyncStatus()}">${syncStatusLabel(getSyncStatus())}</span>
@@ -2424,6 +2424,11 @@ function persist() {
 }
 
 function bind() {
+  document.querySelector("#brandHomeBtn")?.addEventListener("click", () => {
+    ui.tab = "portfolio";
+    render();
+  });
+
   document.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
       ui.tab = normalizeTab(btn.dataset.tab);
