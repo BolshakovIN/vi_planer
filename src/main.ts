@@ -45,7 +45,7 @@ import {
   onSyncStatusChange,
   syncStatusLabel,
 } from "./storage";
-import { downloadElementPdf } from "./pdfExport";
+import { downloadElementPdf, downloadMarkdownAsPdf } from "./pdfExport";
 
 type Tab = "portfolio" | "timeline" | "queuesTest" | "settings";
 type SortKey = "priority" | "wsjf" | "estimate" | "eta";
@@ -2276,7 +2276,7 @@ function render() {
       </div>
     </div>
     <div class="page-foot no-print">
-      <button type="button" class="req-dl-btn" id="downloadReqsBtn" title="Скачать требования">Требования (BR / UC / FR / NFR)</button>
+      <button type="button" class="req-dl-btn" id="downloadReqsBtn" title="Скачать требования (PDF)">Требования PDF (BR / UC / FR / NFR)</button>
     </div>
     ${ui.creating || editing ? editorHtml(editing) : ""}
   `;
@@ -3068,6 +3068,13 @@ function bindPortfolioColResize() {
 }
 
 async function downloadRequirementsDoc() {
+  const btn = document.querySelector<HTMLButtonElement>("#downloadReqsBtn");
+  const prevLabel = btn?.textContent ?? "Требования PDF (BR / UC / FR / NFR)";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "PDF…";
+  }
+
   const base = import.meta.env.BASE_URL || "./";
   const url = new URL(
     "VI-Planer-requirements.md",
@@ -3076,17 +3083,16 @@ async function downloadRequirementsDoc() {
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(String(res.status));
-    const text = await res.text();
-    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
-    const objectUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = objectUrl;
-    a.download = "VI-Planer-requirements.md";
-    a.click();
-    URL.revokeObjectURL(objectUrl);
+    const markdown = await res.text();
+    await downloadMarkdownAsPdf(markdown, "VI-Planer-requirements.pdf");
   } catch (err) {
     console.error(err);
-    alert("Не удалось скачать файл требований");
+    alert("Не удалось создать PDF требований");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
   }
 }
 
