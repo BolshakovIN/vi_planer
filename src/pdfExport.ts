@@ -1,6 +1,8 @@
 export type PdfCaptureOptions = {
   orientation?: "portrait" | "landscape";
   backgroundColor?: string;
+  /** Page margin from edges in mm (default 8). */
+  marginMm?: number;
 };
 
 /** Expand scroll/sticky layout so html2canvas can paint full tab content. */
@@ -141,7 +143,7 @@ export async function downloadElementPdf(
 
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
-    const margin = 8;
+    const margin = options.marginMm ?? 8;
     const headerH = title ? 8 : 0;
     const usableW = pageW - margin * 2;
     const usableH = pageH - margin * 2 - headerH;
@@ -328,15 +330,18 @@ export function markdownToSimpleHtml(md: string): string {
   return out.join("\n");
 }
 
+/** Off-screen capture width (px). Scaled to A4 usable width (210mm − 2×20mm). */
+const REQ_PDF_CAPTURE_WIDTH_PX = 900;
+
 const REQ_PDF_STYLES = `
   .req-pdf-root {
     box-sizing: border-box;
-    width: 720px;
-    padding: 28px 32px 40px;
+    width: ${REQ_PDF_CAPTURE_WIDTH_PX}px;
+    padding: 8px 0 16px;
     background: #ffffff;
     color: #0f172a;
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    font-size: 12.5px;
+    font-size: 13.5px;
     line-height: 1.5;
   }
   .req-pdf-root * { box-sizing: border-box; }
@@ -403,7 +408,7 @@ export async function downloadMarkdownAsPdf(
     position: "fixed",
     left: "-10000px",
     top: "0",
-    width: "720px",
+    width: `${REQ_PDF_CAPTURE_WIDTH_PX}px`,
     opacity: "0",
     pointerEvents: "none",
     zIndex: "-1",
@@ -418,6 +423,7 @@ export async function downloadMarkdownAsPdf(
     await downloadElementPdf(root, filename, "", {
       orientation: "portrait",
       backgroundColor: "#ffffff",
+      marginMm: 20,
     });
   } finally {
     host.remove();
