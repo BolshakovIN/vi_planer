@@ -1504,6 +1504,7 @@ body.prio-dragging {
 .gantt-dep-meta {
   color: var(--accent) !important;
   font-weight: 600;
+  font-size: 10px;
 }
 
 .gantt-row {
