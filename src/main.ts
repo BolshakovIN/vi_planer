@@ -97,7 +97,7 @@ interface UiState {
   showTeamLoad: boolean;
   /**
    * Preferred schedule mode (Настройки).
-   * `manual` | `teamQueue` | `dense` — see SCHEDULE_MODE_META.
+   * `manual` | `teamQueue` | `maxUtilization` — see SCHEDULE_MODE_META.
    * Applied on Gantt/Очередь only when `scheduleModeEnabled` is on.
    */
   scheduleMode: ScheduleMode;
@@ -119,9 +119,9 @@ const SCHEDULE_MODE_META: Record<
     label: "Очередь команды",
     hint: "Строгая FS-очередь по приоритету внутри команды; позже может ждать конца предыдущей работы.",
   },
-  dense: {
-    label: "Плотная параллель",
-    hint: "Упаковка свободной ёмкости по приоритету без FS-курсора; разные команды на одной инициативе могут перекрываться.",
+  maxUtilization: {
+    label: "Максимальная утилизация ресурсов",
+    hint: "По приоритету: все команды одной инициативы стартуют вместе (параллельно); ETA = max по командам, без раздвигания сроков очередью.",
   },
 };
 
@@ -137,7 +137,7 @@ const ui: UiState = {
   creating: false,
   ganttWeeks: 16,
   showTeamLoad: false,
-  scheduleMode: "dense",
+  scheduleMode: "maxUtilization",
   scheduleModeEnabled: true,
   hiddenCols: [],
   colPickerOpen: false,
@@ -392,8 +392,16 @@ function saveShowTeamLoad(show: boolean) {
 function loadScheduleMode(): ScheduleMode {
   try {
     const raw = localStorage.getItem(SCHEDULE_MODE_KEY);
-    if (raw === "manual" || raw === "teamQueue" || raw === "dense") {
-      return raw;
+    if (
+      raw === "manual" ||
+      raw === "teamQueue" ||
+      raw === "maxUtilization" ||
+      raw === "dense" ||
+      raw === "parallel" ||
+      raw === "max_util" ||
+      raw === "auto"
+    ) {
+      return normalizeScheduleMode(raw);
     }
     const legacy = localStorage.getItem(AUTO_CAPACITY_SCHEDULE_KEY);
     if (legacy === "1") return "teamQueue";
@@ -401,7 +409,7 @@ function loadScheduleMode(): ScheduleMode {
   } catch {
     /* ignore */
   }
-  return "dense";
+  return "maxUtilization";
 }
 
 function saveScheduleMode(mode: ScheduleMode) {
@@ -885,8 +893,8 @@ function queuesTestHtml(
               takeReason =
                 mode === "teamQueue" && blockedBy
                   ? `ждёт очередь: после #${blockedBy.item.manualRank ?? "?"} «${blockedBy.item.title}»`
-                  : mode === "dense"
-                    ? "сдвиг: ищет свободную ёмкость по приоритету"
+                  : mode === "maxUtilization"
+                    ? "сдвиг: ждёт общий старт всех команд инициативы (ёмкость)"
                     : "сдвиг из‑за загрузки очереди";
               takeClass = "take-queue";
             } else if (s.startDate > planStart) {
@@ -969,8 +977,8 @@ function queuesTestHtml(
       ${
         mode === "teamQueue"
           ? "Режим «Очередь команды»: «Может взять с …» — после FS-предшественника и не раньше планового старта."
-          : mode === "dense"
-            ? "Режим «Плотная параллель»: старт в ближайшую неделю со свободной ёмкостью (≥ плановый старт); разные команды на одной инициативе могут идти параллельно."
+          : mode === "maxUtilization"
+            ? "Режим «Максимальная утилизация ресурсов»: все команды одной инициативы стартуют в одну неделю (параллельно ≥ плановый старт); приоритет портфеля при распределении ёмкости."
             : "Режим «Как задано»: даты = заданные старты; параллельная работа может перегрузить ёмкость."
       }
       Полоска — окно работы в ближайшие 12 недель.
@@ -1550,8 +1558,8 @@ function timelineHtml(
                 ? `<div class="meta gantt-dep-meta" title="Очередь той же команды по приоритету (Finish-to-Start)">после ${uniqPreds.join(", ")}</div>`
                 : `<div class="meta gantt-dep-meta">старт очереди</div>`;
             })()
-          : schedMode === "dense"
-            ? `<div class="meta gantt-dep-meta" title="Плотная упаковка ёмкости; команды независимы">плотная параллель · ETA = max команд</div>`
+          : schedMode === "maxUtilization"
+            ? `<div class="meta gantt-dep-meta" title="Параллельный старт команд инициативы по приоритету">макс. утилизация · ETA = max команд</div>`
             : `<div class="meta gantt-dep-meta">как задано · без сдвига очереди</div>`;
 
       const packed = packedByItem.get(item.id) ?? [];
@@ -1634,8 +1642,8 @@ function timelineHtml(
             ${
               schedMode === "teamQueue"
                 ? "Стрелки: очередь одной команды (цвет = команда), от конца полоски к началу следующей — не кросс-командные зависимости инициативы."
-                : schedMode === "dense"
-                  ? "Плотная параллель: полоски — ближайшая свободная ёмкость команды (≥ дата старта). Стрелки FS скрыты; разные команды на одной инициативе могут перекрываться."
+                : schedMode === "maxUtilization"
+                  ? "Максимальная утилизация ресурсов: полоски одной инициативы стартуют вместе (параллельно ≥ даты старта). Стрелки FS скрыты; ETA = max по командам."
                   : "Режим «Как задано»: даты полосок = старты из карточек. Включите «Оптимизировать под капасити команд» и выберите «Очередь команды» в Настройках, чтобы увидеть стрелки FS."
             }
           </p>
@@ -1697,8 +1705,8 @@ function timelineHtml(
       <p class="footer-note" style="padding:0 16px 16px;margin:0">${
         schedMode === "teamQueue"
           ? "Шкала — недели от старта планирования (понедельник). Стрелки FS одной команды: правый край полоски → левый край следующей работы этой же команды в очереди по приоритету (цвет = команда; не связи между разными командами одной инициативы). Подпись «после #N (команда)» — кто стоит перед этой полоской в очереди. ETA = конец bottleneck-полоски."
-          : schedMode === "dense"
-            ? "Шкала — недели от старта планирования (понедельник). Режим «Плотная параллель»: каждая команда занимает ближайшие свободные слоты ёмкости по приоритету портфеля, без ожидания конца предыдущей работы той же команды, если слоты раньше свободны. ETA инициативы = max по командам (полоски разных команд могут перекрываться)."
+          : schedMode === "maxUtilization"
+            ? "Шкала — недели от старта планирования (понедельник). Режим «Максимальная утилизация ресурсов»: инициативы по приоритету; все команды одной инициативы делят общий старт и идут параллельно (ETA = max по командам), без FS-очереди, которая раздвигает сроки. Ниже по приоритету ждут свободной ёмкости, но при старте тоже параллельны."
             : "Шкала — недели от старта планирования (понедельник). Даты полосок = заданные старты (без сдвига по ёмкости); стрелки очереди скрыты. ETA = конец bottleneck-полоски; параллельная работа может перегрузить команду."
       }${
         ui.showTeamLoad
@@ -2159,7 +2167,7 @@ function formatLiveEtaHtml(
       ? `ETA по заданным стартам = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`
       : activeScheduleMode() === "teamQueue"
         ? `ETA с учётом очереди команды = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`
-        : `ETA (плотная параллель) = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`;
+        : `ETA (макс. утилизация) = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`;
 
   return (
     lines +

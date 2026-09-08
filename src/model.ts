@@ -591,20 +591,26 @@ export function ensureUniquePriorities(
  * How Gantt / queues place work relative to team capacity.
  * - `manual`: fixed workStartDate (overloads visible)
  * - `teamQueue`: Finish-to-Start per team by portfolio priority (legacy auto)
- * - `dense`: pack free weekly capacity by priority; no FS cursor — different
- *   teams on one initiative may overlap; earlier free weeks stay fillable
+ * - `maxUtilization`: item-level parallel blocks by priority — all teams on one
+ *   initiative share a common start; ETA = max of tracks (not serial sum)
  */
-export type ScheduleMode = "manual" | "teamQueue" | "dense";
+export type ScheduleMode = "manual" | "teamQueue" | "maxUtilization";
 
-/** @deprecated use ScheduleMode; kept for callers still passing "auto" */
-export type LegacyScheduleMode = ScheduleMode | "auto";
+/** @deprecated use ScheduleMode; kept for callers still passing legacy ids */
+export type LegacyScheduleMode =
+  | ScheduleMode
+  | "auto"
+  | "dense"
+  | "parallel"
+  | "max_util";
 
 export interface ScheduleOptions {
   /**
-   * `dense` (recommended): earliest free capacity ≥ workStartDate, no FS cursor.
+   * `maxUtilization` (recommended): process items by priority; all assignments
+   * of an item share one start week and run in parallel (respecting capacity).
    * `teamQueue`: strict per-team Finish-to-Start queue by priority.
    * `manual`: fix each assignment at workStartDate; concurrent work may overload.
-   * Legacy `"auto"` is treated as `teamQueue`.
+   * Legacy `"auto"` → `teamQueue`; `"dense"` / `"parallel"` / `"max_util"` → `maxUtilization`.
    */
   mode?: LegacyScheduleMode;
 }
@@ -613,24 +619,51 @@ export function normalizeScheduleMode(
   mode: LegacyScheduleMode | null | undefined
 ): ScheduleMode {
   if (mode === "manual") return "manual";
-  if (mode === "dense") return "dense";
   if (mode === "auto" || mode === "teamQueue") return "teamQueue";
-  return "dense";
+  if (
+    mode === "maxUtilization" ||
+    mode === "max_util" ||
+    mode === "dense" ||
+    mode === "parallel"
+  ) {
+    return "maxUtilization";
+  }
+  return "maxUtilization";
 }
 
 export function isCapacityScheduleMode(mode: ScheduleMode): boolean {
-  return mode === "teamQueue" || mode === "dense";
+  return mode === "teamQueue" || mode === "maxUtilization";
+}
+
+/** True if estimatePw fits in consecutive free capacity from startWeek (no mid-gap skip). */
+function canPlaceContiguous(
+  weeks: TeamLoadWeek[],
+  capacityPw: number,
+  startWeek: number,
+  estimatePw: number,
+  maxWeeks: number
+): boolean {
+  let remaining = estimatePw;
+  let w = startWeek;
+  while (remaining > 0.001 && w < maxWeeks) {
+    const free = Math.max(0, capacityPw - weeks[w].usedPw);
+    if (free <= 0.001) return false;
+    remaining -= Math.min(free, remaining);
+    if (remaining > 0.001) w += 1;
+  }
+  return remaining <= 0.001;
 }
 
 /**
- * Schedule each team's work independently by shared priority field.
+ * Schedule portfolio work by shared priority field.
  * T-shirt on assignment → person-weeks; team capacityPw = person-weeks per calendar week.
  *
  * Mode `teamQueue`: later items wait until previous team work finishes (FS), then
  * fill free slots — classic queue arrows on Gantt.
- * Mode `dense`: place each assignment at the earliest week ≥ workStartDate with
- * free capacity (higher priority already reserved). No artificial FS wait, so
- * free early weeks stay usable and multi-team items can overlap in time.
+ * Mode `maxUtilization`: process items in priority order; for each item pick a
+ * common start week (≥ all planned starts) where every assigned team can run its
+ * track contiguously from that week in parallel; consume capacity, then next item.
+ * Does not use a per-team FS cursor that splits one item’s teams across time.
  * Mode `manual`: user dates fixed — effort fills from workStartDate at capacityPw
  * rate even when weeks already have other work, so overload is visible.
  * Does not mutate stored workStartDate values.
@@ -643,138 +676,230 @@ export function schedulePortfolio(
   rollups: ItemSchedule[];
   load: Record<string, TeamLoadWeek[]>;
 } {
-  const mode = normalizeScheduleMode(options.mode ?? "dense");
+  const mode = normalizeScheduleMode(options.mode ?? "maxUtilization");
   const ranges = state.sizeRanges ?? DEFAULT_SIZE_RANGES;
   const active = state.items.filter((i) => i.status !== "done");
   const ordered = sortByPriority(active, ranges);
-
-  const byTeam = new Map<
-    string,
-    { item: WorkItem; size: TShirtSize; workStartDate: string }[]
-  >();
-  for (const team of state.teams) byTeam.set(team.id, []);
-  for (const item of ordered) {
-    for (const a of item.assignments) {
-      const list = byTeam.get(a.teamId) ?? [];
-      list.push({
-        item,
-        size: a.size,
-        workStartDate: snapToMonday(a.workStartDate || state.startDate),
-      });
-      byTeam.set(a.teamId, list);
-    }
-  }
 
   const slices: ScheduledSlice[] = [];
   const load: Record<string, TeamLoadWeek[]> = {};
   const maxWeeks = 52;
   const packCapacity = isCapacityScheduleMode(mode);
 
-  for (const team of state.teams) {
-    const queue = byTeam.get(team.id) ?? [];
-    const weeks: TeamLoadWeek[] = Array.from({ length: maxWeeks }, (_, w) => ({
+  const emptyWeeks = (team: Team): TeamLoadWeek[] =>
+    Array.from({ length: maxWeeks }, (_, w) => ({
       week: w,
       weekStart: addWeeks(state.startDate, w),
       usedPw: 0,
       capacityPw: team.capacityPw,
-      items: [],
+      items: [] as LoadDemandItem[],
     }));
 
-    let cursor = 0;
-    queue.forEach((entry, idx) => {
-      const estimatePw = sizePlanWeeks(entry.size, ranges);
-      const plannedWeek = weekIndex(state.startDate, entry.workStartDate);
-      let startWeek: number;
+  const placeEffort = (
+    weeks: TeamLoadWeek[],
+    team: Team,
+    item: WorkItem,
+    startWeek: number,
+    estimatePw: number,
+    allowSkipBusy: boolean
+  ): { endWeek: number; endDate: string; startDate: string } => {
+    let remaining = estimatePw;
+    let endWeek = startWeek;
+    let endDate = addWeeks(state.startDate, startWeek);
+    const startDate = addWeeks(state.startDate, startWeek);
+
+    while (remaining > 0.001 && endWeek < maxWeeks) {
+      const slot = weeks[endWeek];
+      let take: number;
+      let offsetInWeek = 0;
 
       if (mode === "manual") {
-        startWeek = plannedWeek;
-      } else if (mode === "teamQueue") {
-        // Strict FS: cannot start before previous item in this team's queue ends.
-        startWeek = Math.max(cursor, plannedWeek);
-        while (
-          startWeek < maxWeeks &&
-          weeks[startWeek].usedPw >= team.capacityPw - 0.001
-        ) {
-          startWeek += 1;
-        }
+        take = Math.min(team.capacityPw, remaining);
       } else {
-        // Dense: earliest free week ≥ planned — holes before a late high-prio
-        // item remain usable by later items; no cross-item FS cursor.
-        startWeek = plannedWeek;
-        while (
-          startWeek < maxWeeks &&
-          weeks[startWeek].usedPw >= team.capacityPw - 0.001
-        ) {
-          startWeek += 1;
+        const free = Math.max(0, team.capacityPw - slot.usedPw);
+        if (free <= 0.001) {
+          if (!allowSkipBusy) break;
+          endWeek += 1;
+          continue;
         }
+        take = Math.min(free, remaining);
+        offsetInWeek = (slot.usedPw / team.capacityPw) * 7;
       }
 
-      let remaining = estimatePw;
-      let endWeek = startWeek;
-      let endDate = addWeeks(state.startDate, startWeek);
-      const startDate = addWeeks(state.startDate, startWeek);
+      const weekStart = addWeeks(state.startDate, endWeek);
+      const daysUsed = (take / Math.max(team.capacityPw, 0.001)) * 7;
+      endDate = addDays(weekStart, offsetInWeek + daysUsed);
 
-      while (remaining > 0.001 && endWeek < maxWeeks) {
-        const slot = weeks[endWeek];
-        let take: number;
-        let offsetInWeek = 0;
+      addLoadContribution(slot, item, take);
+      remaining -= take;
+      if (remaining > 0.001) endWeek += 1;
+    }
 
-        if (mode === "manual") {
-          // Full rate from planned start even if week already busy → overload visible
-          take = Math.min(team.capacityPw, remaining);
-        } else {
-          const free = Math.max(0, team.capacityPw - slot.usedPw);
-          if (free <= 0.001) {
-            endWeek += 1;
-            continue;
-          }
-          take = Math.min(free, remaining);
-          offsetInWeek = (slot.usedPw / team.capacityPw) * 7;
-        }
+    return { endWeek, endDate, startDate };
+  };
 
-        const weekStart = addWeeks(state.startDate, endWeek);
-        const daysUsed = (take / Math.max(team.capacityPw, 0.001)) * 7;
-        endDate = addDays(weekStart, offsetInWeek + daysUsed);
+  if (mode === "maxUtilization") {
+    for (const team of state.teams) {
+      load[team.id] = emptyWeeks(team);
+    }
 
-        addLoadContribution(slot, entry.item, take);
-        remaining -= take;
-        if (remaining > 0.001) endWeek += 1;
+    ordered.forEach((item, itemIdx) => {
+      const tracks = item.assignments
+        .map((a) => {
+          const team = state.teams.find((t) => t.id === a.teamId);
+          if (!team) return null;
+          return {
+            team,
+            size: a.size,
+            workStartDate: snapToMonday(a.workStartDate || state.startDate),
+            estimatePw: sizePlanWeeks(a.size, ranges),
+          };
+        })
+        .filter((t): t is NonNullable<typeof t> => t != null);
+
+      if (!tracks.length) return;
+
+      const plannedFloor = Math.max(
+        ...tracks.map((t) => weekIndex(state.startDate, t.workStartDate))
+      );
+
+      let commonStart = plannedFloor;
+      while (commonStart < maxWeeks) {
+        const allReady = tracks.every((t) =>
+          canPlaceContiguous(
+            load[t.team.id],
+            t.team.capacityPw,
+            commonStart,
+            t.estimatePw,
+            maxWeeks
+          )
+        );
+        if (allReady) break;
+        commonStart += 1;
       }
 
-      const durationWeeks =
-        team.capacityPw > 0
-          ? Math.round((estimatePw / team.capacityPw) * 100) / 100
-          : estimatePw;
+      for (const t of tracks) {
+        const weeks = load[t.team.id];
+        const plannedWeek = weekIndex(state.startDate, t.workStartDate);
+        const { endWeek, endDate, startDate } = placeEffort(
+          weeks,
+          t.team,
+          item,
+          commonStart,
+          t.estimatePw,
+          false
+        );
+        const durationWeeks =
+          t.team.capacityPw > 0
+            ? Math.round((t.estimatePw / t.team.capacityPw) * 100) / 100
+            : t.estimatePw;
 
-      slices.push({
-        item: entry.item,
-        teamId: team.id,
-        size: entry.size,
-        estimatePw,
-        wsjf: wsjf(entry.item),
-        effectiveRank: idx + 1,
-        plannedStartDate: entry.workStartDate,
-        startWeek,
-        endWeek,
-        startDate,
-        endDate,
-        waitWeeks: startWeek,
-        delayedByQueue: packCapacity && startWeek > plannedWeek,
-        durationWeeks,
-      });
-
-      if (mode === "teamQueue") {
-        cursor = endWeek;
-        if (weeks[cursor] && weeks[cursor].usedPw >= team.capacityPw - 0.001) {
-          cursor = endWeek + 1;
-        } else {
-          cursor = endWeek;
-        }
+        slices.push({
+          item,
+          teamId: t.team.id,
+          size: t.size,
+          estimatePw: t.estimatePw,
+          wsjf: wsjf(item),
+          effectiveRank: itemIdx + 1,
+          plannedStartDate: t.workStartDate,
+          startWeek: commonStart,
+          endWeek,
+          startDate,
+          endDate,
+          waitWeeks: commonStart,
+          delayedByQueue: packCapacity && commonStart > plannedWeek,
+          durationWeeks,
+        });
       }
     });
 
-    finalizeLoadWeeks(weeks);
-    load[team.id] = weeks;
+    for (const team of state.teams) {
+      finalizeLoadWeeks(load[team.id] ?? []);
+    }
+  } else {
+    const byTeam = new Map<
+      string,
+      { item: WorkItem; size: TShirtSize; workStartDate: string }[]
+    >();
+    for (const team of state.teams) byTeam.set(team.id, []);
+    for (const item of ordered) {
+      for (const a of item.assignments) {
+        const list = byTeam.get(a.teamId) ?? [];
+        list.push({
+          item,
+          size: a.size,
+          workStartDate: snapToMonday(a.workStartDate || state.startDate),
+        });
+        byTeam.set(a.teamId, list);
+      }
+    }
+
+    for (const team of state.teams) {
+      const queue = byTeam.get(team.id) ?? [];
+      const weeks = emptyWeeks(team);
+
+      let cursor = 0;
+      queue.forEach((entry, idx) => {
+        const estimatePw = sizePlanWeeks(entry.size, ranges);
+        const plannedWeek = weekIndex(state.startDate, entry.workStartDate);
+        let startWeek: number;
+
+        if (mode === "manual") {
+          startWeek = plannedWeek;
+        } else {
+          // Strict FS: cannot start before previous item in this team's queue ends.
+          startWeek = Math.max(cursor, plannedWeek);
+          while (
+            startWeek < maxWeeks &&
+            weeks[startWeek].usedPw >= team.capacityPw - 0.001
+          ) {
+            startWeek += 1;
+          }
+        }
+
+        const { endWeek, endDate, startDate } = placeEffort(
+          weeks,
+          team,
+          entry.item,
+          startWeek,
+          estimatePw,
+          mode === "teamQueue"
+        );
+
+        const durationWeeks =
+          team.capacityPw > 0
+            ? Math.round((estimatePw / team.capacityPw) * 100) / 100
+            : estimatePw;
+
+        slices.push({
+          item: entry.item,
+          teamId: team.id,
+          size: entry.size,
+          estimatePw,
+          wsjf: wsjf(entry.item),
+          effectiveRank: idx + 1,
+          plannedStartDate: entry.workStartDate,
+          startWeek,
+          endWeek,
+          startDate,
+          endDate,
+          waitWeeks: startWeek,
+          delayedByQueue: packCapacity && startWeek > plannedWeek,
+          durationWeeks,
+        });
+
+        if (mode === "teamQueue") {
+          if (weeks[endWeek] && weeks[endWeek].usedPw >= team.capacityPw - 0.001) {
+            cursor = endWeek + 1;
+          } else {
+            cursor = endWeek;
+          }
+        }
+      });
+
+      finalizeLoadWeeks(weeks);
+      load[team.id] = weeks;
+    }
   }
 
   const byItem = new Map<string, ScheduledSlice[]>();
