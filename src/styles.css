@@ -1750,19 +1750,14 @@ body.prio-dragging {
 
 .schedule-mode-enable {
   display: inline-flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
   font-weight: 600;
   color: var(--ink);
   cursor: pointer;
   user-select: none;
-}
-
-.schedule-mode-enable-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  white-space: nowrap;
 }
 
 .schedule-mode-enable input[type="checkbox"] {
@@ -1774,8 +1769,9 @@ body.prio-dragging {
 }
 
 .schedule-mode-enable-hint {
-  margin-left: 24px;
+  font-size: 0.85em;
   font-weight: 500;
+  color: var(--muted);
 }
 
 .schedule-mode-cards {

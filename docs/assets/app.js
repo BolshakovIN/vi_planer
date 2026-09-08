@@ -94,11 +94,8 @@ ${w}`}class jr extends Error{constructor({message:e,code:t,cause:A,name:n}){var 
       Показать загрузку команд
     </label>`}function yT(){return`
     <label class="schedule-mode-enable">
-      <span class="schedule-mode-enable-row">
-        <input type="checkbox" id="scheduleModeEnabled" ${ye.scheduleModeEnabled?"checked":""} />
-        Оптимизировать под капасити команд
-      </span>
-      <span class="meta schedule-mode-enable-hint">Режим задаётся в Настройках</span>
+      <input type="checkbox" id="scheduleModeEnabled" ${ye.scheduleModeEnabled?"checked":""} />
+      <span>Оптимизировать под капасити команд <span class="schedule-mode-enable-hint">(режим задаётся в Настройках)</span></span>
     </label>`}function W1(){return`<div class="schedule-toggles">${wT()}${yT()}</div>`}function BT(){const r=hl(ye.scheduleMode);return`
     <div class="panel">
       <div class="panel-header">

@@ -466,11 +466,8 @@ function showTeamLoadToggleHtml(): string {
 function scheduleModeEnableHtml(): string {
   return `
     <label class="schedule-mode-enable">
-      <span class="schedule-mode-enable-row">
-        <input type="checkbox" id="scheduleModeEnabled" ${ui.scheduleModeEnabled ? "checked" : ""} />
-        Оптимизировать под капасити команд
-      </span>
-      <span class="meta schedule-mode-enable-hint">Режим задаётся в Настройках</span>
+      <input type="checkbox" id="scheduleModeEnabled" ${ui.scheduleModeEnabled ? "checked" : ""} />
+      <span>Оптимизировать под капасити команд <span class="schedule-mode-enable-hint">(режим задаётся в Настройках)</span></span>
     </label>`;
 }
 
