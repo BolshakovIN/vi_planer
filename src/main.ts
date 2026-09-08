@@ -574,11 +574,20 @@ function metricsHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string 
         <div class="value">${overloaded}</div>
         <div class="hint">очередь длиннее 8 недель</div>
       </div>
-      <div class="metric">
+      <label
+        class="metric metric-plan-start plan-start-anchor"
+        title="Изменить старт планирования"
+      >
         <div class="label">Старт планирования</div>
         <div class="value" style="font-size:18px">${formatDate(state.startDate)}</div>
-        <div class="hint">якорь шкалы Gantt (пн) · меняется в Gantt</div>
-      </div>
+        <div class="hint">якорь шкалы Gantt (пн) · нажмите, чтобы изменить</div>
+        <input
+          type="date"
+          class="plan-start-date-input metric-plan-start-input"
+          value="${state.startDate}"
+          aria-label="Старт планирования"
+        />
+      </label>
     </div>
   `;
 }
@@ -1032,33 +1041,44 @@ function layoutGanttDepArrows() {
   });
 }
 
+function syncPlanStartInputs(value: string) {
+  document
+    .querySelectorAll<HTMLInputElement>(".plan-start-date-input")
+    .forEach((el) => {
+      el.value = value;
+    });
+}
+
 function bindPlanStartDate() {
-  const anchor = document.querySelector<HTMLElement>("#planStartDateBtn");
-  const input = document.querySelector<HTMLInputElement>("#planStartDate");
-  if (!anchor || !input) return;
+  document
+    .querySelectorAll<HTMLInputElement>(".plan-start-date-input")
+    .forEach((input) => {
+      const anchor =
+        input.closest<HTMLElement>(".plan-start-anchor") ?? input;
 
-  input.addEventListener("change", () => {
-    const next = snapToMonday(input.value || state.startDate);
-    input.value = next;
-    if (next === state.startDate) return;
+      input.addEventListener("change", () => {
+        const next = snapToMonday(input.value || state.startDate);
+        syncPlanStartInputs(next);
+        if (next === state.startDate) return;
 
-    askAppConfirm(
-      anchor,
-      `Сменить старт планирования на <span class="accent">${formatDate(next)}</span> (пн)?<br/><span class="meta">Шкала недель сдвинется; абсолютные даты работ сохранятся.</span>`,
-      () => {
-        state.startDate = next;
-        persist();
-      },
-      () => {
-        input.value = state.startDate;
-      },
-      {
-        wide: true,
-        yesLabel: "Сменить",
-        noLabel: "Отмена",
-      }
-    );
-  });
+        askAppConfirm(
+          anchor,
+          `Сменить старт планирования на <span class="accent">${formatDate(next)}</span> (пн)?<br/><span class="meta">Шкала недель сдвинется; абсолютные даты работ сохранятся.</span>`,
+          () => {
+            state.startDate = next;
+            persist();
+          },
+          () => {
+            syncPlanStartInputs(state.startDate);
+          },
+          {
+            wide: true,
+            yesLabel: "Сменить",
+            noLabel: "Отмена",
+          }
+        );
+      });
+    });
 }
 
 function bindGanttDepArrowLayout() {
@@ -1529,15 +1549,13 @@ function timelineHtml(
           <div class="gantt-axis-row">
             <div class="gantt-axis-spacer">
               <label
-                class="gantt-start-date"
-                id="planStartDateBtn"
+                class="gantt-start-date plan-start-anchor"
                 title="Изменить старт планирования"
               >
                 <span>нед. с ${formatDate(state.startDate)}</span>
                 <input
                   type="date"
-                  id="planStartDate"
-                  class="gantt-start-date-input"
+                  class="gantt-start-date-input plan-start-date-input"
                   value="${state.startDate}"
                   aria-label="Старт планирования"
                 />
@@ -1700,6 +1718,26 @@ function settingsHtml(rollups: ItemSchedule[]): string {
 
   return `
     <div class="settings-stack">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Старт планирования</h2>
+        </div>
+        <div class="settings-plan-start">
+          <label class="settings-plan-start-field plan-start-anchor">
+            <span class="meta">Дата (понедельник)</span>
+            <input
+              type="date"
+              class="plan-start-date-input settings-plan-start-input"
+              value="${state.startDate}"
+              aria-label="Старт планирования"
+            />
+          </label>
+          <p class="meta settings-plan-start-hint">
+            Якорь шкалы недель Gantt. При смене шкала сдвигается; абсолютные даты работ сохраняются.
+            Дата округляется к понедельнику.
+          </p>
+        </div>
+      </div>
       ${teamsManageHtml()}
       <div class="callout">
         Диапазоны майок — <strong>сколько недель</strong> заложено в оценке проекта (S / M / L). Для плана берётся середина диапазона.

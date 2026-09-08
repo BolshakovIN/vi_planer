@@ -322,6 +322,30 @@ textarea {
   box-shadow: var(--shadow);
 }
 
+.metric-plan-start {
+  position: relative;
+  display: block;
+  cursor: pointer;
+  margin: 0;
+}
+
+.metric-plan-start:hover,
+.metric-plan-start:focus-within {
+  border-color: var(--ink);
+}
+
+.metric-plan-start-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
 .metric .label {
   font-size: 11px;
   color: var(--muted);
@@ -822,6 +846,42 @@ th.sortable.sorted {
   flex-direction: column;
   gap: 4px;
   text-align: right;
+}
+
+.settings-plan-start {
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-plan-start-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 280px;
+  margin: 0;
+}
+
+.settings-plan-start-input {
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.settings-plan-start-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--ink) 25%, transparent);
+  outline-offset: 1px;
+}
+
+.settings-plan-start-hint {
+  margin: 0;
+  max-width: 42rem;
+  line-height: 1.4;
 }
 
 .settings-stack {
