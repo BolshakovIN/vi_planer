@@ -1473,18 +1473,31 @@ function timelineHtml(
   const packedByItem = new Map(
     visible.map(({ item, r }) => [item.id, packBarLanes(r.slices)] as const)
   );
-  const rowLaneCounts = visible.map(({ item }) => {
+  /** Label: prio + 2 meta lines + gaps + pad/border ≈ 68px */
+  const LABEL_MIN_H = 68;
+  const trackHForLanes = (lanes: number) =>
+    TRACK_PAD * 2 + lanes * BAR_H + Math.max(0, lanes - 1) * BAR_GAP;
+  // Per-row height from concurrent stacked team lanes (not global max)
+  const rowMetrics = visible.map(({ item }) => {
     const packed = packedByItem.get(item.id) ?? [];
-    return packed.length ? Math.max(...packed.map((p) => p.lane)) + 1 : 1;
+    const lanes = packed.length
+      ? Math.max(...packed.map((p) => p.lane)) + 1
+      : 1;
+    const trackH = trackHForLanes(lanes);
+    const rowH = Math.max(LABEL_MIN_H, trackH);
+    return { lanes, trackH, rowH, trackOffsetY: (rowH - trackH) / 2 };
   });
-  const maxLanes = Math.max(1, ...rowLaneCounts);
-  // Equal row height keeps dep SVG Y mapping aligned with DOM rows
-  const trackH =
-    TRACK_PAD * 2 + maxLanes * BAR_H + Math.max(0, maxLanes - 1) * BAR_GAP;
-  // Label: prio (22) + 2 meta lines + gaps + pad/border ≈ 68px; keep SVG Y in sync
-  const rowH = Math.max(68, trackH);
-  const totalRowsPx = n * rowH + Math.max(0, n - 1) * ROW_GAP;
-  const trackOffsetY = (rowH - trackH) / 2;
+  const rowTopPx: number[] = [];
+  {
+    let y = 0;
+    for (let i = 0; i < n; i++) {
+      rowTopPx.push(y);
+      y += rowMetrics[i].rowH + (i < n - 1 ? ROW_GAP : 0);
+    }
+  }
+  const totalRowsPx =
+    rowMetrics.reduce((sum, m) => sum + m.rowH, 0) +
+    Math.max(0, n - 1) * ROW_GAP;
 
   /** Bar vertical center in SVG viewBox Y (0..n), matching DOM incl. row gaps + lane */
   const sliceCenterY = (slice: ScheduledSlice): number => {
@@ -1497,9 +1510,13 @@ function timelineHtml(
         p.slice.endWeek === slice.endWeek
     );
     const lane = found?.lane ?? 0;
+    const { trackOffsetY } = rowMetrics[rowIdx] ?? {
+      trackOffsetY: 0,
+    };
     const barCenterInTrack =
       TRACK_PAD + lane * (BAR_H + BAR_GAP) + BAR_H / 2;
-    const yPx = rowIdx * (rowH + ROW_GAP) + trackOffsetY + barCenterInTrack;
+    const yPx =
+      (rowTopPx[rowIdx] ?? 0) + trackOffsetY + barCenterInTrack;
     return (yPx / Math.max(1, totalRowsPx)) * n;
   };
 
@@ -1537,7 +1554,7 @@ function timelineHtml(
   }
 
   const rowsHtml = visible
-    .map(({ item, r }) => {
+    .map(({ item, r }, rowIdx) => {
       const depHint =
         schedMode === "teamQueue"
           ? (() => {
@@ -1563,6 +1580,7 @@ function timelineHtml(
             : `<div class="meta gantt-dep-meta">как задано · без сдвига очереди</div>`;
 
       const packed = packedByItem.get(item.id) ?? [];
+      const { trackH, rowH } = rowMetrics[rowIdx];
       const bars = packed
         .map(({ slice: s, lane: barLane }) => {
           const team = teamById(s.teamId);
