@@ -577,7 +577,7 @@ function metricsHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string 
       <div class="metric">
         <div class="label">Старт планирования</div>
         <div class="value" style="font-size:18px">${formatDate(state.startDate)}</div>
-        <div class="hint">понедельник текущей недели</div>
+        <div class="hint">якорь шкалы Gantt (пн) · меняется в Gantt</div>
       </div>
     </div>
   `;
@@ -1029,6 +1029,35 @@ function layoutGanttDepArrows() {
     poly.setAttribute("fill", color);
     poly.setAttribute("fill-opacity", "0.92");
     heads.appendChild(poly);
+  });
+}
+
+function bindPlanStartDate() {
+  const anchor = document.querySelector<HTMLElement>("#planStartDateBtn");
+  const input = document.querySelector<HTMLInputElement>("#planStartDate");
+  if (!anchor || !input) return;
+
+  input.addEventListener("change", () => {
+    const next = snapToMonday(input.value || state.startDate);
+    input.value = next;
+    if (next === state.startDate) return;
+
+    askAppConfirm(
+      anchor,
+      `Сменить старт планирования на <span class="accent">${formatDate(next)}</span> (пн)?<br/><span class="meta">Шкала недель сдвинется; абсолютные даты работ сохранятся.</span>`,
+      () => {
+        state.startDate = next;
+        persist();
+      },
+      () => {
+        input.value = state.startDate;
+      },
+      {
+        wide: true,
+        yesLabel: "Сменить",
+        noLabel: "Отмена",
+      }
+    );
   });
 }
 
@@ -1499,7 +1528,20 @@ function timelineHtml(
             ? `<div class="gantt-layout">
           <div class="gantt-axis-row">
             <div class="gantt-axis-spacer">
-              <span class="meta">нед. с ${formatDate(state.startDate)}</span>
+              <label
+                class="gantt-start-date"
+                id="planStartDateBtn"
+                title="Изменить старт планирования"
+              >
+                <span>нед. с ${formatDate(state.startDate)}</span>
+                <input
+                  type="date"
+                  id="planStartDate"
+                  class="gantt-start-date-input"
+                  value="${state.startDate}"
+                  aria-label="Старт планирования"
+                />
+              </label>
             </div>
             <div class="gantt-axis">${axisTicks}</div>
           </div>
@@ -2843,6 +2885,7 @@ function bind() {
   bindStickyTabsOffset();
   bindGanttDepArrowLayout();
   bindGanttBarEdit();
+  bindPlanStartDate();
 
   const close = () => {
     ui.creating = false;
