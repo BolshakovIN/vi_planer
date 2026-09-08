@@ -93,8 +93,6 @@ interface UiState {
   creating: boolean;
   /** Gantt horizon in weeks */
   ganttWeeks: number;
-  /** Experimental per-team capacity / overload visualization */
-  showTeamLoad: boolean;
   /**
    * Preferred schedule mode (Настройки).
    * `manual` | `teamQueue` | `maxUtilization` — see SCHEDULE_MODE_META.
@@ -136,7 +134,6 @@ const ui: UiState = {
   editingId: null,
   creating: false,
   ganttWeeks: 16,
-  showTeamLoad: false,
   scheduleMode: "maxUtilization",
   scheduleModeEnabled: true,
   hiddenCols: [],
@@ -281,7 +278,6 @@ function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
 
 const COL_WIDTH_KEY = "vi-planer-col-widths";
 const COL_VISIBILITY_KEY = "vi-planer-col-hidden";
-const SHOW_TEAM_LOAD_KEY = "vi-planer-show-team-load";
 const SCHEDULE_MODE_KEY = "vi-planer-schedule-mode";
 const SCHEDULE_MODE_ENABLED_KEY = "vi-planer-schedule-mode-enabled";
 /** Legacy boolean toggle; migrated once into SCHEDULE_MODE_KEY */
@@ -377,18 +373,6 @@ function saveHiddenCols(hidden: HideablePortfolioCol[]) {
   localStorage.setItem(COL_VISIBILITY_KEY, JSON.stringify(hidden));
 }
 
-function loadShowTeamLoad(): boolean {
-  try {
-    return localStorage.getItem(SHOW_TEAM_LOAD_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function saveShowTeamLoad(show: boolean) {
-  localStorage.setItem(SHOW_TEAM_LOAD_KEY, show ? "1" : "0");
-}
-
 function loadScheduleMode(): ScheduleMode {
   try {
     const raw = localStorage.getItem(SCHEDULE_MODE_KEY);
@@ -463,14 +447,6 @@ function scheduleState(stateOverride?: AppState) {
   });
 }
 
-function showTeamLoadToggleHtml(): string {
-  return `
-    <label class="team-load-toggle">
-      <input type="checkbox" id="showTeamLoad" ${ui.showTeamLoad ? "checked" : ""} />
-      Показать загрузку команд
-    </label>`;
-}
-
 function scheduleModeEnableHtml(): string {
   return `
     <label class="schedule-mode-enable">
@@ -480,7 +456,7 @@ function scheduleModeEnableHtml(): string {
 }
 
 function scheduleTogglesHtml(): string {
-  return `<div class="schedule-toggles">${showTeamLoadToggleHtml()}${scheduleModeEnableHtml()}</div>`;
+  return `<div class="schedule-toggles">${scheduleModeEnableHtml()}</div>`;
 }
 
 function scheduleModeSettingsHtml(): string {
@@ -952,9 +928,7 @@ function queuesTestHtml(
               по приоритету<br/>портфеля
             </div>
           </div>
-          ${
-            ui.showTeamLoad
-              ? `<div class="cap-strip-wrap">
+          <div class="cap-strip-wrap">
             <div class="cap-strip-label meta">Загрузка по расписанию (эксп.) — красный = перегруз ёмкости; наведите или нажмите</div>
             ${teamCapacityStripHtml(
               team,
@@ -962,9 +936,7 @@ function queuesTestHtml(
               overflowByTeam[team.id] ?? new Set(),
               horizon
             )}
-          </div>`
-              : ""
-          }
+          </div>
           ${items}
         </div>
       `;
@@ -1619,7 +1591,7 @@ function timelineHtml(
 
   const axisTicks = Array.from({ length: weeks }, (_, w) => {
     const show = w % tickStep === 0 || w === weeks - 1;
-    const isOverflow = ui.showTeamLoad && anyOverflowWeek(w);
+    const isOverflow = anyOverflowWeek(w);
     const overflowCls = isOverflow ? " gantt-axis-tick-overflow" : "";
     const overloadAttrs = isOverflow
       ? ` data-overload-week="${w}" role="button" tabindex="0" aria-label="Перегруз Н${w + 1}: расшифровка"`
@@ -1708,14 +1680,10 @@ function timelineHtml(
             </svg>
             ${rowsHtml}
           </div>
-          ${
-            ui.showTeamLoad
-              ? `<div class="gantt-capacity-block">
+          <div class="gantt-capacity-block">
             <div class="gantt-capacity-head meta">Загрузка команд по расписанию (эксперимент) — те же недели, что полоски Gantt; красный = перегруз ёмкости</div>
             <div class="gantt-capacity-rows">${capacityRows}</div>
-          </div>`
-              : ""
-          }
+          </div>
         </div>`
             : `<div class="empty">Нет активных инициатив</div>`
         }
@@ -1726,11 +1694,7 @@ function timelineHtml(
           : schedMode === "maxUtilization"
             ? "Шкала — недели от старта планирования (понедельник). Режим «Максимальная утилизация ресурсов»: инициативы по приоритету; все команды одной инициативы делят общий старт и идут параллельно (ETA = max по командам), без FS-очереди, которая раздвигает сроки. Ниже по приоритету ждут свободной ёмкости, но при старте тоже параллельны."
             : "Шкала — недели от старта планирования (понедельник). Даты полосок = заданные старты (без сдвига по ёмкости); стрелки очереди скрыты. ETA = конец bottleneck-полоски; параллельная работа может перегрузить команду."
-      }${
-        ui.showTeamLoad
-          ? " Красная подсветка — загрузка команды по расписанию (как на Gantt) выше ёмкости в эту неделю."
-          : ""
-      }</p>
+      } Красная подсветка — загрузка команды по расписанию (как на Gantt) выше ёмкости в эту неделю.</p>
     </div>
   `;
 }
@@ -2325,8 +2289,6 @@ function showOverloadExplain(
   anchor: HTMLElement,
   opts: { teamId?: string; week: number; pin?: boolean }
 ) {
-  if (!ui.showTeamLoad) return;
-
   const week = opts.week;
   const teamId = opts.teamId;
   const body =
@@ -2405,8 +2367,6 @@ function showOverloadExplain(
 }
 
 function bindOverloadExplain() {
-  if (!ui.showTeamLoad) return;
-
   const openFromEl = (el: HTMLElement, pin: boolean) => {
     const weekRaw = el.dataset.overloadWeek;
     if (weekRaw == null || weekRaw === "") return;
@@ -2928,14 +2888,6 @@ function bind() {
     ui.statusFilter = statusFilter.value as UiState["statusFilter"];
     render();
   });
-
-  document
-    .querySelector<HTMLInputElement>("#showTeamLoad")
-    ?.addEventListener("change", (e) => {
-      ui.showTeamLoad = (e.target as HTMLInputElement).checked;
-      saveShowTeamLoad(ui.showTeamLoad);
-      render();
-    });
 
   document
     .querySelector<HTMLInputElement>("#scheduleModeEnabled")
@@ -3618,7 +3570,6 @@ async function exportCurrentTabPdf() {
 async function bootstrap() {
   state = await loadState();
   ui.hiddenCols = loadHiddenCols();
-  ui.showTeamLoad = loadShowTeamLoad();
   ui.scheduleMode = loadScheduleMode();
   ui.scheduleModeEnabled = loadScheduleModeEnabled(ui.scheduleMode);
   saveScheduleMode(ui.scheduleMode);

@@ -1723,29 +1723,11 @@ body.prio-dragging {
   min-width: 0;
 }
 
-.team-load-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink);
-  cursor: pointer;
-  user-select: none;
-}
-
 .schedule-toggles {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 12px 18px;
-}
-
-.team-load-toggle input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  cursor: pointer;
 }
 
 .schedule-mode-enable {
