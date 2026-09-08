@@ -1772,9 +1772,17 @@ body.prio-dragging {
   box-shadow: inset 0 0 0 1px var(--accent-border, #f5c6c6);
 }
 
+.gantt-dep-legend {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
 .schedule-mode-hint {
   margin: 0;
   max-width: 42rem;
+  color: var(--muted);
   font-size: 11px;
   line-height: 1.35;
 }
