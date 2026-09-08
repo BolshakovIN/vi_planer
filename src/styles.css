@@ -1725,79 +1725,65 @@ body.prio-dragging {
 
 .schedule-toggles {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px 18px;
-}
-
-.schedule-mode-enable {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink);
-  cursor: pointer;
-  user-select: none;
-  white-space: nowrap;
-}
-
-.schedule-mode-enable input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.schedule-mode-enable-hint {
-  font-size: 0.85em;
-  font-weight: 500;
-  color: var(--muted);
-}
-
-.schedule-mode-cards {
-  display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
-.schedule-mode-card {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 10px 12px;
+.schedule-mode-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
   border: 1px solid var(--line);
   border-radius: 8px;
-  cursor: pointer;
+  overflow: hidden;
   background: var(--surface, #fff);
 }
 
-.schedule-mode-card.is-active {
-  border-color: var(--accent, #2563eb);
-  box-shadow: inset 0 0 0 1px var(--accent, #2563eb);
+.schedule-mode-btn {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  line-height: 1.25;
+  text-align: left;
+  border-right: 1px solid var(--line);
 }
 
-.schedule-mode-card input {
-  margin-top: 3px;
-  flex-shrink: 0;
+.schedule-mode-btn:last-child {
+  border-right: 0;
 }
 
-.schedule-mode-card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
+.schedule-mode-btn:hover {
+  color: var(--ink);
+  background: var(--row-hover, #f5f5f5);
 }
 
-.schedule-mode-card-body strong {
-  font-size: 14px;
+.schedule-mode-btn.is-active {
+  color: var(--accent, #d60000);
+  background: var(--accent-soft, #fff0f0);
+  box-shadow: inset 0 0 0 1px var(--accent-border, #f5c6c6);
+}
+
+.schedule-mode-hint {
+  margin: 0;
+  max-width: 42rem;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .gantt-weeks-ctrl {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 12px;
   width: 100%;
   flex-basis: 100%;
   font-size: 13px;
@@ -1810,6 +1796,8 @@ body.prio-dragging {
   gap: 6px;
   flex-wrap: wrap;
   font-size: 12px;
+  flex-shrink: 0;
+  padding-top: 4px;
 }
 
 .gantt-weeks-ctrl-right label {
