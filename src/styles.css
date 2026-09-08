@@ -60,7 +60,7 @@ textarea {
 }
 
 .app-shell {
-  max-width: 1280px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 20px 20px 48px;
 }
@@ -2159,7 +2159,7 @@ button.cap-cell:last-child {
 }
 
 .page-foot {
-  max-width: 1280px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 8px 20px 28px;
   display: flex;
