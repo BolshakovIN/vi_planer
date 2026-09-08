@@ -36,6 +36,8 @@ import {
   scheduledOverloadWeeks,
   isTeamWeekOverloaded,
   utilizationPct,
+  nearestSizeForCalendarWeeks,
+  calendarWeeksForSize,
 } from "./model";
 import { SEED } from "./seed";
 import {
@@ -47,9 +49,13 @@ import {
 } from "./storage";
 import { downloadElementPdf, downloadMarkdownAsPdf } from "./pdfExport";
 
+/** Release / deploy stamp in the header (DD.MM.YYYY) */
+const RELEASE_UPDATED = "08.09.2026";
+
 type Tab = "portfolio" | "timeline" | "queuesTest" | "settings";
 type SortKey = "priority" | "wsjf" | "estimate" | "eta";
 type SortDir = "asc" | "desc";
+type GanttBarDragMode = "move" | "resize-left" | "resize-right";
 
 const TAB_LABELS: Record<Tab, string> = {
   portfolio: "Портфель",
@@ -1039,6 +1045,223 @@ function bindGanttDepArrowLayout() {
   if (svg) ro.observe(svg);
 }
 
+function applyGanttBarPreview(
+  bar: HTMLElement,
+  startWeek: number,
+  endWeek: number,
+  weeks: number
+) {
+  const span = Math.max(1, endWeek - startWeek + 1);
+  const left = (startWeek / weeks) * 100;
+  const width = (span / weeks) * 100;
+  bar.style.left = `${left}%`;
+  bar.style.width = `${Math.max(width, 2.5)}%`;
+  bar.dataset.startWeek = String(startWeek);
+  bar.dataset.endWeek = String(endWeek);
+}
+
+function bindGanttBarEdit() {
+  const weeks = Math.max(4, Math.min(52, Math.round(ui.ganttWeeks) || 16));
+
+  document.querySelectorAll<HTMLElement>(".gantt-bar").forEach((bar) => {
+    bar.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      const itemId = bar.dataset.itemId;
+      const teamId = bar.dataset.teamId;
+      if (!itemId || !teamId) return;
+
+      const track = bar.closest<HTMLElement>(".gantt-track");
+      if (!track) return;
+
+      const handle = (e.target as HTMLElement).closest<HTMLElement>(
+        "[data-gantt-handle]"
+      );
+      const mode: GanttBarDragMode =
+        handle?.dataset.ganttHandle === "left"
+          ? "resize-left"
+          : handle?.dataset.ganttHandle === "right"
+            ? "resize-right"
+            : "move";
+
+      const originStart = Number(bar.dataset.startWeek);
+      const originEnd = Number(bar.dataset.endWeek);
+      if (!Number.isFinite(originStart) || !Number.isFinite(originEnd)) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      closeAppPop();
+      closeOverloadPop();
+
+      const startClientX = e.clientX;
+      const trackRect0 = track.getBoundingClientRect();
+      const weekWidth = trackRect0.width / weeks;
+      let previewStart = originStart;
+      let previewEnd = originEnd;
+      let moved = false;
+
+      bar.classList.add("gantt-bar-dragging");
+      document.body.classList.add("gantt-dragging");
+      try {
+        bar.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+
+      const onMove = (ev: PointerEvent) => {
+        if (ev.pointerId !== e.pointerId) return;
+        const delta = Math.round((ev.clientX - startClientX) / weekWidth);
+        if (delta !== 0) moved = true;
+
+        const duration = originEnd - originStart + 1;
+        if (mode === "move") {
+          previewStart = Math.max(
+            0,
+            Math.min(weeks - duration, originStart + delta)
+          );
+          previewEnd = previewStart + duration - 1;
+        } else if (mode === "resize-right") {
+          previewStart = originStart;
+          previewEnd = Math.max(
+            originStart,
+            Math.min(weeks - 1, originEnd + delta)
+          );
+        } else {
+          previewEnd = originEnd;
+          previewStart = Math.max(
+            0,
+            Math.min(originEnd, originStart + delta)
+          );
+        }
+        applyGanttBarPreview(bar, previewStart, previewEnd, weeks);
+        layoutGanttDepArrows();
+      };
+
+      const cleanupDrag = () => {
+        bar.classList.remove("gantt-bar-dragging");
+        document.body.classList.remove("gantt-dragging");
+        bar.removeEventListener("pointermove", onMove);
+        bar.removeEventListener("pointerup", onUp);
+        bar.removeEventListener("pointercancel", onUp);
+        try {
+          bar.releasePointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
+      };
+
+      const restoreVisual = () => {
+        applyGanttBarPreview(bar, originStart, originEnd, weeks);
+        layoutGanttDepArrows();
+      };
+
+      const onUp = (ev: PointerEvent) => {
+        if (ev.pointerId !== e.pointerId) return;
+        cleanupDrag();
+
+        if (
+          !moved ||
+          (previewStart === originStart && previewEnd === originEnd)
+        ) {
+          restoreVisual();
+          return;
+        }
+
+        const item = state.items.find((i) => i.id === itemId);
+        const assign = item?.assignments.find((a) => a.teamId === teamId);
+        const team = teamById(teamId);
+        if (!item || !assign || !team) {
+          restoreVisual();
+          return;
+        }
+
+        const oldStart = addWeeks(state.startDate, originStart);
+        const oldEnd = addWeeks(state.startDate, originEnd);
+        const newStart = addWeeks(state.startDate, previewStart);
+        const newEnd = addWeeks(state.startDate, previewEnd);
+        const newSpan = previewEnd - previewStart + 1;
+        const oldSize = assign.size;
+        const newSize =
+          mode === "move"
+            ? oldSize
+            : nearestSizeForCalendarWeeks(
+                newSpan,
+                team.capacityPw,
+                szRanges()
+              );
+        const scheduledSpan = calendarWeeksForSize(
+          newSize,
+          team.capacityPw,
+          szRanges()
+        );
+        const sizeChanged = newSize !== oldSize;
+
+        // Keep preview at the snapped edit; cancel restores.
+        applyGanttBarPreview(bar, previewStart, previewEnd, weeks);
+        bar.classList.add("gantt-bar-confirm");
+
+        const actionLabel =
+          mode === "move"
+            ? "Переместить"
+            : "Изменить длительность";
+        const sizeLine = sizeChanged
+          ? `Оценка: <span class="accent">${oldSize}</span> (${sizePlanWeeks(oldSize, szRanges())} чел·нед) → <span class="accent">${newSize}</span> (${sizePlanWeeks(newSize, szRanges())} чел·нед)${
+              scheduledSpan !== newSpan
+                ? `<br/><span class="meta">после сохранения полоска ≈ ${scheduledSpan} нед. по майке ${newSize}</span>`
+                : ""
+            }`
+          : `Оценка: <span class="accent">${oldSize}</span> (без изменений)`;
+        const autoNote = ui.autoCapacitySchedule
+          ? `<br/><span class="meta">Автосдвиг по ёмкости будет выключен, чтобы даты сохранились.</span>`
+          : "";
+
+        const text = `${actionLabel} «<strong>${escapeHtml(team.name)}</strong>» — ${escapeHtml(item.title)}?<br/>
+Период: <span class="accent">${formatDate(oldStart)}–${formatDate(oldEnd)}</span> → <span class="accent">${formatDate(newStart)}–${formatDate(newEnd)}</span><br/>
+${sizeLine}${autoNote}`;
+
+        askAppConfirm(
+          bar,
+          text,
+          () => {
+            state.items = state.items.map((it) => {
+              if (it.id !== itemId) return it;
+              return {
+                ...it,
+                assignments: it.assignments.map((a) => {
+                  if (a.teamId !== teamId) return a;
+                  return {
+                    ...a,
+                    workStartDate: snapToMonday(newStart),
+                    size: newSize,
+                  };
+                }),
+              };
+            });
+            if (ui.autoCapacitySchedule) {
+              ui.autoCapacitySchedule = false;
+              saveAutoCapacitySchedule(false);
+            }
+            persist();
+          },
+          () => {
+            restoreVisual();
+            bar.classList.remove("gantt-bar-confirm");
+          },
+          {
+            wide: true,
+            anchorClass: "gantt-bar-confirm",
+            yesLabel: "ОК",
+            noLabel: "Отмена",
+          }
+        );
+      };
+
+      bar.addEventListener("pointermove", onMove);
+      bar.addEventListener("pointerup", onUp);
+      bar.addEventListener("pointercancel", onUp);
+    });
+  });
+}
+
 function timelineHtml(
   rollups: ItemSchedule[],
   slices: ScheduledSlice[],
@@ -1187,8 +1410,8 @@ function timelineHtml(
             (_, i) => s.startWeek + i
           ).some((w) => teamOverflow.has(w));
           const overloadCls = barOverload ? " gantt-bar-overload" : "";
-          const title = `${team?.name ?? ""}: ${formatDate(s.startDate)} → ${formatDate(s.endDate)}${barOverload ? " · перегруз ёмкости" : ""}`;
-          return `<div class="gantt-bar ${isBot ? "gantt-bot" : ""}${overloadCls}" data-item-id="${escapeAttr(item.id)}" data-team-id="${escapeAttr(s.teamId)}" style="left:${left}%;width:${Math.max(width, 2.5)}%;top:${top}px;height:${BAR_H}px;background:${team?.color ?? "#64748b"}" title="${escapeAttr(title)}">${escapeHtml(team?.name ?? "")}</div>`;
+          const title = `${team?.name ?? ""}: ${formatDate(s.startDate)} → ${formatDate(s.endDate)}${barOverload ? " · перегруз ёмкости" : ""} · тяните полоску или края`;
+          return `<div class="gantt-bar ${isBot ? "gantt-bot" : ""}${overloadCls}" data-item-id="${escapeAttr(item.id)}" data-team-id="${escapeAttr(s.teamId)}" data-start-week="${s.startWeek}" data-end-week="${s.endWeek}" style="left:${left}%;width:${Math.max(width, 2.5)}%;top:${top}px;height:${BAR_H}px;background:${team?.color ?? "#64748b"}" title="${escapeAttr(title)}"><span class="gantt-bar-handle gantt-bar-handle-l" data-gantt-handle="left" title="Изменить начало"></span><span class="gantt-bar-label">${escapeHtml(team?.name ?? "")}</span><span class="gantt-bar-handle gantt-bar-handle-r" data-gantt-handle="right" title="Изменить конец"></span></div>`;
         })
         .join("");
 
@@ -1765,8 +1988,8 @@ function closeAppPop() {
     .forEach((el) => {
       el.classList.remove("prio-ask");
     });
-  document.querySelectorAll(".confirm-ask").forEach((el) => {
-    el.classList.remove("confirm-ask");
+  document.querySelectorAll(".confirm-ask, .gantt-bar-confirm").forEach((el) => {
+    el.classList.remove("confirm-ask", "gantt-bar-confirm");
   });
   document.querySelector("#appConfirmPop")?.remove();
 }
@@ -2005,12 +2228,17 @@ function bindOverloadExplain() {
     });
 }
 
-function confirmPopHtml(textHtml: string): string {
+function confirmPopHtml(
+  textHtml: string,
+  labels?: { yes?: string; no?: string }
+): string {
+  const no = labels?.no ?? "Нет";
+  const yes = labels?.yes ?? "Да";
   return `
     <div class="prio-confirm-text">${textHtml}</div>
     <div class="prio-confirm-actions">
-      <button type="button" class="btn" data-confirm-no>Нет</button>
-      <button type="button" class="btn btn-primary" data-confirm-yes>Да</button>
+      <button type="button" class="btn" data-confirm-no>${escapeHtml(no)}</button>
+      <button type="button" class="btn btn-primary" data-confirm-yes>${escapeHtml(yes)}</button>
     </div>
   `;
 }
@@ -2020,7 +2248,12 @@ function askAppConfirm(
   textHtml: string,
   onYes: () => void,
   onNo: () => void = () => undefined,
-  opts?: { anchorClass?: string; wide?: boolean }
+  opts?: {
+    anchorClass?: string;
+    wide?: boolean;
+    yesLabel?: string;
+    noLabel?: string;
+  }
 ) {
   closeAppPop();
   anchor.classList.add(opts?.anchorClass ?? "confirm-ask");
@@ -2029,7 +2262,10 @@ function askAppConfirm(
   pop.id = "appConfirmPop";
   pop.className = `prio-confirm prio-confirm-float${opts?.wide ? " prio-confirm-wide" : ""}`;
   pop.setAttribute("data-stop-edit", "");
-  pop.innerHTML = confirmPopHtml(textHtml);
+  pop.innerHTML = confirmPopHtml(textHtml, {
+    yes: opts?.yesLabel,
+    no: opts?.noLabel,
+  });
   document.body.appendChild(pop);
 
   const place = () => {
@@ -2243,6 +2479,7 @@ function render() {
           <button type="button" class="brand-home" id="brandHomeBtn" title="На главную">VI Planer</button>
         </div>
         <div class="top-actions">
+          <span class="release-stamp" title="Дата релиза">updated ${RELEASE_UPDATED}</span>
           <span class="sync-badge" id="syncStatus" data-status="${getSyncStatus()}">${syncStatusLabel(getSyncStatus())}</span>
           <button class="btn" id="exportPdfBtn">Экспорт PDF</button>
         </div>
@@ -2605,6 +2842,7 @@ function bind() {
   bindPortfolioTableScroll();
   bindStickyTabsOffset();
   bindGanttDepArrowLayout();
+  bindGanttBarEdit();
 
   const close = () => {
     ui.creating = false;

@@ -89,6 +89,51 @@ export function pwToSize(estimatePw: number, capacityPw = 3): TShirtSize {
   return "L";
 }
 
+/** Nearest t-shirt by planning midpoint (person-weeks) */
+export function nearestSizeForEstimatePw(
+  estimatePw: number,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): TShirtSize {
+  const target = Math.max(0.1, estimatePw);
+  let best: TShirtSize = "M";
+  let bestDist = Infinity;
+  for (const sz of TSHIRT_SIZES) {
+    const dist = Math.abs(sizePlanWeeks(sz, ranges) - target);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = sz;
+    }
+  }
+  return best;
+}
+
+/**
+ * Calendar weeks a size occupies at a team's capacity (same fill rule as schedule).
+ */
+export function calendarWeeksForSize(
+  size: TShirtSize,
+  capacityPw: number,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): number {
+  const pw = sizePlanWeeks(size, ranges);
+  const cap = Math.max(capacityPw, 0.001);
+  return Math.max(1, Math.ceil(pw / cap - 1e-9));
+}
+
+/**
+ * Map a dragged/resized Gantt span (inclusive calendar weeks) to the nearest t-shirt
+ * for that team's capacity — used when the user edits bar length on the timeline.
+ */
+export function nearestSizeForCalendarWeeks(
+  calendarWeeks: number,
+  capacityPw: number,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): TShirtSize {
+  const target = Math.max(1, Math.round(calendarWeeks));
+  const estimatePw = target * Math.max(capacityPw, 0.001);
+  return nearestSizeForEstimatePw(estimatePw, ranges);
+}
+
 export interface Team {
   id: string;
   name: string;
