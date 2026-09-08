@@ -587,24 +587,52 @@ export function ensureUniquePriorities(
   });
 }
 
-/** How Gantt / queues place work relative to team capacity */
-export type ScheduleMode = "manual" | "auto";
+/**
+ * How Gantt / queues place work relative to team capacity.
+ * - `manual`: fixed workStartDate (overloads visible)
+ * - `teamQueue`: Finish-to-Start per team by portfolio priority (legacy auto)
+ * - `dense`: pack free weekly capacity by priority; no FS cursor — different
+ *   teams on one initiative may overlap; earlier free weeks stay fillable
+ */
+export type ScheduleMode = "manual" | "teamQueue" | "dense";
+
+/** @deprecated use ScheduleMode; kept for callers still passing "auto" */
+export type LegacyScheduleMode = ScheduleMode | "auto";
 
 export interface ScheduleOptions {
   /**
-   * `auto` (default historically): queue by priority, fill free capacity, shift starts.
-   * `manual`: fix each assignment at workStartDate; concurrent work may overload capacity.
+   * `dense` (recommended): earliest free capacity ≥ workStartDate, no FS cursor.
+   * `teamQueue`: strict per-team Finish-to-Start queue by priority.
+   * `manual`: fix each assignment at workStartDate; concurrent work may overload.
+   * Legacy `"auto"` is treated as `teamQueue`.
    */
-  mode?: ScheduleMode;
+  mode?: LegacyScheduleMode;
+}
+
+export function normalizeScheduleMode(
+  mode: LegacyScheduleMode | null | undefined
+): ScheduleMode {
+  if (mode === "manual") return "manual";
+  if (mode === "dense") return "dense";
+  if (mode === "auto" || mode === "teamQueue") return "teamQueue";
+  return "dense";
+}
+
+export function isCapacityScheduleMode(mode: ScheduleMode): boolean {
+  return mode === "teamQueue" || mode === "dense";
 }
 
 /**
  * Schedule each team's work independently by shared priority field.
  * T-shirt on assignment → person-weeks; team capacityPw = person-weeks per calendar week.
  *
- * Mode `auto`: capacity queue — later items wait for free slots (no overload on load strip).
- * Mode `manual`: user dates fixed — effort fills from workStartDate at capacityPw rate even
- * when weeks already have other work, so overload is visible on load / bars.
+ * Mode `teamQueue`: later items wait until previous team work finishes (FS), then
+ * fill free slots — classic queue arrows on Gantt.
+ * Mode `dense`: place each assignment at the earliest week ≥ workStartDate with
+ * free capacity (higher priority already reserved). No artificial FS wait, so
+ * free early weeks stay usable and multi-team items can overlap in time.
+ * Mode `manual`: user dates fixed — effort fills from workStartDate at capacityPw
+ * rate even when weeks already have other work, so overload is visible.
  * Does not mutate stored workStartDate values.
  */
 export function schedulePortfolio(
@@ -615,7 +643,7 @@ export function schedulePortfolio(
   rollups: ItemSchedule[];
   load: Record<string, TeamLoadWeek[]>;
 } {
-  const mode: ScheduleMode = options.mode === "manual" ? "manual" : "auto";
+  const mode = normalizeScheduleMode(options.mode ?? "dense");
   const ranges = state.sizeRanges ?? DEFAULT_SIZE_RANGES;
   const active = state.items.filter((i) => i.status !== "done");
   const ordered = sortByPriority(active, ranges);
@@ -640,6 +668,7 @@ export function schedulePortfolio(
   const slices: ScheduledSlice[] = [];
   const load: Record<string, TeamLoadWeek[]> = {};
   const maxWeeks = 52;
+  const packCapacity = isCapacityScheduleMode(mode);
 
   for (const team of state.teams) {
     const queue = byTeam.get(team.id) ?? [];
@@ -659,8 +688,19 @@ export function schedulePortfolio(
 
       if (mode === "manual") {
         startWeek = plannedWeek;
-      } else {
+      } else if (mode === "teamQueue") {
+        // Strict FS: cannot start before previous item in this team's queue ends.
         startWeek = Math.max(cursor, plannedWeek);
+        while (
+          startWeek < maxWeeks &&
+          weeks[startWeek].usedPw >= team.capacityPw - 0.001
+        ) {
+          startWeek += 1;
+        }
+      } else {
+        // Dense: earliest free week ≥ planned — holes before a late high-prio
+        // item remain usable by later items; no cross-item FS cursor.
+        startWeek = plannedWeek;
         while (
           startWeek < maxWeeks &&
           weeks[startWeek].usedPw >= team.capacityPw - 0.001
@@ -719,11 +759,11 @@ export function schedulePortfolio(
         startDate,
         endDate,
         waitWeeks: startWeek,
-        delayedByQueue: mode === "auto" && startWeek > plannedWeek,
+        delayedByQueue: packCapacity && startWeek > plannedWeek,
         durationWeeks,
       });
 
-      if (mode === "auto") {
+      if (mode === "teamQueue") {
         cursor = endWeek;
         if (weeks[cursor] && weeks[cursor].usedPw >= team.capacityPw - 0.001) {
           cursor = endWeek + 1;

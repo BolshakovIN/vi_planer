@@ -10,6 +10,8 @@ import {
   formatDate,
   schedulePortfolio,
   ScheduleMode,
+  isCapacityScheduleMode,
+  normalizeScheduleMode,
   sortByPriority,
   totalEstimateWeeks,
   sizePlanWeeks,
@@ -94,13 +96,31 @@ interface UiState {
   /** Experimental per-team capacity / overload visualization */
   showTeamLoad: boolean;
   /**
-   * When true: schedulePortfolio auto mode (queue by priority + capacity).
-   * When false: keep user workStartDates (manual) so overload is visible.
+   * Gantt / queues schedule mode (Настройки).
+   * `manual` | `teamQueue` | `dense` — see SCHEDULE_MODE_META.
    */
-  autoCapacitySchedule: boolean;
+  scheduleMode: ScheduleMode;
   hiddenCols: HideablePortfolioCol[];
   colPickerOpen: boolean;
 }
+
+const SCHEDULE_MODE_META: Record<
+  ScheduleMode,
+  { label: string; hint: string }
+> = {
+  manual: {
+    label: "Как задано",
+    hint: "Старты = даты в карточке; возможны перегрузки ёмкости.",
+  },
+  teamQueue: {
+    label: "Очередь команды",
+    hint: "Строгая FS-очередь по приоритету внутри команды; позже может ждать конца предыдущей работы.",
+  },
+  dense: {
+    label: "Плотная параллель",
+    hint: "Упаковка свободной ёмкости по приоритету без FS-курсора; разные команды на одной инициативе могут перекрываться.",
+  },
+};
 
 const ui: UiState = {
   tab: "portfolio",
@@ -114,7 +134,7 @@ const ui: UiState = {
   creating: false,
   ganttWeeks: 16,
   showTeamLoad: false,
-  autoCapacitySchedule: false,
+  scheduleMode: "dense",
   hiddenCols: [],
   colPickerOpen: false,
 };
@@ -258,6 +278,8 @@ function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
 const COL_WIDTH_KEY = "vi-planer-col-widths";
 const COL_VISIBILITY_KEY = "vi-planer-col-hidden";
 const SHOW_TEAM_LOAD_KEY = "vi-planer-show-team-load";
+const SCHEDULE_MODE_KEY = "vi-planer-schedule-mode";
+/** Legacy boolean toggle; migrated once into SCHEDULE_MODE_KEY */
 const AUTO_CAPACITY_SCHEDULE_KEY = "vi-planer-auto-capacity-schedule";
 
 type PortfolioCol =
@@ -362,20 +384,36 @@ function saveShowTeamLoad(show: boolean) {
   localStorage.setItem(SHOW_TEAM_LOAD_KEY, show ? "1" : "0");
 }
 
-function loadAutoCapacitySchedule(): boolean {
+function loadScheduleMode(): ScheduleMode {
   try {
-    return localStorage.getItem(AUTO_CAPACITY_SCHEDULE_KEY) === "1";
+    const raw = localStorage.getItem(SCHEDULE_MODE_KEY);
+    if (raw === "manual" || raw === "teamQueue" || raw === "dense") {
+      return raw;
+    }
+    const legacy = localStorage.getItem(AUTO_CAPACITY_SCHEDULE_KEY);
+    if (legacy === "1") return "teamQueue";
+    if (legacy === "0") return "manual";
   } catch {
-    return false;
+    /* ignore */
   }
+  return "dense";
 }
 
-function saveAutoCapacitySchedule(on: boolean) {
-  localStorage.setItem(AUTO_CAPACITY_SCHEDULE_KEY, on ? "1" : "0");
+function saveScheduleMode(mode: ScheduleMode) {
+  localStorage.setItem(SCHEDULE_MODE_KEY, mode);
+  localStorage.setItem(
+    AUTO_CAPACITY_SCHEDULE_KEY,
+    isCapacityScheduleMode(mode) ? "1" : "0"
+  );
+}
+
+function setScheduleMode(mode: ScheduleMode) {
+  ui.scheduleMode = normalizeScheduleMode(mode);
+  saveScheduleMode(ui.scheduleMode);
 }
 
 function activeScheduleMode(): ScheduleMode {
-  return ui.autoCapacitySchedule ? "auto" : "manual";
+  return normalizeScheduleMode(ui.scheduleMode);
 }
 
 function scheduleState(stateOverride?: AppState) {
@@ -392,16 +430,55 @@ function showTeamLoadToggleHtml(): string {
     </label>`;
 }
 
-function autoCapacityToggleHtml(): string {
+function scheduleModeSelectHtml(id: string): string {
+  const mode = activeScheduleMode();
+  const opts = (Object.keys(SCHEDULE_MODE_META) as ScheduleMode[])
+    .map((m) => {
+      const meta = SCHEDULE_MODE_META[m];
+      return `<option value="${m}" ${m === mode ? "selected" : ""} title="${escapeAttr(meta.hint)}">${meta.label}</option>`;
+    })
+    .join("");
   return `
-    <label class="team-load-toggle" title="Выкл: даты старта как заданы (видны перегрузки). Вкл: сдвиг по приоритету и ёмкости команд.">
-      <input type="checkbox" id="autoCapacitySchedule" ${ui.autoCapacitySchedule ? "checked" : ""} />
-      Автоматически сдвигать по ёмкости
+    <label class="schedule-mode-select" title="${escapeAttr(SCHEDULE_MODE_META[mode].hint)}">
+      <span class="schedule-mode-label">Расписание</span>
+      <select id="${id}" class="schedule-mode-input" aria-label="Режим расписания">
+        ${opts}
+      </select>
     </label>`;
 }
 
 function scheduleTogglesHtml(): string {
-  return `<div class="schedule-toggles">${showTeamLoadToggleHtml()}${autoCapacityToggleHtml()}</div>`;
+  return `<div class="schedule-toggles">${showTeamLoadToggleHtml()}${scheduleModeSelectHtml("scheduleModeGantt")}</div>`;
+}
+
+function scheduleModeSettingsHtml(): string {
+  const mode = activeScheduleMode();
+  const cards = (Object.keys(SCHEDULE_MODE_META) as ScheduleMode[])
+    .map((m) => {
+      const meta = SCHEDULE_MODE_META[m];
+      const checked = m === mode ? "checked" : "";
+      return `
+        <label class="schedule-mode-card ${m === mode ? "is-active" : ""}">
+          <input type="radio" name="scheduleModeSettings" value="${m}" ${checked} />
+          <span class="schedule-mode-card-body">
+            <strong>${meta.label}</strong>
+            <span class="meta">${meta.hint}</span>
+          </span>
+        </label>`;
+    })
+    .join("");
+  return `
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Расписание по ёмкости</h2>
+      </div>
+      <p class="meta" style="margin:0 0 12px">
+        Как Gantt и «Очередь команд» ставят работы относительно ёмкости.
+        Режим также доступен на вкладках Gantt и Очередь. Ручной сдвиг полоски на Gantt
+        переключает на «Как задано».
+      </p>
+      <div class="schedule-mode-cards" id="scheduleModeSettings">${cards}</div>
+    </div>`;
 }
 
 function isColVisible(col: PortfolioCol): boolean {
@@ -752,7 +829,8 @@ function queuesTestHtml(
 ): string {
   const planStart = state.startDate;
   const horizon = 12;
-  const auto = ui.autoCapacitySchedule;
+  const mode = activeScheduleMode();
+  const packing = isCapacityScheduleMode(mode);
   const cards = state.teams
     .map((team) => {
       const queue = slices
@@ -780,16 +858,19 @@ function queuesTestHtml(
             let takeReason = "может взять сразу (очередь свободна)";
             let takeClass = "take-now";
             if (s.startDate > s.plannedStartDate) {
-              takeReason = blockedBy
-                ? `ждёт очередь: после #${blockedBy.item.manualRank ?? "?"} «${blockedBy.item.title}»`
-                : "сдвиг из‑за загрузки очереди";
+              takeReason =
+                mode === "teamQueue" && blockedBy
+                  ? `ждёт очередь: после #${blockedBy.item.manualRank ?? "?"} «${blockedBy.item.title}»`
+                  : mode === "dense"
+                    ? "сдвиг: ищет свободную ёмкость по приоритету"
+                    : "сдвиг из‑за загрузки очереди";
               takeClass = "take-queue";
             } else if (s.startDate > planStart) {
-              takeReason = auto
+              takeReason = packing
                 ? `ждёт плановый старт ${formatDate(s.plannedStartDate)}`
                 : `плановый старт ${formatDate(s.plannedStartDate)}`;
               takeClass = "take-plan";
-            } else if (!auto) {
+            } else if (!packing) {
               takeReason = "по заданной дате старта (без сдвига очереди)";
             }
             const others = s.item.assignments
@@ -862,9 +943,11 @@ function queuesTestHtml(
     <div class="callout">
       Цифра — приоритет из Портфеля (1 = выше).
       ${
-        auto
-          ? "«Может взять с …» — фактическая дата с учётом очереди и планового старта."
-          : "Сейчас без автосдвига: даты = заданные старты; параллельная работа может перегрузить ёмкость."
+        mode === "teamQueue"
+          ? "Режим «Очередь команды»: «Может взять с …» — после FS-предшественника и не раньше планового старта."
+          : mode === "dense"
+            ? "Режим «Плотная параллель»: старт в ближайшую неделю со свободной ёмкостью (≥ плановый старт); разные команды на одной инициативе могут идти параллельно."
+            : "Режим «Как задано»: даты = заданные старты; параллельная работа может перегрузить ёмкость."
       }
       Полоска — окно работы в ближайшие 12 недель.
     </div>
@@ -1259,8 +1342,8 @@ function bindGanttBarEdit() {
                 : ""
             }`
           : `Оценка: <span class="accent">${oldSize}</span> (без изменений)`;
-        const autoNote = ui.autoCapacitySchedule
-          ? `<br/><span class="meta">Автосдвиг по ёмкости будет выключен, чтобы даты сохранились.</span>`
+        const autoNote = isCapacityScheduleMode(activeScheduleMode())
+          ? `<br/><span class="meta">Режим расписания станет «Как задано», чтобы даты сохранились.</span>`
           : "";
 
         const text = `${actionLabel} «<strong>${escapeHtml(team.name)}</strong>» — ${escapeHtml(item.title)}?<br/>
@@ -1285,9 +1368,8 @@ ${sizeLine}${autoNote}`;
                 }),
               };
             });
-            if (ui.autoCapacitySchedule) {
-              ui.autoCapacitySchedule = false;
-              saveAutoCapacitySchedule(false);
+            if (isCapacityScheduleMode(activeScheduleMode())) {
+              setScheduleMode("manual");
             }
             persist();
           },
@@ -1389,10 +1471,11 @@ function timelineHtml(
     return (yPx / Math.max(1, totalRowsPx)) * n;
   };
 
-  // Same-team queue deps: only meaningful when auto capacity queue shifts work.
+  // Same-team queue deps: FS arrows only for teamQueue mode.
   // Endpoints are approximate here; layoutGanttDepArrows() snaps to real bar rects.
   const depPaths: string[] = [];
-  if (ui.autoCapacitySchedule) {
+  const schedMode = activeScheduleMode();
+  if (schedMode === "teamQueue") {
     state.teams.forEach((team) => {
       const queue = slices
         .filter((s) => s.teamId === team.id)
@@ -1423,26 +1506,29 @@ function timelineHtml(
 
   const rowsHtml = visible
     .map(({ item, r }) => {
-      const depHint = ui.autoCapacitySchedule
-        ? (() => {
-            const preds = r.slices
-              .map((s) => {
-                const teamQueue = slices
-                  .filter((x) => x.teamId === s.teamId)
-                  .sort((a, b) => a.effectiveRank - b.effectiveRank);
-                const idx = teamQueue.findIndex((x) => x.item.id === item.id);
-                if (idx <= 0) return null;
-                const pred = teamQueue[idx - 1];
-                const t = teamById(s.teamId);
-                return `#${pred.item.manualRank} (${t?.name ?? s.teamId})`;
-              })
-              .filter(Boolean);
-            const uniqPreds = [...new Set(preds)];
-            return uniqPreds.length
-              ? `<div class="meta gantt-dep-meta" title="Очередь той же команды по приоритету (Finish-to-Start)">после ${uniqPreds.join(", ")}</div>`
-              : `<div class="meta gantt-dep-meta">старт очереди</div>`;
-          })()
-        : `<div class="meta gantt-dep-meta">как задано · без сдвига очереди</div>`;
+      const depHint =
+        schedMode === "teamQueue"
+          ? (() => {
+              const preds = r.slices
+                .map((s) => {
+                  const teamQueue = slices
+                    .filter((x) => x.teamId === s.teamId)
+                    .sort((a, b) => a.effectiveRank - b.effectiveRank);
+                  const idx = teamQueue.findIndex((x) => x.item.id === item.id);
+                  if (idx <= 0) return null;
+                  const pred = teamQueue[idx - 1];
+                  const t = teamById(s.teamId);
+                  return `#${pred.item.manualRank} (${t?.name ?? s.teamId})`;
+                })
+                .filter(Boolean);
+              const uniqPreds = [...new Set(preds)];
+              return uniqPreds.length
+                ? `<div class="meta gantt-dep-meta" title="Очередь той же команды по приоритету (Finish-to-Start)">после ${uniqPreds.join(", ")}</div>`
+                : `<div class="meta gantt-dep-meta">старт очереди</div>`;
+            })()
+          : schedMode === "dense"
+            ? `<div class="meta gantt-dep-meta" title="Плотная упаковка ёмкости; команды независимы">плотная параллель · ETA = max команд</div>`
+            : `<div class="meta gantt-dep-meta">как задано · без сдвига очереди</div>`;
 
       const packed = packedByItem.get(item.id) ?? [];
       const bars = packed
@@ -1522,9 +1608,11 @@ function timelineHtml(
           <h2>Сроки и зависимости по приоритету</h2>
           <p class="meta gantt-dep-legend" style="margin:0;flex-basis:100%">
             ${
-              ui.autoCapacitySchedule
+              schedMode === "teamQueue"
                 ? "Стрелки: очередь одной команды (цвет = команда), от конца полоски к началу следующей — не кросс-командные зависимости инициативы."
-                : "Включите «Автоматически сдвигать по ёмкости», чтобы увидеть стрелки очереди команды."
+                : schedMode === "dense"
+                  ? "Плотная параллель: полоски — ближайшая свободная ёмкость команды (≥ дата старта). Стрелки FS скрыты; разные команды на одной инициативе могут перекрываться."
+                  : "Режим «Как задано»: даты полосок = старты из карточек. Выберите «Очередь команды» в Настройках, чтобы увидеть стрелки FS."
             }
           </p>
           <div class="gantt-weeks-ctrl">
@@ -1583,9 +1671,11 @@ function timelineHtml(
         }
       </div>
       <p class="footer-note" style="padding:0 16px 16px;margin:0">${
-        ui.autoCapacitySchedule
+        schedMode === "teamQueue"
           ? "Шкала — недели от старта планирования (понедельник). Стрелки FS одной команды: правый край полоски → левый край следующей работы этой же команды в очереди по приоритету (цвет = команда; не связи между разными командами одной инициативы). Подпись «после #N (команда)» — кто стоит перед этой полоской в очереди. ETA = конец bottleneck-полоски."
-          : "Шкала — недели от старта планирования (понедельник). Даты полосок = заданные старты (без сдвига по ёмкости); стрелки очереди скрыты. ETA = конец bottleneck-полоски; параллельная работа может перегрузить команду."
+          : schedMode === "dense"
+            ? "Шкала — недели от старта планирования (понедельник). Режим «Плотная параллель»: каждая команда занимает ближайшие свободные слоты ёмкости по приоритету портфеля, без ожидания конца предыдущей работы той же команды, если слоты раньше свободны. ETA инициативы = max по командам (полоски разных команд могут перекрываться)."
+            : "Шкала — недели от старта планирования (понедельник). Даты полосок = заданные старты (без сдвига по ёмкости); стрелки очереди скрыты. ETA = конец bottleneck-полоски; параллельная работа может перегрузить команду."
       }${
         ui.showTeamLoad
           ? " Красная подсветка — загрузка команды по расписанию (как на Gantt) выше ёмкости в эту неделю."
@@ -1739,6 +1829,7 @@ function settingsHtml(rollups: ItemSchedule[]): string {
         </div>
       </div>
       ${teamsManageHtml()}
+      ${scheduleModeSettingsHtml()}
       <div class="callout">
         Диапазоны майок — <strong>сколько недель</strong> заложено в оценке проекта (S / M / L). Для плана берётся середина диапазона.
         Изменения сразу перестраивают ETA и Gantt.
@@ -2039,9 +2130,12 @@ function formatLiveEtaHtml(
     .map((a) => planOnlyEnd(a).end)
     .reduce((a, b) => (a > b ? a : b), "0000-00-00");
 
-  const modeNote = ui.autoCapacitySchedule
-    ? `ETA с учётом очереди = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`
-    : `ETA по заданным стартам = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`;
+  const modeNote =
+    activeScheduleMode() === "manual"
+      ? `ETA по заданным стартам = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`
+      : activeScheduleMode() === "teamQueue"
+        ? `ETA с учётом очереди команды = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`
+        : `ETA (плотная параллель) = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`;
 
   return (
     lines +
@@ -2793,12 +2887,21 @@ function bind() {
       render();
     });
 
+  const onScheduleModeChange = (value: string) => {
+    setScheduleMode(normalizeScheduleMode(value as ScheduleMode));
+    render();
+  };
   document
-    .querySelector<HTMLInputElement>("#autoCapacitySchedule")
-    ?.addEventListener("change", (e) => {
-      ui.autoCapacitySchedule = (e.target as HTMLInputElement).checked;
-      saveAutoCapacitySchedule(ui.autoCapacitySchedule);
-      render();
+    .querySelectorAll<HTMLSelectElement>("#scheduleModeGantt")
+    .forEach((el) => {
+      el.addEventListener("change", () => onScheduleModeChange(el.value));
+    });
+  document
+    .querySelectorAll<HTMLInputElement>('input[name="scheduleModeSettings"]')
+    .forEach((el) => {
+      el.addEventListener("change", () => {
+        if (el.checked) onScheduleModeChange(el.value);
+      });
     });
 
   bindOverloadExplain();
@@ -3466,7 +3569,8 @@ async function bootstrap() {
   state = await loadState();
   ui.hiddenCols = loadHiddenCols();
   ui.showTeamLoad = loadShowTeamLoad();
-  ui.autoCapacitySchedule = loadAutoCapacitySchedule();
+  ui.scheduleMode = loadScheduleMode();
+  saveScheduleMode(ui.scheduleMode);
   const before = state.items.map((i) => i.manualRank).join(",");
   state = { ...state, items: ensureUniquePriorities(state.items, szRanges()) };
   const after = state.items.map((i) => i.manualRank).join(",");
