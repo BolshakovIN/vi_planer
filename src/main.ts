@@ -96,10 +96,13 @@ interface UiState {
   /** Experimental per-team capacity / overload visualization */
   showTeamLoad: boolean;
   /**
-   * Gantt / queues schedule mode (Настройки).
+   * Preferred schedule mode (Настройки).
    * `manual` | `teamQueue` | `dense` — see SCHEDULE_MODE_META.
+   * Applied on Gantt/Очередь only when `scheduleModeEnabled` is on.
    */
   scheduleMode: ScheduleMode;
+  /** Gantt/Очередь: apply Settings mode; off → behave as «Как задано». */
+  scheduleModeEnabled: boolean;
   hiddenCols: HideablePortfolioCol[];
   colPickerOpen: boolean;
 }
@@ -135,6 +138,7 @@ const ui: UiState = {
   ganttWeeks: 16,
   showTeamLoad: false,
   scheduleMode: "dense",
+  scheduleModeEnabled: true,
   hiddenCols: [],
   colPickerOpen: false,
 };
@@ -279,6 +283,7 @@ const COL_WIDTH_KEY = "vi-planer-col-widths";
 const COL_VISIBILITY_KEY = "vi-planer-col-hidden";
 const SHOW_TEAM_LOAD_KEY = "vi-planer-show-team-load";
 const SCHEDULE_MODE_KEY = "vi-planer-schedule-mode";
+const SCHEDULE_MODE_ENABLED_KEY = "vi-planer-schedule-mode-enabled";
 /** Legacy boolean toggle; migrated once into SCHEDULE_MODE_KEY */
 const AUTO_CAPACITY_SCHEDULE_KEY = "vi-planer-auto-capacity-schedule";
 
@@ -401,9 +406,30 @@ function loadScheduleMode(): ScheduleMode {
 
 function saveScheduleMode(mode: ScheduleMode) {
   localStorage.setItem(SCHEDULE_MODE_KEY, mode);
+  syncLegacyAutoCapacityKey();
+}
+
+function loadScheduleModeEnabled(preferredMode: ScheduleMode): boolean {
+  try {
+    const raw = localStorage.getItem(SCHEDULE_MODE_ENABLED_KEY);
+    if (raw === "1") return true;
+    if (raw === "0") return false;
+    // Migrate: previous builds stored the live mode directly.
+    return isCapacityScheduleMode(preferredMode);
+  } catch {
+    return isCapacityScheduleMode(preferredMode);
+  }
+}
+
+function saveScheduleModeEnabled(enabled: boolean) {
+  localStorage.setItem(SCHEDULE_MODE_ENABLED_KEY, enabled ? "1" : "0");
+  syncLegacyAutoCapacityKey();
+}
+
+function syncLegacyAutoCapacityKey() {
   localStorage.setItem(
     AUTO_CAPACITY_SCHEDULE_KEY,
-    isCapacityScheduleMode(mode) ? "1" : "0"
+    isCapacityScheduleMode(activeScheduleMode()) ? "1" : "0"
   );
 }
 
@@ -412,7 +438,14 @@ function setScheduleMode(mode: ScheduleMode) {
   saveScheduleMode(ui.scheduleMode);
 }
 
+function setScheduleModeEnabled(enabled: boolean) {
+  ui.scheduleModeEnabled = enabled;
+  saveScheduleModeEnabled(enabled);
+}
+
+/** Effective mode for scheduling (Gantt / Очередь / ETA). */
 function activeScheduleMode(): ScheduleMode {
+  if (!ui.scheduleModeEnabled) return "manual";
   return normalizeScheduleMode(ui.scheduleMode);
 }
 
@@ -430,29 +463,23 @@ function showTeamLoadToggleHtml(): string {
     </label>`;
 }
 
-function scheduleModeSelectHtml(id: string): string {
-  const mode = activeScheduleMode();
-  const opts = (Object.keys(SCHEDULE_MODE_META) as ScheduleMode[])
-    .map((m) => {
-      const meta = SCHEDULE_MODE_META[m];
-      return `<option value="${m}" ${m === mode ? "selected" : ""} title="${escapeAttr(meta.hint)}">${meta.label}</option>`;
-    })
-    .join("");
+function scheduleModeEnableHtml(): string {
   return `
-    <label class="schedule-mode-select" title="${escapeAttr(SCHEDULE_MODE_META[mode].hint)}">
-      <span class="schedule-mode-label">Расписание</span>
-      <select id="${id}" class="schedule-mode-input" aria-label="Режим расписания">
-        ${opts}
-      </select>
+    <label class="schedule-mode-enable">
+      <span class="schedule-mode-enable-row">
+        <input type="checkbox" id="scheduleModeEnabled" ${ui.scheduleModeEnabled ? "checked" : ""} />
+        Оптимизировать под капасити команд
+      </span>
+      <span class="meta schedule-mode-enable-hint">Режим задаётся в Настройках</span>
     </label>`;
 }
 
 function scheduleTogglesHtml(): string {
-  return `<div class="schedule-toggles">${showTeamLoadToggleHtml()}${scheduleModeSelectHtml("scheduleModeGantt")}</div>`;
+  return `<div class="schedule-toggles">${showTeamLoadToggleHtml()}${scheduleModeEnableHtml()}</div>`;
 }
 
 function scheduleModeSettingsHtml(): string {
-  const mode = activeScheduleMode();
+  const mode = normalizeScheduleMode(ui.scheduleMode);
   const cards = (Object.keys(SCHEDULE_MODE_META) as ScheduleMode[])
     .map((m) => {
       const meta = SCHEDULE_MODE_META[m];
@@ -474,8 +501,8 @@ function scheduleModeSettingsHtml(): string {
       </div>
       <p class="meta" style="margin:0 0 12px">
         Как Gantt и «Очередь команд» ставят работы относительно ёмкости.
-        Режим также доступен на вкладках Gantt и Очередь. Ручной сдвиг полоски на Gantt
-        переключает на «Как задано».
+        На вкладках Gantt и Очередь включите «Оптимизировать под капасити команд».
+        Ручной сдвиг полоски на Gantt снимает оптимизацию (даты сохраняются как заданные).
       </p>
       <div class="schedule-mode-cards" id="scheduleModeSettings">${cards}</div>
     </div>`;
@@ -1343,7 +1370,7 @@ function bindGanttBarEdit() {
             }`
           : `Оценка: <span class="accent">${oldSize}</span> (без изменений)`;
         const autoNote = isCapacityScheduleMode(activeScheduleMode())
-          ? `<br/><span class="meta">Режим расписания станет «Как задано», чтобы даты сохранились.</span>`
+          ? `<br/><span class="meta">«Оптимизировать под капасити команд» будет снято, чтобы даты сохранились.</span>`
           : "";
 
         const text = `${actionLabel} «<strong>${escapeHtml(team.name)}</strong>» — ${escapeHtml(item.title)}?<br/>
@@ -1369,7 +1396,7 @@ ${sizeLine}${autoNote}`;
               };
             });
             if (isCapacityScheduleMode(activeScheduleMode())) {
-              setScheduleMode("manual");
+              setScheduleModeEnabled(false);
             }
             persist();
           },
@@ -1612,7 +1639,7 @@ function timelineHtml(
                 ? "Стрелки: очередь одной команды (цвет = команда), от конца полоски к началу следующей — не кросс-командные зависимости инициативы."
                 : schedMode === "dense"
                   ? "Плотная параллель: полоски — ближайшая свободная ёмкость команды (≥ дата старта). Стрелки FS скрыты; разные команды на одной инициативе могут перекрываться."
-                  : "Режим «Как задано»: даты полосок = старты из карточек. Выберите «Очередь команды» в Настройках, чтобы увидеть стрелки FS."
+                  : "Режим «Как задано»: даты полосок = старты из карточек. Включите «Оптимизировать под капасити команд» и выберите «Очередь команды» в Настройках, чтобы увидеть стрелки FS."
             }
           </p>
           <div class="gantt-weeks-ctrl">
@@ -2887,20 +2914,20 @@ function bind() {
       render();
     });
 
-  const onScheduleModeChange = (value: string) => {
-    setScheduleMode(normalizeScheduleMode(value as ScheduleMode));
-    render();
-  };
   document
-    .querySelectorAll<HTMLSelectElement>("#scheduleModeGantt")
-    .forEach((el) => {
-      el.addEventListener("change", () => onScheduleModeChange(el.value));
+    .querySelector<HTMLInputElement>("#scheduleModeEnabled")
+    ?.addEventListener("change", (e) => {
+      setScheduleModeEnabled((e.target as HTMLInputElement).checked);
+      render();
     });
+
   document
     .querySelectorAll<HTMLInputElement>('input[name="scheduleModeSettings"]')
     .forEach((el) => {
       el.addEventListener("change", () => {
-        if (el.checked) onScheduleModeChange(el.value);
+        if (!el.checked) return;
+        setScheduleMode(normalizeScheduleMode(el.value as ScheduleMode));
+        render();
       });
     });
 
@@ -3570,7 +3597,9 @@ async function bootstrap() {
   ui.hiddenCols = loadHiddenCols();
   ui.showTeamLoad = loadShowTeamLoad();
   ui.scheduleMode = loadScheduleMode();
+  ui.scheduleModeEnabled = loadScheduleModeEnabled(ui.scheduleMode);
   saveScheduleMode(ui.scheduleMode);
+  saveScheduleModeEnabled(ui.scheduleModeEnabled);
   const before = state.items.map((i) => i.manualRank).join(",");
   state = { ...state, items: ensureUniquePriorities(state.items, szRanges()) };
   const after = state.items.map((i) => i.manualRank).join(",");

@@ -1748,10 +1748,10 @@ body.prio-dragging {
   cursor: pointer;
 }
 
-.schedule-mode-select {
+.schedule-mode-enable {
   display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
   font-size: 12px;
   font-weight: 600;
   color: var(--ink);
@@ -1759,21 +1759,23 @@ body.prio-dragging {
   user-select: none;
 }
 
-.schedule-mode-label {
-  white-space: nowrap;
+.schedule-mode-enable-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.schedule-mode-input {
-  font: inherit;
-  font-weight: 600;
-  font-size: 12px;
-  padding: 4px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface, #fff);
-  color: var(--ink);
+.schedule-mode-enable input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
   cursor: pointer;
-  max-width: 11.5rem;
+  flex-shrink: 0;
+}
+
+.schedule-mode-enable-hint {
+  margin-left: 24px;
+  font-weight: 500;
 }
 
 .schedule-mode-cards {
