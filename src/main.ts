@@ -1095,7 +1095,8 @@ function timelineHtml(
   // Equal row height keeps dep SVG Y mapping aligned with DOM rows
   const trackH =
     TRACK_PAD * 2 + maxLanes * BAR_H + Math.max(0, maxLanes - 1) * BAR_GAP;
-  const rowH = Math.max(58, trackH);
+  // Label: prio (22) + 2 meta lines + gaps + pad/border ≈ 68px; keep SVG Y in sync
+  const rowH = Math.max(68, trackH);
   const totalRowsPx = n * rowH + Math.max(0, n - 1) * ROW_GAP;
   const trackOffsetY = (rowH - trackH) / 2;
 
