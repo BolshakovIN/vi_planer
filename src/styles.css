@@ -609,6 +609,32 @@ table {
   padding: 0 8px;
 }
 
+.resizable-th .th-label.th-label-stack {
+  white-space: normal;
+  line-height: 1.15;
+  text-overflow: clip;
+}
+
+.resizable-th .th-unit {
+  display: block;
+  margin-top: 1px;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--muted);
+}
+
+th.finance-cell {
+  white-space: normal;
+  text-align: right;
+  vertical-align: middle;
+}
+
+th.finance-cell .th-label {
+  text-align: right;
+}
+
 .portfolio-table thead th.prio-cell {
   text-align: center;
 }

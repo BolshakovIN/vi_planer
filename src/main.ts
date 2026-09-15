@@ -349,12 +349,13 @@ const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
   teams: "Команды (оценка · старт)",
   status: "Статус",
   rice: "RICE",
-  cashFlow: "ЧП",
-  roi: "ROI",
+  cashFlow: "ЧП, млрд ₽",
+  roi: "ROI, %",
   estimate: "Маечная оценка",
   eta: "Дата завершения",
 };
 
+/** Narrow metric cols; keep finance compact so the table does not explode horizontally. */
 const PORTFOLIO_COL_DEFAULTS: Record<PortfolioCol, number> = {
   priority: 96,
   type: 118,
@@ -362,10 +363,16 @@ const PORTFOLIO_COL_DEFAULTS: Record<PortfolioCol, number> = {
   teams: 220,
   status: 130,
   rice: 72,
-  cashFlow: 110,
-  roi: 110,
+  cashFlow: 84,
+  roi: 76,
   estimate: 120,
   eta: 168,
+};
+
+/** Labels used only for min-width measurement (stacked unit lines must not widen cols). */
+const PORTFOLIO_COL_MEASURE_LABELS: Partial<Record<PortfolioCol, string>> = {
+  cashFlow: "ЧП",
+  roi: "ROI, %",
 };
 
 function loadColWidths(): Partial<Record<PortfolioCol, number>> {
@@ -376,6 +383,17 @@ function loadColWidths(): Partial<Record<PortfolioCol, number>> {
     if (parsed.wsjf != null && parsed.rice == null) {
       parsed.rice = parsed.wsjf;
       delete parsed.wsjf;
+    }
+    // Drop exact prior finance defaults (110) from full-₽ era so new narrow defaults apply.
+    let migrated = false;
+    for (const key of ["cashFlow", "roi"] as const) {
+      if (parsed[key] === 110) {
+        delete parsed[key];
+        migrated = true;
+      }
+    }
+    if (migrated) {
+      localStorage.setItem(COL_WIDTH_KEY, JSON.stringify(parsed));
     }
     return parsed as Partial<Record<PortfolioCol, number>>;
   } catch {
@@ -557,6 +575,10 @@ function setColVisible(col: HideablePortfolioCol, visible: boolean) {
 
 const colMinWidthCache: Partial<Record<PortfolioCol, number>> = {};
 
+function measureLabelForCol(col: PortfolioCol): string {
+  return PORTFOLIO_COL_MEASURE_LABELS[col] ?? PORTFOLIO_COL_LABELS[col];
+}
+
 function measureColMinWidth(label: string, col?: PortfolioCol): number {
   if (col && colMinWidthCache[col] != null) return colMinWidthCache[col]!;
   const probe = document.createElement("span");
@@ -574,7 +596,7 @@ function measureColMinWidth(label: string, col?: PortfolioCol): number {
 
 function colWidthStyle(col: PortfolioCol): string {
   const stored = loadColWidths()[col];
-  const min = measureColMinWidth(PORTFOLIO_COL_LABELS[col], col);
+  const min = measureColMinWidth(measureLabelForCol(col), col);
   const width = Math.max(min, stored ?? PORTFOLIO_COL_DEFAULTS[col]);
   return `width:${width}px;min-width:${min}px`;
 }
@@ -584,6 +606,7 @@ function resizableTh(
   col: PortfolioCol,
   extraClass = "",
   dataSort?: SortKey,
+  unit?: string,
 ): string {
   const active = dataSort != null && ui.sortKey === dataSort;
   const arrow =
@@ -594,7 +617,11 @@ function resizableTh(
   const hiddenCls = isColVisible(col) ? "" : " col-hidden";
   const sortAttr = dataSort ? ` data-sort="${dataSort}"` : "";
   const titleAttr = dataSort ? ` title="Сортировать"` : "";
-  return `<th class="resizable-th ${sortCls}${hiddenCls} ${extraClass}" data-col="${col}"${sortAttr}${titleAttr} style="${colWidthStyle(col)}"><span class="th-label">${label}${arrow}</span><span class="col-resize" data-col-resize="${col}" title="Изменить ширину"></span></th>`;
+  const stackCls = unit ? " th-label-stack" : "";
+  const labelHtml = unit
+    ? `<span class="th-stack">${label}${arrow}</span><span class="th-unit">${unit}</span>`
+    : `${label}${arrow}`;
+  return `<th class="resizable-th ${sortCls}${hiddenCls} ${extraClass}" data-col="${col}"${sortAttr}${titleAttr} style="${colWidthStyle(col)}"><span class="th-label${stackCls}">${labelHtml}</span><span class="col-resize" data-col-resize="${col}" title="Изменить ширину"></span></th>`;
 }
 
 function sortHeader(label: string, key: SortKey, extraClass = ""): string {
@@ -628,8 +655,8 @@ function portfolioTheadCellsHtml(): string {
     ${resizableTh("Команды (оценка · старт)", "teams")}
     ${resizableTh("Статус", "status", "status-cell")}
     ${sortHeader("RICE", "rice", "rice-cell")}
-    ${resizableTh("ЧП", "cashFlow", "finance-cell")}
-    ${resizableTh("ROI", "roi", "finance-cell")}
+    ${resizableTh("ЧП", "cashFlow", "finance-cell", undefined, "млрд ₽")}
+    ${resizableTh("ROI, %", "roi", "finance-cell")}
     ${sortHeader("Маечная оценка", "estimate", "estimate-cell")}
     ${sortHeader("Дата завершения", "eta")}
   `;
@@ -773,8 +800,8 @@ function columnsHelpHtml(): string {
         <div><span class="cols-help-k">Команды</span> — кто делает, маечная оценка (S/M/L) и план старта</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
         <div><span class="cols-help-k">RICE</span> — (Охват × Влияние × Уверенность) / Трудозатраты (чел·нед по маечной оценке)</div>
-        <div><span class="cols-help-k">ЧП</span> — чистая прибыль за 12 мес., млрд ₽ (карточка функциональности)</div>
-        <div><span class="cols-help-k">ROI</span> — ROI за 12 мес., % (карточка функциональности)</div>
+        <div><span class="cols-help-k">ЧП, млрд ₽</span> — чистая прибыль за 12 мес. (карточка функциональности)</div>
+        <div><span class="cols-help-k">ROI, %</span> — ROI за 12 мес. (карточка функциональности)</div>
         <div><span class="cols-help-k">Маечная оценка</span> — S / M / L (недели в Настройках)</div>
         <div><span class="cols-help-k">Дата завершения</span> — когда закончила последняя команда (bottleneck)</div>
       </div>
@@ -4441,7 +4468,7 @@ function bindPortfolioColResize() {
       const th = handle.closest<HTMLTableCellElement>("th");
       if (!th) return;
 
-      const min = measureColMinWidth(PORTFOLIO_COL_LABELS[col], col);
+      const min = measureColMinWidth(measureLabelForCol(col), col);
       const startX = e.clientX;
       const startW = th.getBoundingClientRect().width;
       const pointerId = e.pointerId;
