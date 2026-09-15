@@ -1584,6 +1584,10 @@ function timelineHtml(
 
       const packed = packedByItem.get(item.id) ?? [];
       const { trackH, rowH } = rowMetrics[rowIdx];
+      const containerName = productProjectName(item.backlog);
+      const etaMetaLine = containerName
+        ? `${escapeHtml(containerName)} · ETA ${formatDate(r.endDate)}`
+        : `ETA ${formatDate(r.endDate)}`;
       const bars = packed
         .map(({ slice: s, lane: barLane }) => {
           const team = teamById(s.teamId);
@@ -1607,7 +1611,7 @@ function timelineHtml(
       <div class="gantt-row" style="--gantt-row-h:${rowH}px;--gantt-track-h:${trackH}px">
         <div class="gantt-label">
           <div class="name"><span class="prio-mini">${item.manualRank ?? "—"}</span> ${escapeHtml(item.title)}</div>
-          <div class="meta">${item.type === "product" ? "Продукт" : "Проект"} · ETA ${formatDate(r.endDate)}</div>
+          <div class="meta">${etaMetaLine}</div>
           ${depHint}
         </div>
         <div class="gantt-track gantt-track-multi" style="background:${trackBg}">${bars}</div>

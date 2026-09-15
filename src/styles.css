@@ -1125,7 +1125,8 @@ tr.clickable:hover td {
 
 .title-cell .meta {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
+  font-style: italic;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
