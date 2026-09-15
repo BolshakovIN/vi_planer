@@ -320,7 +320,9 @@ ${w}`}class Kr extends Error{constructor({message:e,code:t,cause:A,name:n}){var 
       <div class="panel-sticky">
         <div class="panel-header">
           <h2>Очередь команд — когда команда может взять задачу</h2>
-          ${oy()}
+          <div class="schedule-toolbar">
+            ${oy()}
+          </div>
         </div>
       </div>
       ${a}
@@ -367,7 +369,7 @@ ${W}${te}`;bo(e,le,()=>{Se.items=Se.items.map(oe=>oe.id!==A?oe:{...oe,assignment
           <p class="meta gantt-dep-legend" style="margin:0;flex-basis:100%">
             ${T==="teamQueue"?"Стрелки: очередь одной команды (цвет = команда), от конца полоски к началу следующей — не кросс-командные зависимости функциональности.":T==="maxUtilization"?"Максимальная утилизация ресурса: полоски одной функциональности стартуют вместе (параллельно ≥ даты старта). Стрелки FS скрыты; дата реализации = max по командам.":"Режим «Как задано»: даты полосок = старты из карточек. Выберите режим утилизации выше, чтобы сдвигать работы под ёмкость (и увидеть стрелки FS в последовательном режиме)."}
           </p>
-          <div class="gantt-weeks-ctrl">
+          <div class="schedule-toolbar">
             ${oy()}
             <div class="gantt-weeks-ctrl-right">
               <label for="ganttWeeks">Горизонт</label>
