@@ -953,7 +953,7 @@ th.sortable.sorted {
 }
 
 .modal-wide {
-  width: min(1120px, 100%);
+  width: min(1233px, 96vw);
 }
 
 @media (max-width: 640px) {
@@ -2053,7 +2053,8 @@ body.prio-dragging {
   line-height: 1.35;
 }
 
-.gantt-weeks-ctrl {
+/* Shared Gantt / Очередь toolbar row: mode buttons (+ optional horizon) */
+.schedule-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
