@@ -121,7 +121,7 @@ const SCHEDULE_MODE_META: Record<
   },
   maxUtilization: {
     label: "Максимальная утилизация ресурса",
-    hint: "Все команды одной инициативы стартуют вместе; ETA = max по командам.",
+    hint: "Все команды одной функциональности стартуют вместе; ETA = max по командам.",
   },
 };
 
@@ -320,7 +320,7 @@ const ALL_PORTFOLIO_COLS: PortfolioCol[] = [
 const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
   priority: "Приоритет",
   type: "Тип",
-  title: "Инициатива / исходный бэклог",
+  title: "Функциональность / исходный бэклог",
   teams: "Команды (майка · старт)",
   status: "Статус",
   rice: "RICE",
@@ -330,7 +330,7 @@ const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
 
 const PORTFOLIO_COL_DEFAULTS: Record<PortfolioCol, number> = {
   priority: 96,
-  type: 88,
+  type: 118,
   title: 260,
   teams: 220,
   status: 130,
@@ -560,7 +560,7 @@ function portfolioTheadCellsHtml(): string {
   return `
     ${sortHeader("Приоритет", "priority", "prio-cell")}
     ${resizableTh("Тип", "type", "type-cell")}
-    ${resizableTh("Инициатива / исходный бэклог", "title", "title-cell")}
+    ${resizableTh("Функциональность / исходный бэклог", "title", "title-cell")}
     ${resizableTh("Команды (оценка · старт)", "teams")}
     ${resizableTh("Статус", "status", "status-cell")}
     ${sortHeader("RICE", "rice", "rice-cell")}
@@ -679,14 +679,39 @@ function metricsHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string 
   `;
 }
 
+/**
+ * `backlog` seed convention: «Product backlog · Mobile» / «Projects backlog · Sales Ops».
+ * Last « · » segment = product/project container name (shown under Тип).
+ */
+function parseBacklogMeta(backlog: string): { stream: string; container: string } {
+  const parts = backlog
+    .split(" · ")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length >= 2) {
+    return {
+      stream: parts.slice(0, -1).join(" · "),
+      container: parts[parts.length - 1]!,
+    };
+  }
+  return { stream: backlog.trim(), container: "" };
+}
+
+function functionalitySubtitleHtml(item: WorkItem): string {
+  const { stream, container } = parseBacklogMeta(item.backlog);
+  const left = container ? stream : item.backlog;
+  const bits = [left, item.owner].filter((b) => b.trim());
+  return escapeHtml(bits.join(" · "));
+}
+
 function columnsHelpHtml(): string {
   return `
     <details class="callout callout-cols agenda">
       <summary class="agenda-summary">Адженда</summary>
       <div class="cols-help">
         <div><span class="cols-help-k">Приоритет</span> — сквозной ранг (1 = выше); тяните строку за ⋮⋮, чтобы переставить. Сортировка других колонок приоритет не меняет</div>
-        <div><span class="cols-help-k">Тип</span> — проект или продукт</div>
-        <div><span class="cols-help-k">Инициатива</span> — название, исходный бэклог и владелец</div>
+        <div><span class="cols-help-k">Тип</span> — продукт или проект и его название (контейнер функциональности)</div>
+        <div><span class="cols-help-k">Функциональность</span> — набор задач → бизнес-результат с эффектом; в ячейке — название, исходный бэклог и владелец</div>
         <div><span class="cols-help-k">Команды</span> — кто делает, майка (S/M/L) и план старта</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
         <div><span class="cols-help-k">RICE</span> — (Охват × Влияние × Уверенность) / Трудозатраты (чел·нед по майкам)</div>
@@ -708,6 +733,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
       const score = rice(item, szRanges());
       const total = totalEstimateWeeks(item, szRanges());
       const prio = item.manualRank ?? "—";
+      const { container } = parseBacklogMeta(item.backlog);
       const etaMeta = r
         ? `<div class="eta-teams">${r.slices
             .map((s) => {
@@ -741,11 +767,16 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           </td>
           <td${tdAttrs("type", "type-cell")}>
             <span class="badge badge-${item.type}">${item.type === "product" ? "Продукт" : "Проект"}</span>
+            ${
+              container
+                ? `<div class="type-container-name" title="Продукт или проект">${escapeHtml(container)}</div>`
+                : ""
+            }
             ${item.assignments.length > 1 ? `<div class="type-team-count">${item.assignments.length} команды</div>` : ""}
           </td>
           <td${tdAttrs("title", "title-cell")}>
             <div class="name">${escapeHtml(item.title)}</div>
-            <div class="meta">${escapeHtml(item.backlog)} · ${escapeHtml(item.owner)}</div>
+            <div class="meta">${functionalitySubtitleHtml(item)}</div>
           </td>
           <td${tdAttrs("teams", "teams-cell")}>${teamsCellHtml(item)}</td>
           <td${tdAttrs("status", "status-cell")}><span class="badge badge-status-${item.status}">${statusLabel(item.status)}</span></td>
@@ -796,7 +827,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
             </select>
             ${portfolioColPickerHtml()}
             <button class="btn" id="resetFilters" title="Сбросить фильтры, сортировку и колонки">Сбросить фильтры</button>
-            <button class="btn btn-primary" id="addItem">+ Инициатива</button>
+            <button class="btn btn-primary" id="addItem">+ Функциональность</button>
           </div>
         </div>
         <div class="table-scroll-top" aria-hidden="true"><div class="table-scroll-top-inner"></div></div>
@@ -871,7 +902,7 @@ function queuesTestHtml(
                 mode === "teamQueue" && blockedBy
                   ? `ждёт очередь: после #${blockedBy.item.manualRank ?? "?"} «${blockedBy.item.title}»`
                   : mode === "maxUtilization"
-                    ? "сдвиг: ждёт общий старт всех команд инициативы (ёмкость)"
+                    ? "сдвиг: ждёт общий старт всех команд функциональности (ёмкость)"
                     : "сдвиг из‑за загрузки очереди";
               takeClass = "take-queue";
             } else if (s.startDate > planStart) {
@@ -951,7 +982,7 @@ function queuesTestHtml(
         mode === "teamQueue"
           ? "Режим «Последовательная утилизация ресурса»: «Может взять с …» — после FS-предшественника и не раньше планового старта."
           : mode === "maxUtilization"
-            ? "Режим «Максимальная утилизация ресурса»: все команды одной инициативы стартуют в одну неделю (параллельно ≥ плановый старт); приоритет портфеля при распределении ёмкости."
+            ? "Режим «Максимальная утилизация ресурса»: все команды одной функциональности стартуют в одну неделю (параллельно ≥ плановый старт); приоритет портфеля при распределении ёмкости."
             : "Режим «Как задано»: даты = заданные старты; параллельная работа может перегрузить ёмкость."
       }
       Полоска — окно работы в ближайшие 12 недель.
@@ -1549,7 +1580,7 @@ function timelineHtml(
                 : `<div class="meta gantt-dep-meta">старт очереди</div>`;
             })()
           : schedMode === "maxUtilization"
-            ? `<div class="meta gantt-dep-meta" title="Параллельный старт команд инициативы по приоритету">макс. утилизация · ETA = max команд</div>`
+            ? `<div class="meta gantt-dep-meta" title="Параллельный старт команд функциональности по приоритету">макс. утилизация · ETA = max команд</div>`
             : `<div class="meta gantt-dep-meta">как задано · без сдвига очереди</div>`;
 
       const packed = packedByItem.get(item.id) ?? [];
@@ -1632,9 +1663,9 @@ function timelineHtml(
           <p class="meta gantt-dep-legend" style="margin:0;flex-basis:100%">
             ${
               schedMode === "teamQueue"
-                ? "Стрелки: очередь одной команды (цвет = команда), от конца полоски к началу следующей — не кросс-командные зависимости инициативы."
+                ? "Стрелки: очередь одной команды (цвет = команда), от конца полоски к началу следующей — не кросс-командные зависимости функциональности."
                 : schedMode === "maxUtilization"
-                  ? "Максимальная утилизация ресурса: полоски одной инициативы стартуют вместе (параллельно ≥ даты старта). Стрелки FS скрыты; ETA = max по командам."
+                  ? "Максимальная утилизация ресурса: полоски одной функциональности стартуют вместе (параллельно ≥ даты старта). Стрелки FS скрыты; ETA = max по командам."
                   : "Режим «Как задано»: даты полосок = старты из карточек. Выберите режим утилизации выше, чтобы сдвигать работы под ёмкость (и увидеть стрелки FS в последовательном режиме)."
             }
           </p>
@@ -1686,14 +1717,14 @@ function timelineHtml(
             <div class="gantt-capacity-rows">${capacityRows}</div>
           </div>
         </div>`
-            : `<div class="empty">Нет активных инициатив</div>`
+            : `<div class="empty">Нет активных функциональностей</div>`
         }
       </div>
       <p class="footer-note" style="padding:0 16px 16px;margin:0">${
         schedMode === "teamQueue"
-          ? "Шкала — недели от старта планирования (понедельник). Стрелки FS одной команды: правый край полоски → левый край следующей работы этой же команды в очереди по приоритету (цвет = команда; не связи между разными командами одной инициативы). Подпись «после #N (команда)» — кто стоит перед этой полоской в очереди. ETA = конец bottleneck-полоски."
+          ? "Шкала — недели от старта планирования (понедельник). Стрелки FS одной команды: правый край полоски → левый край следующей работы этой же команды в очереди по приоритету (цвет = команда; не связи между разными командами одной функциональности). Подпись «после #N (команда)» — кто стоит перед этой полоской в очереди. ETA = конец bottleneck-полоски."
           : schedMode === "maxUtilization"
-            ? "Шкала — недели от старта планирования (понедельник). Режим «Максимальная утилизация ресурса»: инициативы по приоритету; все команды одной инициативы делят общий старт и идут параллельно (ETA = max по командам), без FS-очереди, которая раздвигает сроки. Ниже по приоритету ждут свободной ёмкости, но при старте тоже параллельны."
+            ? "Шкала — недели от старта планирования (понедельник). Режим «Максимальная утилизация ресурса»: функциональности по приоритету; все команды одной функциональности делят общий старт и идут параллельно (ETA = max по командам), без FS-очереди, которая раздвигает сроки. Ниже по приоритету ждут свободной ёмкости, но при старте тоже параллельны."
             : "Шкала — недели от старта планирования (понедельник). Даты полосок = заданные старты (без сдвига по ёмкости); стрелки очереди скрыты. ETA = конец bottleneck-полоски; параллельная работа может перегрузить команду."
       } Красная подсветка — загрузка команды по расписанию (как на Gantt) выше ёмкости в эту неделю.</p>
     </div>
@@ -1891,7 +1922,7 @@ function teamsManageHtml(): string {
   return `
     <div class="callout">
       <strong>Ёмкость</strong> — сколько человеко-недель команда может отдать за календарную неделю.
-      Оценки инициатив задаются майками (недели — в блоке ниже).
+      Оценки функциональностей задаются майками (недели — в блоке ниже).
     </div>
     <div class="panel panel-sticky-host">
       <div class="panel-sticky">
@@ -1998,7 +2029,7 @@ function settingsHtml(rollups: ItemSchedule[]): string {
             <strong class="mono" id="settingsHorizon">${horizon} нед.</strong>
           </div>
           <div class="settings-preview-row">
-            <span>Активных инициатив</span>
+            <span>Активных функциональностей</span>
             <strong class="mono">${active.length}</strong>
           </div>
           <div class="settings-preview-row">
@@ -2145,7 +2176,7 @@ function editorHtml(item: WorkItem | null): string {
     <div class="modal-backdrop" id="modal">
       <div class="modal modal-wide">
         <div class="modal-head">
-          <h3>${item ? "Карточка инициативы" : "Новая инициатива"}</h3>
+          <h3>${item ? "Карточка функциональности" : "Новая функциональность"}</h3>
           <div class="modal-head-actions">
             <button class="btn" id="closeModal2">Отмена</button>
             <button class="btn btn-ghost" id="closeModal">Закрыть</button>
@@ -2153,8 +2184,9 @@ function editorHtml(item: WorkItem | null): string {
           </div>
         </div>
         <div class="modal-body">
+          <p class="meta modal-entity-hint">Функциональность — задачи → бизнес-результат с эффектом; живёт в продукте или проекте.</p>
           <div class="field">
-            <label>Название</label>
+            <label>Функциональность</label>
             <input id="f_title" value="${escapeAttr(draft.title)}" />
           </div>
           <div class="grid-2">
@@ -2167,7 +2199,8 @@ function editorHtml(item: WorkItem | null): string {
             </div>
             <div class="field">
               <label>Исходный бэклог</label>
-              <input id="f_backlog" value="${escapeAttr(draft.backlog)}" />
+              <input id="f_backlog" value="${escapeAttr(draft.backlog)}" placeholder="Product backlog · Mobile" />
+              <div class="meta" style="margin-top:6px">Формат «бэклог · имя»: после · — продукт/проект (колонка Тип).</div>
             </div>
             <div class="field">
               <label>Статус</label>
@@ -2361,7 +2394,7 @@ function overloadExplainBodyHtml(
               `<li><span class="overload-item-title">${escapeHtml(it.title)}</span> <span class="meta mono">${it.contributionPw.toFixed(1)} чел·нед</span></li>`
           )
           .join("")}</ul>`
-      : `<p class="meta">Нет детализации инициатив за эту неделю.</p>`;
+      : `<p class="meta">Нет детализации функциональностей за эту неделю.</p>`;
 
   return `
     <div class="overload-pop-head">
@@ -2371,7 +2404,7 @@ function overloadExplainBodyHtml(
     <div class="meta">${overloadWeekLabel(week)}</div>
     <div class="overload-load mono">Загрузка <strong>${used.toFixed(1)}</strong> / ${cap} чел·нед</div>
     <p class="overload-why">По расписанию (те же интервалы, что полоски Gantt) спрос команды на этой неделе превышает ёмкость (${cap} чел·нед/нед).</p>
-    <div class="overload-contrib-label meta">Вклад инициатив</div>
+    <div class="overload-contrib-label meta">Вклад функциональностей</div>
     ${itemList}
   `;
 }
@@ -2681,7 +2714,7 @@ function confirmDeleteTeam(teamId: string, anchor: HTMLElement) {
   const cap = `${team.capacityPw} чел·нед/нед`;
   const text =
     n > 0
-      ? `Удалить «<strong>${escapeHtml(team.name)}</strong>» (${cap}/нед)?<br/>Снимется с <span class="accent">${n}</span> инициатив. Карточки без команд тоже удалятся.`
+      ? `Удалить «<strong>${escapeHtml(team.name)}</strong>» (${cap}/нед)?<br/>Снимется с <span class="accent">${n}</span> функциональностей. Карточки без команд тоже удалятся.`
       : `Удалить «<strong>${escapeHtml(team.name)}</strong>» (${cap}/нед)?`;
   askAppConfirm(anchor, text, () => removeTeam(teamId), () => undefined, {
     wide: true,
@@ -2905,7 +2938,7 @@ function render() {
           <button class="btn" id="exportPdfBtn">Экспорт PDF</button>
         </div>
         <p class="subtitle">
-          Единый портфель проектов и продуктов: сквозной RICE, несколько команд на инициативу
+          Единый портфель проектов и продуктов: сквозной RICE, несколько команд на функциональность
           со своими оценками и ETA, bottleneck-срок готовности.
         </p>
       </div>
