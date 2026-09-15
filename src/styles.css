@@ -1209,11 +1209,28 @@ body.prio-dragging {
   vertical-align: middle !important;
 }
 
+.type-container-name {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 .type-team-count {
   margin-top: 4px;
   font-size: 10px;
   color: var(--muted);
   line-height: 1.2;
+}
+
+.modal-entity-hint {
+  margin: 0 0 12px;
+  line-height: 1.35;
 }
 
 .prio-input,

@@ -155,7 +155,11 @@ export interface WorkItem {
   id: string;
   title: string;
   type: ItemType;
-  /** Original backlog / stream name */
+  /**
+   * Original backlog / stream name.
+   * Convention: «Product backlog · Mobile» / «Projects backlog · Sales Ops» —
+   * the segment after « · » is the product/project container (UI: under Тип).
+   */
   backlog: string;
   /** One or more teams; each has its own remaining effort */
   assignments: TeamAssignment[];
