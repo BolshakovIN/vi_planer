@@ -1680,6 +1680,16 @@ const TEAM_COLORS = [
   "#546e7a",
   "#b71c1c",
   "#f57c00",
+  "#00695c",
+  "#2e7d32",
+  "#37474f",
+  "#1a237e",
+  "#827717",
+  "#00838f",
+  "#1565c0",
+  "#bf360c",
+  "#33691e",
+  "#263238",
 ];
 
 /** Draft color for the «new team» row (palette pick before save). */

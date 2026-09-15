@@ -1434,6 +1434,7 @@ body.prio-dragging {
 .team-color-palette {
   display: grid;
   grid-template-columns: repeat(5, 22px);
+  grid-template-rows: repeat(4, 22px);
   gap: 6px;
 }
 
