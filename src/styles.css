@@ -826,7 +826,7 @@ th.sortable.sorted {
 .team-assign-check input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  margin: 0 0 0 auto;
+  margin: 0;
   padding: 0;
   flex: 0 0 16px;
   align-self: center;
