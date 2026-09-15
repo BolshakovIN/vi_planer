@@ -1682,6 +1682,9 @@ const TEAM_COLORS = [
   "#f57c00",
 ];
 
+/** Draft color for the «new team» row (palette pick before save). */
+let draftNewTeamColor: string | null = null;
+
 function nextTeamColor(): string {
   const used = new Set(state.teams.map((t) => t.color));
   return (
@@ -1690,12 +1693,134 @@ function nextTeamColor(): string {
   );
 }
 
+function newTeamColor(): string {
+  return draftNewTeamColor ?? nextTeamColor();
+}
+
+function teamColorBtnHtml(
+  color: string,
+  opts: { teamId?: string; id?: string }
+): string {
+  const dataTeam = opts.teamId
+    ? ` data-team-color="${escapeAttr(opts.teamId)}"`
+    : ` data-new-team-color`;
+  const idAttr = opts.id ? ` id="${escapeAttr(opts.id)}"` : "";
+  return `
+    <button
+      type="button"
+      class="team-color-btn"${idAttr}${dataTeam}
+      aria-label="Цвет команды"
+      title="Выбрать цвет"
+      aria-haspopup="dialog"
+    ><span class="team-dot" style="background:${escapeAttr(color)}"></span></button>
+  `;
+}
+
+function closeTeamColorPop() {
+  document.querySelectorAll(".team-color-btn.is-open").forEach((el) => {
+    el.classList.remove("is-open");
+    el.setAttribute("aria-expanded", "false");
+  });
+  document.querySelector("#teamColorPop")?.remove();
+}
+
+function openTeamColorPicker(
+  anchor: HTMLElement,
+  currentColor: string,
+  onSelect: (color: string) => void
+) {
+  closeAppPop();
+  closeTeamColorPop();
+  closeOverloadPop();
+
+  anchor.classList.add("is-open");
+  anchor.setAttribute("aria-expanded", "true");
+
+  const pop = document.createElement("div");
+  pop.id = "teamColorPop";
+  pop.className = "team-color-pop";
+  pop.setAttribute("role", "dialog");
+  pop.setAttribute("aria-label", "Палитра цветов команды");
+  pop.innerHTML = `
+    <div class="team-color-palette">
+      ${TEAM_COLORS.map((c) => {
+        const selected = c.toLowerCase() === currentColor.toLowerCase();
+        return `<button
+          type="button"
+          class="team-color-swatch${selected ? " is-selected" : ""}"
+          data-pick-color="${escapeAttr(c)}"
+          style="background:${escapeAttr(c)}"
+          title="${escapeAttr(c)}"
+          aria-label="Цвет ${escapeAttr(c)}"
+          aria-pressed="${selected ? "true" : "false"}"
+        ></button>`;
+      }).join("")}
+    </div>
+  `;
+  document.body.appendChild(pop);
+
+  const place = () => {
+    const rect = anchor.getBoundingClientRect();
+    const popRect = pop.getBoundingClientRect();
+    let left = rect.left;
+    let top = rect.bottom + 6;
+    if (left + popRect.width > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - popRect.width - 8);
+    }
+    if (top + popRect.height > window.innerHeight - 8) {
+      top = Math.max(8, rect.top - popRect.height - 6);
+    }
+    pop.style.left = `${left}px`;
+    pop.style.top = `${top}px`;
+  };
+  place();
+
+  const onScroll = () => place();
+  window.addEventListener("scroll", onScroll, true);
+  window.addEventListener("resize", onScroll);
+
+  const cleanup = () => {
+    window.removeEventListener("scroll", onScroll, true);
+    window.removeEventListener("resize", onScroll);
+    document.removeEventListener("mousedown", onDoc, true);
+    document.removeEventListener("keydown", onKey, true);
+  };
+
+  const finish = () => {
+    cleanup();
+    closeTeamColorPop();
+  };
+
+  const onDoc = (e: MouseEvent) => {
+    const t = e.target as Node;
+    if (pop.contains(t) || anchor.contains(t)) return;
+    finish();
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      finish();
+    }
+  };
+  document.addEventListener("mousedown", onDoc, true);
+  document.addEventListener("keydown", onKey, true);
+
+  pop.querySelectorAll<HTMLButtonElement>("[data-pick-color]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const color = btn.dataset.pickColor!;
+      finish();
+      onSelect(color);
+    });
+  });
+}
+
 function teamsManageHtml(): string {
   const rows = state.teams
     .map(
       (t) => `
       <div class="capacity-row" data-team-row="${t.id}">
-        <span class="team-dot" style="background:${t.color}"></span>
+        ${teamColorBtnHtml(t.color, { teamId: t.id })}
         <input
           class="team-name-input"
           type="text"
@@ -1737,7 +1862,7 @@ function teamsManageHtml(): string {
         ${rows || `<div class="empty">Нет команд — добавьте первую ниже</div>`}
       </div>
       <div class="team-add-bar" id="teamAddBar">
-        <span class="team-dot" id="newTeamDot" style="background:${nextTeamColor()}"></span>
+        ${teamColorBtnHtml(newTeamColor(), { id: "newTeamColorBtn" })}
         <input id="newTeamName" type="text" placeholder="Название новой команды" />
         <button class="btn btn-primary" id="saveNewTeam">+ Команда</button>
         <button class="btn" id="cancelNewTeam">Отмена</button>
@@ -2151,6 +2276,7 @@ function closeAppPop() {
       el.classList.remove("confirm-ask", "gantt-bar-confirm", "prio-row-confirm");
     });
   document.querySelector("#appConfirmPop")?.remove();
+  closeTeamColorPop();
 }
 
 function closePrioPop() {
@@ -3292,6 +3418,42 @@ function bind() {
     }
   );
 
+  document.querySelectorAll<HTMLButtonElement>("[data-team-color]").forEach(
+    (btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.teamColor!;
+        const team = state.teams.find((t) => t.id === id);
+        if (!team) return;
+        if (btn.classList.contains("is-open")) {
+          closeTeamColorPop();
+          return;
+        }
+        openTeamColorPicker(btn, team.color, (color) => {
+          if (team.color === color) return;
+          team.color = color;
+          persist();
+        });
+      });
+    }
+  );
+
+  document
+    .querySelector<HTMLButtonElement>("[data-new-team-color]")
+    ?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const btn = e.currentTarget as HTMLButtonElement;
+      if (btn.classList.contains("is-open")) {
+        closeTeamColorPop();
+        return;
+      }
+      openTeamColorPicker(btn, newTeamColor(), (color) => {
+        draftNewTeamColor = color;
+        const dot = btn.querySelector<HTMLElement>(".team-dot");
+        if (dot) dot.style.background = color;
+      });
+    });
+
   const createTeam = () => {
     const nameInput = document.querySelector<HTMLInputElement>("#newTeamName");
     const name = nameInput?.value.trim() || "";
@@ -3303,8 +3465,9 @@ function bind() {
       id: uid("team"),
       name,
       capacityPw: 3,
-      color: nextTeamColor(),
+      color: newTeamColor(),
     });
+    draftNewTeamColor = null;
     if (nameInput) nameInput.value = "";
     persist();
   };
@@ -3312,6 +3475,10 @@ function bind() {
   document.querySelector("#cancelNewTeam")?.addEventListener("click", () => {
     const nameInput = document.querySelector<HTMLInputElement>("#newTeamName");
     if (nameInput) nameInput.value = "";
+    draftNewTeamColor = null;
+    const btn = document.querySelector<HTMLButtonElement>("[data-new-team-color]");
+    const dot = btn?.querySelector<HTMLElement>(".team-dot");
+    if (dot) dot.style.background = nextTeamColor();
     nameInput?.focus();
   });
 
