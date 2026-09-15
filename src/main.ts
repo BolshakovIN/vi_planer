@@ -1030,7 +1030,9 @@ function queuesTestHtml(
       <div class="panel-sticky">
         <div class="panel-header">
           <h2>Очередь команд — когда команда может взять задачу</h2>
-          ${scheduleTogglesHtml()}
+          <div class="schedule-toolbar">
+            ${scheduleTogglesHtml()}
+          </div>
         </div>
       </div>
       ${cards}
@@ -1888,7 +1890,7 @@ function timelineHtml(
                   : "Режим «Как задано»: даты полосок = старты из карточек. Выберите режим утилизации выше, чтобы сдвигать работы под ёмкость (и увидеть стрелки FS в последовательном режиме)."
             }
           </p>
-          <div class="gantt-weeks-ctrl">
+          <div class="schedule-toolbar">
             ${scheduleTogglesHtml()}
             <div class="gantt-weeks-ctrl-right">
               <label for="ganttWeeks">Горизонт</label>
