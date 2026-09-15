@@ -2187,38 +2187,40 @@ function editorHtml(item: WorkItem | null): string {
           </div>
         </div>
         <div class="modal-body">
-          <p class="meta modal-entity-hint">Функциональность — задачи → бизнес-результат с эффектом; живёт в продукте или проекте.</p>
-          <div class="field">
-            <label>Функциональность</label>
-            <input id="f_title" value="${escapeAttr(draft.title)}" />
-          </div>
-          <div class="grid-2">
+          <div class="modal-meta-fields">
+            <p class="meta modal-entity-hint">Функциональность — задачи → бизнес-результат с эффектом; живёт в продукте или проекте.</p>
             <div class="field">
-              <label>Тип</label>
-              <select id="f_type">
-                <option value="product" ${draft.type === "product" ? "selected" : ""}>Продукт</option>
-                <option value="project" ${draft.type === "project" ? "selected" : ""}>Проект</option>
-              </select>
+              <label>Функциональность</label>
+              <input id="f_title" value="${escapeAttr(draft.title)}" />
             </div>
-            <div class="field">
-              <label>Название проекта / продукта</label>
-              <input id="f_backlog" value="${escapeAttr(draft.backlog)}" placeholder="ЛК B2B" />
-              <div class="meta">Название продукта или проекта, в котором живёт функциональность; показывается в колонке Тип.</div>
-            </div>
-            <div class="field">
-              <label>Статус</label>
-              <select id="f_status">
-                ${(["idea", "ready", "in_progress", "blocked", "done"] as ItemStatus[])
-                  .map(
-                    (s) =>
-                      `<option value="${s}" ${draft.status === s ? "selected" : ""}>${statusLabel(s)}</option>`
-                  )
-                  .join("")}
-              </select>
-            </div>
-            <div class="field">
-              <label>Владелец</label>
-              <input id="f_owner" value="${escapeAttr(draft.owner)}" />
+            <div class="grid-2">
+              <div class="field">
+                <label>Тип</label>
+                <select id="f_type">
+                  <option value="product" ${draft.type === "product" ? "selected" : ""}>Продукт</option>
+                  <option value="project" ${draft.type === "project" ? "selected" : ""}>Проект</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Название проекта / продукта</label>
+                <input id="f_backlog" value="${escapeAttr(draft.backlog)}" placeholder="ЛК B2B" />
+                <div class="meta">Название продукта или проекта, в котором живёт функциональность; показывается в колонке Тип.</div>
+              </div>
+              <div class="field">
+                <label>Статус</label>
+                <select id="f_status">
+                  ${(["idea", "ready", "in_progress", "blocked", "done"] as ItemStatus[])
+                    .map(
+                      (s) =>
+                        `<option value="${s}" ${draft.status === s ? "selected" : ""}>${statusLabel(s)}</option>`
+                    )
+                    .join("")}
+                </select>
+              </div>
+              <div class="field">
+                <label>Владелец</label>
+                <input id="f_owner" value="${escapeAttr(draft.owner)}" />
+              </div>
             </div>
           </div>
           <div class="field">

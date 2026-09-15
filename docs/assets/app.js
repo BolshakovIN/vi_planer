@@ -591,33 +591,35 @@ ${z}${te}`;Bo(e,le,()=>{_e.items=_e.items.map(oe=>oe.id!==A?oe:{...oe,assignment
           </div>
         </div>
         <div class="modal-body">
-          <p class="meta modal-entity-hint">Функциональность — задачи → бизнес-результат с эффектом; живёт в продукте или проекте.</p>
-          <div class="field">
-            <label>Функциональность</label>
-            <input id="f_title" value="${Er(e.title)}" />
-          </div>
-          <div class="grid-2">
+          <div class="modal-meta-fields">
+            <p class="meta modal-entity-hint">Функциональность — задачи → бизнес-результат с эффектом; живёт в продукте или проекте.</p>
             <div class="field">
-              <label>Тип</label>
-              <select id="f_type">
-                <option value="product" ${e.type==="product"?"selected":""}>Продукт</option>
-                <option value="project" ${e.type==="project"?"selected":""}>Проект</option>
-              </select>
+              <label>Функциональность</label>
+              <input id="f_title" value="${Er(e.title)}" />
             </div>
-            <div class="field">
-              <label>Название проекта / продукта</label>
-              <input id="f_backlog" value="${Er(e.backlog)}" placeholder="ЛК B2B" />
-              <div class="meta">Название продукта или проекта, в котором живёт функциональность; показывается в колонке Тип.</div>
-            </div>
-            <div class="field">
-              <label>Статус</label>
-              <select id="f_status">
-                ${["idea","ready","in_progress","blocked","done"].map(d=>`<option value="${d}" ${e.status===d?"selected":""}>${vd(d)}</option>`).join("")}
-              </select>
-            </div>
-            <div class="field">
-              <label>Владелец</label>
-              <input id="f_owner" value="${Er(e.owner)}" />
+            <div class="grid-2">
+              <div class="field">
+                <label>Тип</label>
+                <select id="f_type">
+                  <option value="product" ${e.type==="product"?"selected":""}>Продукт</option>
+                  <option value="project" ${e.type==="project"?"selected":""}>Проект</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Название проекта / продукта</label>
+                <input id="f_backlog" value="${Er(e.backlog)}" placeholder="ЛК B2B" />
+                <div class="meta">Название продукта или проекта, в котором живёт функциональность; показывается в колонке Тип.</div>
+              </div>
+              <div class="field">
+                <label>Статус</label>
+                <select id="f_status">
+                  ${["idea","ready","in_progress","blocked","done"].map(d=>`<option value="${d}" ${e.status===d?"selected":""}>${vd(d)}</option>`).join("")}
+                </select>
+              </div>
+              <div class="field">
+                <label>Владелец</label>
+                <input id="f_owner" value="${Er(e.owner)}" />
+              </div>
             </div>
           </div>
           <div class="field">

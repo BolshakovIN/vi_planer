@@ -952,7 +952,7 @@ th.sortable.sorted {
 }
 
 .modal-wide {
-  width: min(720px, 100%);
+  width: min(833px, 100%);
 }
 
 @media (max-width: 640px) {
@@ -1235,6 +1235,31 @@ body.prio-dragging {
   font-style: italic;
   color: var(--muted);
   line-height: 1.35;
+}
+
+/* Compact top metadata block in functionality card modal */
+.modal-meta-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.modal-meta-fields .modal-entity-hint {
+  margin: 0;
+  line-height: 1.25;
+}
+
+.modal-meta-fields .grid-2 {
+  gap: 8px 10px;
+}
+
+.modal-meta-fields .field label {
+  margin-bottom: 2px;
+  line-height: 1.2;
+}
+
+.modal-meta-fields .field > .meta {
+  margin-top: 3px;
+  line-height: 1.25;
 }
 
 .field > .meta {
