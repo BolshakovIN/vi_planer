@@ -780,9 +780,9 @@ th.sortable.sorted {
 .team-assign-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 10px 12px;
   background: var(--surface-2);
 }
@@ -801,7 +801,15 @@ th.sortable.sorted {
   font-size: 11px;
   font-weight: 600;
   line-height: 1.2;
-  padding: 0 0 2px;
+  padding: 0 4px 4px;
+}
+
+.team-assign-row {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  min-height: 44px;
 }
 
 .team-assign-check {
@@ -809,13 +817,19 @@ th.sortable.sorted {
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  min-height: 32px;
+  min-height: 34px;
+  margin: 0;
+}
+
+.team-assign-name {
+  line-height: 1.25;
 }
 
 .team-assign-field {
   display: flex;
   align-items: center;
   min-width: 0;
+  min-height: 34px;
 }
 
 .team-assign-field input {
@@ -825,6 +839,8 @@ th.sortable.sorted {
   padding: 6px 8px;
   font-size: 13px;
   background: #fff;
+  min-height: 34px;
+  box-sizing: border-box;
 }
 
 .team-assign-field input:disabled {
@@ -838,6 +854,8 @@ th.sortable.sorted {
   padding: 6px 8px;
   font-size: 13px;
   background: #fff;
+  min-height: 34px;
+  box-sizing: border-box;
 }
 
 .team-assign-field select:disabled {
