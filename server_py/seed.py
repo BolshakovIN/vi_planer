@@ -51,7 +51,7 @@ def build_seed() -> dict[str, Any]:
                 "id": "p2",
                 "title": "Мобильный чекаут v2",
                 "type": "product",
-                "backlog": "Product backlog · Mobile",
+                "backlog": "Mobile",
                 "assignments": [{"teamId": "mobile", "size": "M", "workStartDate": s0}],
                 "status": "ready",
                 "owner": "Маша Л.",
@@ -64,7 +64,7 @@ def build_seed() -> dict[str, Any]:
                 "id": "j4",
                 "title": "Интеграция телефонии для отдела продаж",
                 "type": "project",
-                "backlog": "Projects backlog · Sales Ops",
+                "backlog": "ЛК B2B",
                 "assignments": [{"teamId": "crm", "size": "S", "workStartDate": s1}],
                 "status": "ready",
                 "owner": "Сергей М.",
@@ -77,7 +77,7 @@ def build_seed() -> dict[str, Any]:
                 "id": "p6",
                 "title": "Push-уведомления и deep links",
                 "type": "product",
-                "backlog": "Product backlog · Mobile",
+                "backlog": "Mobile",
                 "assignments": [{"teamId": "mobile", "size": "S", "workStartDate": s4}],
                 "status": "idea",
                 "owner": "Маша Л.",
@@ -90,7 +90,7 @@ def build_seed() -> dict[str, Any]:
                 "id": "j6",
                 "title": "Дашборд KPI для совета директоров",
                 "type": "project",
-                "backlog": "Projects backlog · Exec",
+                "backlog": "Exec",
                 "assignments": [{"teamId": "data", "size": "S", "workStartDate": s0}],
                 "status": "ready",
                 "owner": "Павел Р.",
@@ -104,7 +104,7 @@ def build_seed() -> dict[str, Any]:
                 "id": "p5",
                 "title": "Админ-панель ролей и аудита",
                 "type": "product",
-                "backlog": "Product backlog · Platform",
+                "backlog": "Platform",
                 "assignments": [
                     {"teamId": "platform", "size": "S", "workStartDate": s6}
                 ],
@@ -119,7 +119,7 @@ def build_seed() -> dict[str, Any]:
                 "id": "p1",
                 "title": "Единый каталог цен и остатков",
                 "type": "product",
-                "backlog": "Product backlog · Commerce",
+                "backlog": "Commerce",
                 "assignments": [
                     {"teamId": "platform", "size": "M", "workStartDate": s0},
                     {"teamId": "data", "size": "M", "workStartDate": s3},
@@ -136,7 +136,7 @@ def build_seed() -> dict[str, Any]:
                 "id": "j1",
                 "title": "Внедрение EDI для крупного B2B-клиента",
                 "type": "project",
-                "backlog": "Projects backlog · Delivery",
+                "backlog": "Delivery",
                 "assignments": [
                     {"teamId": "platform", "size": "M", "workStartDate": s1},
                     {"teamId": "crm", "size": "S", "workStartDate": s4},
@@ -153,7 +153,7 @@ def build_seed() -> dict[str, Any]:
                 "id": "j2",
                 "title": "Пилот Launchpad: клинический портал",
                 "type": "project",
-                "backlog": "Projects backlog · Launchpad",
+                "backlog": "Launchpad",
                 "assignments": [
                     {"teamId": "mobile", "size": "M", "workStartDate": s2},
                     {"teamId": "platform", "size": "S", "workStartDate": s2},
@@ -170,7 +170,7 @@ def build_seed() -> dict[str, Any]:
                 "id": "j3",
                 "title": "Миграция отчётности клиента X на DWH",
                 "type": "project",
-                "backlog": "Projects backlog · Data",
+                "backlog": "Data",
                 "assignments": [
                     {"teamId": "data", "size": "M", "workStartDate": s1},
                     {"teamId": "platform", "size": "S", "workStartDate": s0},
@@ -187,7 +187,7 @@ def build_seed() -> dict[str, Any]:
                 "id": "p4",
                 "title": "Сквозная воронка лида → сделка",
                 "type": "product",
-                "backlog": "Product backlog · CRM",
+                "backlog": "CRM",
                 "assignments": [
                     {"teamId": "crm", "size": "M", "workStartDate": s0},
                     {"teamId": "platform", "size": "S", "workStartDate": s2},
@@ -205,7 +205,7 @@ def build_seed() -> dict[str, Any]:
                 "id": "j5",
                 "title": "Compliance-пакет HIPAA для продукта Y",
                 "type": "project",
-                "backlog": "Projects backlog · Security",
+                "backlog": "Security",
                 "assignments": [
                     {"teamId": "platform", "size": "M", "workStartDate": s3},
                     {"teamId": "data", "size": "S", "workStartDate": s4},
@@ -223,7 +223,7 @@ def build_seed() -> dict[str, Any]:
                 "id": "p3",
                 "title": "Рекомендации в поиске (ML)",
                 "type": "product",
-                "backlog": "Product backlog · Growth",
+                "backlog": "Growth",
                 "assignments": [
                     {"teamId": "data", "size": "L", "workStartDate": s2},
                     {"teamId": "platform", "size": "S", "workStartDate": s6},

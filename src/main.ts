@@ -320,7 +320,7 @@ const ALL_PORTFOLIO_COLS: PortfolioCol[] = [
 const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
   priority: "Приоритет",
   type: "Тип",
-  title: "Функциональность / исходный бэклог",
+  title: "Функциональность",
   teams: "Команды (майка · старт)",
   status: "Статус",
   rice: "RICE",
@@ -560,7 +560,7 @@ function portfolioTheadCellsHtml(): string {
   return `
     ${sortHeader("Приоритет", "priority", "prio-cell")}
     ${resizableTh("Тип", "type", "type-cell")}
-    ${resizableTh("Функциональность / исходный бэклог", "title", "title-cell")}
+    ${resizableTh("Функциональность", "title", "title-cell")}
     ${resizableTh("Команды (оценка · старт)", "teams")}
     ${resizableTh("Статус", "status", "status-cell")}
     ${sortHeader("RICE", "rice", "rice-cell")}
@@ -680,27 +680,25 @@ function metricsHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string 
 }
 
 /**
- * `backlog` seed convention: «Product backlog · Mobile» / «Projects backlog · Sales Ops».
- * Last « · » segment = product/project container name (shown under Тип).
+ * Product/project name stored in `backlog` (shown under Тип).
+ * Uses the full trimmed field; legacy «… backlog · Name» keeps the last segment.
  */
-function parseBacklogMeta(backlog: string): { stream: string; container: string } {
-  const parts = backlog
+function productProjectName(backlog: string): string {
+  const trimmed = backlog.trim();
+  if (!trimmed) return "";
+  const parts = trimmed
     .split(" · ")
     .map((p) => p.trim())
     .filter(Boolean);
-  if (parts.length >= 2) {
-    return {
-      stream: parts.slice(0, -1).join(" · "),
-      container: parts[parts.length - 1]!,
-    };
+  if (parts.length >= 2 && /backlog/i.test(parts.slice(0, -1).join(" · "))) {
+    return parts[parts.length - 1]!;
   }
-  return { stream: backlog.trim(), container: "" };
+  return trimmed;
 }
 
 function functionalitySubtitleHtml(item: WorkItem): string {
-  const { stream, container } = parseBacklogMeta(item.backlog);
-  const left = container ? stream : item.backlog;
-  const bits = [left, item.owner].filter((b) => b.trim());
+  const typeLabel = item.type === "product" ? "Продукт" : "Проект";
+  const bits = [typeLabel, item.owner].filter((b) => b.trim());
   return escapeHtml(bits.join(" · "));
 }
 
@@ -710,8 +708,8 @@ function columnsHelpHtml(): string {
       <summary class="agenda-summary">Адженда</summary>
       <div class="cols-help">
         <div><span class="cols-help-k">Приоритет</span> — сквозной ранг (1 = выше); тяните строку за ⋮⋮, чтобы переставить. Сортировка других колонок приоритет не меняет</div>
-        <div><span class="cols-help-k">Тип</span> — продукт или проект и его название (контейнер функциональности)</div>
-        <div><span class="cols-help-k">Функциональность</span> — набор задач → бизнес-результат с эффектом; в ячейке — название, исходный бэклог и владелец</div>
+        <div><span class="cols-help-k">Тип</span> — продукт или проект и название (колонка «Название проекта / продукта»)</div>
+        <div><span class="cols-help-k">Функциональность</span> — набор задач → бизнес-результат с эффектом; в ячейке — название и владелец</div>
         <div><span class="cols-help-k">Команды</span> — кто делает, майка (S/M/L) и план старта</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
         <div><span class="cols-help-k">RICE</span> — (Охват × Влияние × Уверенность) / Трудозатраты (чел·нед по майкам)</div>
@@ -733,7 +731,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
       const score = rice(item, szRanges());
       const total = totalEstimateWeeks(item, szRanges());
       const prio = item.manualRank ?? "—";
-      const { container } = parseBacklogMeta(item.backlog);
+      const container = productProjectName(item.backlog);
       const etaMeta = r
         ? `<div class="eta-teams">${r.slices
             .map((s) => {
@@ -769,7 +767,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
             <span class="badge badge-${item.type}">${item.type === "product" ? "Продукт" : "Проект"}</span>
             ${
               container
-                ? `<div class="type-container-name" title="Продукт или проект">${escapeHtml(container)}</div>`
+                ? `<div class="type-container-name" title="Название проекта / продукта">${escapeHtml(container)}</div>`
                 : ""
             }
             ${item.assignments.length > 1 ? `<div class="type-team-count">${item.assignments.length} команды</div>` : ""}
@@ -2114,7 +2112,7 @@ function editorHtml(item: WorkItem | null): string {
       id: "",
       title: "",
       type: "product",
-      backlog: "Product backlog",
+      backlog: "",
       assignments: [
         {
           teamId: state.teams[0]?.id ?? "",
@@ -2198,9 +2196,9 @@ function editorHtml(item: WorkItem | null): string {
               </select>
             </div>
             <div class="field">
-              <label>Исходный бэклог</label>
-              <input id="f_backlog" value="${escapeAttr(draft.backlog)}" placeholder="Product backlog · Mobile" />
-              <div class="meta" style="margin-top:6px">Формат «бэклог · имя»: после · — продукт/проект (колонка Тип).</div>
+              <label>Название проекта / продукта</label>
+              <input id="f_backlog" value="${escapeAttr(draft.backlog)}" placeholder="ЛК B2B" />
+              <div class="meta" style="margin-top:6px">Название продукта или проекта, в котором живёт функциональность; показывается в колонке Тип.</div>
             </div>
             <div class="field">
               <label>Статус</label>
@@ -3023,7 +3021,7 @@ function refreshLiveEta() {
       id: "__draft__",
       title: "Черновик",
       type: "product",
-      backlog: "Backlog",
+      backlog: "",
       assignments,
       status: "ready",
       owner: "—",
@@ -3094,7 +3092,7 @@ function readForm(): Omit<WorkItem, "id"> | null {
   return {
     title: val("f_title").trim() || "Без названия",
     type: val("f_type") as ItemType,
-    backlog: val("f_backlog").trim() || "Backlog",
+    backlog: val("f_backlog").trim(),
     assignments,
     status: val("f_status") as ItemStatus,
     owner: val("f_owner").trim() || "—",
