@@ -69,8 +69,8 @@ const SEED_RAW: AppState = {
       impact: 2,
       confidence: 0.8,
       manualRank: null,
-      cashFlow12m: 12_400_000,
-      roi12m: 8_200_000,
+      cashFlow12m: 1.2,
+      roi12m: 18,
     },
     {
       id: "j4",
@@ -85,8 +85,8 @@ const SEED_RAW: AppState = {
       impact: 1,
       confidence: 0.7,
       manualRank: null,
-      cashFlow12m: 3_600_000,
-      roi12m: 2_100_000,
+      cashFlow12m: 0.4,
+      roi12m: 12,
     },
     {
       id: "p6",
@@ -119,7 +119,7 @@ const SEED_RAW: AppState = {
       notes: "Нужен к ближайшему совету",
       manualRank: null,
       cashFlow12m: null,
-      roi12m: 450_000,
+      roi12m: 8,
     },
     {
       id: "p5",
@@ -154,8 +154,8 @@ const SEED_RAW: AppState = {
       confidence: 0.8,
       notes: "Data стартует после первых API Platform",
       manualRank: null,
-      cashFlow12m: 28_000_000,
-      roi12m: 19_500_000,
+      cashFlow12m: 2.8,
+      roi12m: 25,
     },
     {
       id: "j1",
@@ -174,7 +174,7 @@ const SEED_RAW: AppState = {
       confidence: 0.85,
       notes: "CRM — онбординг после ядра EDI",
       manualRank: null,
-      cashFlow12m: 5_200_000,
+      cashFlow12m: 0.5,
       roi12m: null,
     },
     {
@@ -235,8 +235,8 @@ const SEED_RAW: AppState = {
       confidence: 0.8,
       notes: "Mobile подключается после событий Platform",
       manualRank: null,
-      cashFlow12m: 15_800_000,
-      roi12m: 11_200_000,
+      cashFlow12m: 1.6,
+      roi12m: 22,
     },
     {
       id: "j5",
@@ -277,8 +277,8 @@ const SEED_RAW: AppState = {
       confidence: 0.5,
       notes: "Serving и UI после модели",
       manualRank: null,
-      cashFlow12m: 22_000_000,
-      roi12m: 9_750_000,
+      cashFlow12m: 2.2,
+      roi12m: 15,
     },
   ],
 };

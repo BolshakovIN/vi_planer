@@ -179,9 +179,9 @@ export interface WorkItem {
    * Drives queue order and Gantt dependencies. null only before ensureUniquePriorities.
    */
   manualRank: number | null;
-  /** Чистая прибыль (ЧП) за 12 мес., ₽; null = не задано */
+  /** Чистая прибыль (ЧП) за 12 мес., млрд ₽; null = не задано */
   cashFlow12m: number | null;
-  /** ROI за 12 мес., ₽; null = не задано */
+  /** ROI за 12 мес., % (15 = 15%); null = не задано */
   roi12m: number | null;
 }
 
@@ -496,11 +496,31 @@ export function riceFieldsFromRaw(
   };
 }
 
-/** Optional RUB amount; missing / empty / invalid → null. */
+/** Optional finance number; missing / empty / invalid → null. */
 export function optionalRubFromRaw(raw: unknown): number | null {
   if (raw == null || raw === "") return null;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Legacy ЧП was stored as full ₽ (demo values in the millions). Values ≥ 1000
+ * are remapped to млрд ₽ on the same demo scale (÷10⁷ → e.g. 12.4M → 1.2).
+ */
+export function migrateCashFlowToMlrd(n: number): number {
+  if (Math.abs(n) >= 1000) {
+    return Math.round((n / 10_000_000) * 10) / 10;
+  }
+  return n;
+}
+
+/**
+ * Legacy ROI was stored as full ₽. Sensible percents are small; values ≥ 500
+ * are dropped as legacy ruble amounts.
+ */
+export function migrateRoiToPercent(n: number): number | null {
+  if (Math.abs(n) >= 500) return null;
+  return n;
 }
 
 export function totalEstimateWeeks(
@@ -1180,10 +1200,16 @@ export function normalizeState(raw: unknown): AppState | null {
         r.manualRank == null || r.manualRank === ""
           ? null
           : Number(r.manualRank),
-      cashFlow12m: optionalRubFromRaw(
-        r.cashFlow12m ?? r.chpRub ?? r.chp
-      ),
-      roi12m: optionalRubFromRaw(r.roi12m ?? r.roiRub ?? r.roi),
+      cashFlow12m: (() => {
+        const raw = optionalRubFromRaw(
+          r.cashFlow12m ?? r.chpRub ?? r.chp
+        );
+        return raw == null ? null : migrateCashFlowToMlrd(raw);
+      })(),
+      roi12m: (() => {
+        const raw = optionalRubFromRaw(r.roi12m ?? r.roiRub ?? r.roi);
+        return raw == null ? null : migrateRoiToPercent(raw);
+      })(),
     };
   });
 

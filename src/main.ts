@@ -773,8 +773,8 @@ function columnsHelpHtml(): string {
         <div><span class="cols-help-k">Команды</span> — кто делает, маечная оценка (S/M/L) и план старта</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
         <div><span class="cols-help-k">RICE</span> — (Охват × Влияние × Уверенность) / Трудозатраты (чел·нед по маечной оценке)</div>
-        <div><span class="cols-help-k">ЧП</span> — чистая прибыль за 12 мес., ₽ (карточка функциональности)</div>
-        <div><span class="cols-help-k">ROI</span> — ROI за 12 мес., ₽ (карточка функциональности)</div>
+        <div><span class="cols-help-k">ЧП</span> — чистая прибыль за 12 мес., млрд ₽ (карточка функциональности)</div>
+        <div><span class="cols-help-k">ROI</span> — ROI за 12 мес., % (карточка функциональности)</div>
         <div><span class="cols-help-k">Маечная оценка</span> — S / M / L (недели в Настройках)</div>
         <div><span class="cols-help-k">Дата завершения</span> — когда закончила последняя команда (bottleneck)</div>
       </div>
@@ -842,8 +842,8 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           <td${tdAttrs("teams", "teams-cell")}>${teamsCellHtml(item)}</td>
           <td${tdAttrs("status", "status-cell")}><span class="badge badge-status-${item.status}">${statusLabel(item.status)}</span></td>
           <td${tdAttrs("rice", "rice-cell mono metric-num")}>${score}</td>
-          <td${tdAttrs("cashFlow", "finance-cell mono metric-num")}>${formatRub(item.cashFlow12m)}</td>
-          <td${tdAttrs("roi", "finance-cell mono metric-num")}>${formatRub(item.roi12m)}</td>
+          <td${tdAttrs("cashFlow", "finance-cell mono metric-num")}>${formatMlrd(item.cashFlow12m)}</td>
+          <td${tdAttrs("roi", "finance-cell mono metric-num")}>${formatPercent(item.roi12m)}</td>
           <td${tdAttrs("estimate", "estimate-cell mono metric-num")}>
             <span class="size-badge">${sizesSummary(item)}</span>
             <div class="meta">~${total} чел·нед</div>
@@ -2623,12 +2623,12 @@ function editorHtml(item: WorkItem | null): string {
             </div>
             <div class="grid-2 finance-row">
               <div class="field">
-                <label>ЧП (12 мес., ₽)</label>
-                <input id="f_cashFlow12m" type="number" step="1" inputmode="numeric" placeholder="не задано" value="${draft.cashFlow12m == null ? "" : draft.cashFlow12m}" />
+                <label>ЧП (12 мес., млрд ₽)</label>
+                <input id="f_cashFlow12m" type="number" step="0.1" inputmode="decimal" placeholder="напр. 1,2" title="Чистая прибыль за 12 мес. в млрд ₽" value="${draft.cashFlow12m == null ? "" : draft.cashFlow12m}" />
               </div>
               <div class="field">
-                <label>ROI (12 мес., ₽)</label>
-                <input id="f_roi12m" type="number" step="1" inputmode="numeric" placeholder="не задано" value="${draft.roi12m == null ? "" : draft.roi12m}" />
+                <label>ROI (12 мес., %)</label>
+                <input id="f_roi12m" type="number" step="0.1" inputmode="decimal" placeholder="напр. 15" title="ROI за 12 мес. в процентах (15 = 15%)" value="${draft.roi12m == null ? "" : draft.roi12m}" />
               </div>
             </div>
           </div>
@@ -2757,10 +2757,23 @@ function escapeHtml(s: string): string {
     .replaceAll('"', "&quot;");
 }
 
-/** RUB amount with space thousands; null/empty → em dash */
-function formatRub(n: number | null | undefined): string {
+/** ЧП in млрд ₽; null/empty → em dash. E.g. 1.2 → «1,2» */
+function formatMlrd(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
-  return Math.round(n).toLocaleString("ru-RU");
+  return n.toLocaleString("ru-RU", {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+  });
+}
+
+/** ROI as percent; null/empty → em dash. E.g. 15 → «15%» */
+function formatPercent(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  const s = n.toLocaleString("ru-RU", {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 0,
+  });
+  return `${s}%`;
 }
 
 function escapeAttr(s: string): string {
