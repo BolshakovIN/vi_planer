@@ -2223,14 +2223,12 @@ function catalogListHtml(
     .join("");
 
   return `
-    <div class="panel panel-sticky-host">
-      <div class="panel-sticky">
-        <div class="panel-header">
-          <h2>${escapeHtml(title)}</h2>
-        </div>
+    <div class="panel catalog-panel">
+      <div class="panel-header">
+        <h2>${escapeHtml(title)}</h2>
       </div>
       <div class="role-list" data-catalog-list="${kind}">
-        ${rows || `<div class="empty">Нет имён — добавьте ниже</div>`}
+        ${rows || `<div class="empty role-list-empty">Нет имён — добавьте ниже</div>`}
       </div>
       <div class="team-add-bar role-add-bar">
         <input
@@ -2252,8 +2250,10 @@ function rolesHtml(): string {
         Списки <strong>Заказчик</strong> и <strong>Исполнитель</strong> задают допустимые значения
         в карточке функциональности. Имена из старых данных подтягиваются автоматически.
       </div>
-      ${catalogListHtml("customers", "Заказчик", "+ Заказчик")}
-      ${catalogListHtml("executors", "Исполнитель", "+ Исполнитель")}
+      <div class="catalog-pair">
+        ${catalogListHtml("customers", "Заказчик", "+ Заказчик")}
+        ${catalogListHtml("executors", "Исполнитель", "+ Исполнитель")}
+      </div>
     </div>
   `;
 }
@@ -2265,8 +2265,10 @@ function projectsTabHtml(): string {
         Списки <strong>Проекты</strong> и <strong>Продукты</strong> задают варианты поля
         «Название проекта / продукта» в карточке (по выбранному типу).
       </div>
-      ${catalogListHtml("projects", "Проекты", "+ Проект")}
-      ${catalogListHtml("products", "Продукты", "+ Продукт")}
+      <div class="catalog-pair">
+        ${catalogListHtml("projects", "Проекты", "+ Проект")}
+        ${catalogListHtml("products", "Продукты", "+ Продукт")}
+      </div>
     </div>
   `;
 }

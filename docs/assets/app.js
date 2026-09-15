@@ -507,14 +507,12 @@ ${K}${ee}`;_o(e,se,()=>{ge.items=ge.items.map(Ae=>Ae.id!==n?Ae:{...Ae,assignment
           title="Удалить"
         >Удалить</button>
       </div>`).join("");return`
-    <div class="panel panel-sticky-host">
-      <div class="panel-sticky">
-        <div class="panel-header">
-          <h2>${wt(e)}</h2>
-        </div>
+    <div class="panel catalog-panel">
+      <div class="panel-header">
+        <h2>${wt(e)}</h2>
       </div>
       <div class="role-list" data-catalog-list="${r}">
-        ${A||'<div class="empty">Нет имён — добавьте ниже</div>'}
+        ${A||'<div class="empty role-list-empty">Нет имён — добавьте ниже</div>'}
       </div>
       <div class="team-add-bar role-add-bar">
         <input
@@ -532,8 +530,10 @@ ${K}${ee}`;_o(e,se,()=>{ge.items=ge.items.map(Ae=>Ae.id!==n?Ae:{...Ae,assignment
         Списки <strong>Заказчик</strong> и <strong>Исполнитель</strong> задают допустимые значения
         в карточке функциональности. Имена из старых данных подтягиваются автоматически.
       </div>
-      ${Hu("customers","Заказчик","+ Заказчик")}
-      ${Hu("executors","Исполнитель","+ Исполнитель")}
+      <div class="catalog-pair">
+        ${Hu("customers","Заказчик","+ Заказчик")}
+        ${Hu("executors","Исполнитель","+ Исполнитель")}
+      </div>
     </div>
   `}function uL(){return`
     <div class="settings-stack">
@@ -541,8 +541,10 @@ ${K}${ee}`;_o(e,se,()=>{ge.items=ge.items.map(Ae=>Ae.id!==n?Ae:{...Ae,assignment
         Списки <strong>Проекты</strong> и <strong>Продукты</strong> задают варианты поля
         «Название проекта / продукта» в карточке (по выбранному типу).
       </div>
-      ${Hu("projects","Проекты","+ Проект")}
-      ${Hu("products","Продукты","+ Продукт")}
+      <div class="catalog-pair">
+        ${Hu("projects","Проекты","+ Проект")}
+        ${Hu("products","Продукты","+ Продукт")}
+      </div>
     </div>
   `}function Mu(r,e,t,n="—"){const A=t.trim(),i=!!(A&&A!=="—"),s=i&&e.some(l=>l===A),a=i&&!s?`<option value="${qt(A)}" selected>${wt(A)}</option>`:"",o=e.map(l=>`<option value="${qt(l)}" ${l===A?"selected":""}>${wt(l)}</option>`).join("");return`
     <select id="${r}">
