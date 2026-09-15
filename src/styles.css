@@ -399,7 +399,8 @@ textarea {
   box-shadow: none;
 }
 
-.tab-settings {
+/* Push Команды + Настройки to the right edge of the tab bar */
+.tab-end {
   margin-left: auto;
 }
 
@@ -952,7 +953,7 @@ th.sortable.sorted {
 }
 
 .modal-wide {
-  width: min(980px, 100%);
+  width: min(1120px, 100%);
 }
 
 @media (max-width: 640px) {

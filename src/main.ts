@@ -59,7 +59,7 @@ import { downloadElementPdf, downloadMarkdownAsPdf } from "./pdfExport";
 /** Release / deploy stamp in the header (DD.MM.YYYY) */
 const RELEASE_UPDATED = "15.09.2026";
 
-type Tab = "portfolio" | "timeline" | "queuesTest" | "settings";
+type Tab = "portfolio" | "timeline" | "queuesTest" | "capacity" | "settings";
 type SortKey = "priority" | "rice" | "estimate" | "eta";
 type SortDir = "asc" | "desc";
 type GanttBarDragMode = "move" | "resize-left" | "resize-right";
@@ -68,17 +68,18 @@ const TAB_LABELS: Record<Tab, string> = {
   portfolio: "Портфель",
   timeline: "Gantt/Сроки",
   queuesTest: "Очередь команд",
+  capacity: "Команды",
   settings: "Настройки",
 };
 
-/** Legacy deep-link / tab ids: `capacity` → Settings; `teams` → Очередь команд. */
+/** Legacy deep-link / tab ids: `teams` → Очередь команд. */
 function normalizeTab(tab: string | undefined | null): Tab {
-  if (tab === "capacity") return "settings";
   if (tab === "teams") return "queuesTest";
   if (
     tab === "portfolio" ||
     tab === "timeline" ||
     tab === "queuesTest" ||
+    tab === "capacity" ||
     tab === "settings"
   ) {
     return tab;
@@ -2169,6 +2170,10 @@ function teamsManageHtml(): string {
   `;
 }
 
+function capacityHtml(): string {
+  return `<div class="settings-stack">${teamsManageHtml()}</div>`;
+}
+
 function settingsHtml(rollups: ItemSchedule[]): string {
   const r = state.sizeRanges;
   const active = state.items.filter((i) => i.status !== "done");
@@ -2235,7 +2240,6 @@ function settingsHtml(rollups: ItemSchedule[]): string {
           </p>
         </div>
       </div>
-      ${teamsManageHtml()}
       <div class="callout">
         Диапазоны майок — <strong>сколько недель</strong> заложено в оценке проекта (S / M / L). Для плана берётся середина диапазона.
         Изменения сразу перестраивают ETA и Gantt.
@@ -3183,7 +3187,8 @@ function render() {
         <button class="tab ${ui.tab === "portfolio" ? "active" : ""}" data-tab="portfolio">Портфель</button>
         <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Gantt/Сроки</button>
         <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очередь команд</button>
-        <button class="tab tab-settings ${ui.tab === "settings" ? "active" : ""}" data-tab="settings">Настройки</button>
+        <button class="tab tab-end ${ui.tab === "capacity" ? "active" : ""}" data-tab="capacity">Команды</button>
+        <button class="tab ${ui.tab === "settings" ? "active" : ""}" data-tab="settings">Настройки</button>
       </div>
       <div class="tab-print-root" id="tabPrintRoot">
       ${
@@ -3193,7 +3198,9 @@ function render() {
             ? queuesTestHtml(slices, load, overflowByTeam)
             : ui.tab === "timeline"
               ? timelineHtml(rollups, slices, load, overflowByTeam)
-              : settingsHtml(rollups)
+              : ui.tab === "capacity"
+                ? capacityHtml()
+                : settingsHtml(rollups)
       }
       </div>
       </div>
