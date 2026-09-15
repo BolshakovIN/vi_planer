@@ -2145,9 +2145,11 @@ function closeAppPop() {
     .forEach((el) => {
       el.classList.remove("prio-ask");
     });
-  document.querySelectorAll(".confirm-ask, .gantt-bar-confirm").forEach((el) => {
-    el.classList.remove("confirm-ask", "gantt-bar-confirm");
-  });
+  document
+    .querySelectorAll(".confirm-ask, .gantt-bar-confirm, .prio-row-confirm")
+    .forEach((el) => {
+      el.classList.remove("confirm-ask", "gantt-bar-confirm", "prio-row-confirm");
+    });
   document.querySelector("#appConfirmPop")?.remove();
 }
 
@@ -2532,6 +2534,7 @@ function bindPortfolioDrag() {
 
   let dragId: string | null = null;
   let activePointer: number | null = null;
+  let pendingRestore: (() => void) | null = null;
 
   const clearMarks = () => {
     body
@@ -2539,24 +2542,117 @@ function bindPortfolioDrag() {
       .forEach((el) => el.classList.remove("is-dragging", "drag-over"));
   };
 
-  const applyReorder = (fromId: string, toId: string) => {
+  const abortPendingConfirm = () => {
+    if (!pendingRestore) return;
+    const restore = pendingRestore;
+    pendingRestore = null;
+    closeAppPop();
+    restore();
+  };
+
+  const applyDomOrder = (order: string[]) => {
+    for (const id of order) {
+      const row = body.querySelector(`tr[data-row-id="${CSS.escape(id)}"]`);
+      if (row) body.appendChild(row);
+    }
+  };
+
+  const applyPrioInputs = (items: typeof state.items) => {
+    for (const it of items) {
+      const input = body.querySelector<HTMLInputElement>(
+        `.prio-input[data-prio-id="${CSS.escape(it.id)}"]`
+      );
+      if (input && it.manualRank != null) input.value = String(it.manualRank);
+    }
+  };
+
+  const requestReorder = (fromId: string, toId: string) => {
     if (fromId === toId) return;
     const ids = Array.from(
       body.querySelectorAll<HTMLTableRowElement>("tr[data-row-id]")
     ).map((r) => r.dataset.rowId!);
     const from = ids.indexOf(fromId);
     const to = ids.indexOf(toId);
-    if (from < 0 || to < 0) return;
+    if (from < 0 || to < 0 || from === to) return;
 
     const next = [...ids];
     next.splice(from, 1);
     next.splice(to, 0, fromId);
+    if (next.every((id, i) => id === ids[i])) return;
 
     const orderForRanks =
       ui.sortDir === "asc" ? next : [...next].reverse();
-    state.items = reorderVisiblePriority(state.items, orderForRanks, szRanges());
-    ui.sortKey = "priority";
-    persist();
+    const nextItems = reorderVisiblePriority(
+      state.items,
+      orderForRanks,
+      szRanges()
+    );
+    const anyChange = state.items.some((i) => {
+      const n = nextItems.find((x) => x.id === i.id);
+      return n != null && n.manualRank !== i.manualRank;
+    });
+    if (!anyChange) return;
+
+    const moved = state.items.find((i) => i.id === fromId);
+    const nextMoved = nextItems.find((i) => i.id === fromId);
+    const fromRow = body.querySelector<HTMLTableRowElement>(
+      `tr[data-row-id="${CSS.escape(fromId)}"]`
+    );
+    if (!moved || !nextMoved || !fromRow) return;
+
+    abortPendingConfirm();
+
+    applyDomOrder(next);
+    applyPrioInputs(nextItems);
+
+    const restoreVisual = () => {
+      applyDomOrder(ids);
+      applyPrioInputs(state.items);
+      fromRow.classList.remove("prio-row-confirm");
+    };
+
+    pendingRestore = restoreVisual;
+    fromRow.classList.add("prio-row-confirm");
+
+    const oldRank = moved.manualRank ?? "—";
+    const newRank = nextMoved.manualRank ?? "—";
+    const shifted = state.items
+      .filter((i) => i.id !== fromId)
+      .map((i) => {
+        const n = nextItems.find((x) => x.id === i.id);
+        if (!n || n.manualRank === i.manualRank) return null;
+        return `#${i.manualRank ?? "—"}→#${n.manualRank ?? "—"} «${escapeHtml(i.title)}»`;
+      })
+      .filter((x): x is string => Boolean(x));
+    const shiftNote =
+      shifted.length > 0
+        ? `<br/><span class="meta">Сдвинутся: ${shifted.slice(0, 4).join("; ")}${
+            shifted.length > 4 ? ` и ещё ${shifted.length - 4}` : ""
+          }</span>`
+        : "";
+    const text = `Изменить приоритет «<strong>${escapeHtml(moved.title)}</strong>»?<br/>
+<span class="accent">#${oldRank}</span> → <span class="accent">#${newRank}</span>${shiftNote}`;
+
+    askAppConfirm(
+      fromRow,
+      text,
+      () => {
+        pendingRestore = null;
+        state.items = nextItems;
+        ui.sortKey = "priority";
+        persist();
+      },
+      () => {
+        pendingRestore = null;
+        restoreVisual();
+      },
+      {
+        wide: true,
+        anchorClass: "prio-row-confirm",
+        yesLabel: "ОК",
+        noLabel: "Отмена",
+      }
+    );
   };
 
   body.querySelectorAll<HTMLElement>("[data-drag-handle]").forEach((handle) => {
@@ -2567,6 +2663,7 @@ function bindPortfolioDrag() {
       if (e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
+      abortPendingConfirm();
       dragId = row.dataset.rowId ?? null;
       activePointer = e.pointerId;
       handle.setPointerCapture(e.pointerId);
@@ -2600,7 +2697,7 @@ function bindPortfolioDrag() {
       document.body.classList.remove("prio-dragging");
       dragId = null;
       activePointer = null;
-      if (toId) applyReorder(fromId, toId);
+      if (toId) requestReorder(fromId, toId);
     };
 
     handle.addEventListener("pointerup", endDrag);

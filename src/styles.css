@@ -1159,6 +1159,11 @@ tr.row-draggable.drag-over > td {
   box-shadow: inset 0 2px 0 0 var(--neutral);
 }
 
+tr.row-draggable.prio-row-confirm > td {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--neutral-soft);
+}
+
 body.prio-dragging {
   cursor: grabbing;
   user-select: none;
