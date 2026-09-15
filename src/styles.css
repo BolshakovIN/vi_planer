@@ -438,6 +438,29 @@ textarea {
   background: var(--surface);
 }
 
+/* Header lives in .portfolio-sticky (page sticky); body scrolls in .table-scroll.
+   Horizontal scroll is synced in JS so columns stay aligned. */
+.portfolio-thead-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  scrollbar-width: none;
+}
+
+.portfolio-thead-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.portfolio-thead-table {
+  margin: 0;
+}
+
+.portfolio-thead-table thead th {
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
 .panel-header {
   display: flex;
   flex-wrap: wrap;
@@ -461,8 +484,6 @@ textarea {
   gap: 8px;
   align-items: center;
 }
-
-/* thead sticky is incompatible with .table-scroll overflow-x (wrong containing block) */
 
 .filters select,
 .filters input,
@@ -2542,6 +2563,7 @@ body.pdf-capturing .timeline,
 body.pdf-capturing .table-scroll,
 body.pdf-capturing .table-scroll-wrap,
 body.pdf-capturing .table-scroll-top,
+body.pdf-capturing .portfolio-thead-scroll,
 body.pdf-capturing .gantt-layout,
 body.pdf-capturing .gantt-rows {
   overflow: visible !important;
@@ -2656,6 +2678,7 @@ body.pdf-capturing .table-scroll-top {
   .timeline,
   .table-scroll,
   .table-scroll-wrap,
+  .portfolio-thead-scroll,
   .panel,
   .gantt-layout {
     overflow: visible !important;

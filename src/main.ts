@@ -537,6 +537,26 @@ function sortHeader(label: string, key: SortKey, extraClass = ""): string {
   return resizableTh(label, col, extraClass, key);
 }
 
+function portfolioColgroupHtml(): string {
+  return `<colgroup>${ALL_PORTFOLIO_COLS.map((col) => {
+    const hiddenCls = isColVisible(col) ? "" : ' class="col-hidden"';
+    return `<col${hiddenCls} data-col="${col}" style="${colWidthStyle(col)}" />`;
+  }).join("")}</colgroup>`;
+}
+
+function portfolioTheadCellsHtml(): string {
+  return `
+    ${sortHeader("Приоритет", "priority", "prio-cell")}
+    ${resizableTh("Тип", "type", "type-cell")}
+    ${resizableTh("Инициатива / исходный бэклог", "title", "title-cell")}
+    ${resizableTh("Команды (оценка · старт)", "teams")}
+    ${resizableTh("Статус", "status", "status-cell")}
+    ${sortHeader("WSJF", "wsjf", "wsjf-cell")}
+    ${sortHeader("Оценка, майки", "estimate", "estimate-cell")}
+    ${sortHeader("ETA", "eta")}
+  `;
+}
+
 function portfolioColPickerHtml(): string {
   return `
     <details class="col-picker" ${ui.colPickerOpen ? "open" : ""}>
@@ -768,6 +788,16 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           </div>
         </div>
         <div class="table-scroll-top" aria-hidden="true"><div class="table-scroll-top-inner"></div></div>
+        <div class="portfolio-thead-scroll">
+          <table class="portfolio-table portfolio-thead-table">
+            ${portfolioColgroupHtml()}
+            <thead>
+              <tr>
+                ${portfolioTheadCellsHtml()}
+              </tr>
+            </thead>
+          </table>
+        </div>
       </div>
       ${
         canDrag
@@ -776,19 +806,8 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
       }
       <div class="table-scroll-wrap">
         <div class="table-scroll">
-          <table class="portfolio-table">
-            <thead>
-              <tr>
-                ${sortHeader("Приоритет", "priority", "prio-cell")}
-                ${resizableTh("Тип", "type", "type-cell")}
-                ${resizableTh("Инициатива / исходный бэклог", "title", "title-cell")}
-                ${resizableTh("Команды (оценка · старт)", "teams")}
-                ${resizableTh("Статус", "status", "status-cell")}
-                ${sortHeader("WSJF", "wsjf", "wsjf-cell")}
-                ${sortHeader("Оценка, майки", "estimate", "estimate-cell")}
-                ${sortHeader("ETA", "eta")}
-              </tr>
-            </thead>
+          <table class="portfolio-table portfolio-body-table">
+            ${portfolioColgroupHtml()}
             <tbody id="portfolioBody">
               ${rows || `<tr><td colspan="${visiblePortfolioColCount()}" class="empty">Нет элементов по фильтру</td></tr>`}
             </tbody>
@@ -3644,18 +3663,40 @@ function bindStickyTabsOffset() {
   window.addEventListener("resize", sync);
 }
 
+function applyPortfolioColWidth(col: PortfolioCol, width: number, min: number) {
+  document
+    .querySelectorAll<HTMLElement>(
+      `.portfolio-thead-table th[data-col="${col}"], .portfolio-table col[data-col="${col}"]`
+    )
+    .forEach((el) => {
+      el.style.width = `${width}px`;
+      el.style.minWidth = `${min}px`;
+    });
+}
+
 function bindPortfolioTableScroll() {
   const panel = document.querySelector<HTMLElement>(".portfolio-panel");
   const wrap = document.querySelector<HTMLElement>(".table-scroll-wrap");
   if (!panel || !wrap) return;
 
   const top = panel.querySelector<HTMLElement>(".table-scroll-top");
+  const head = panel.querySelector<HTMLElement>(".portfolio-thead-scroll");
   const main = wrap.querySelector<HTMLElement>(".table-scroll");
   const inner = panel.querySelector<HTMLElement>(".table-scroll-top-inner");
-  const table = wrap.querySelector<HTMLTableElement>(".portfolio-table");
+  const table =
+    wrap.querySelector<HTMLTableElement>(".portfolio-body-table") ??
+    wrap.querySelector<HTMLTableElement>(".portfolio-table");
   if (!top || !main || !inner || !table) return;
 
+  const scrollers = [top, main, head].filter(Boolean) as HTMLElement[];
   let syncing = false;
+
+  const setAllScrollLeft = (from: HTMLElement) => {
+    const left = from.scrollLeft;
+    for (const el of scrollers) {
+      if (el !== from) el.scrollLeft = left;
+    }
+  };
 
   const update = () => {
     inner.style.width = `${table.offsetWidth}px`;
@@ -3663,28 +3704,20 @@ function bindPortfolioTableScroll() {
     top.style.display = needsScroll ? "" : "none";
     if (needsScroll && !syncing) {
       syncing = true;
-      top.scrollLeft = main.scrollLeft;
+      setAllScrollLeft(main);
       syncing = false;
     }
   };
 
-  const syncFromMain = () => {
+  const onScroll = (ev: Event) => {
     if (syncing) return;
     syncing = true;
-    top.scrollLeft = main.scrollLeft;
-    syncing = false;
-  };
-
-  const syncFromTop = () => {
-    if (syncing) return;
-    syncing = true;
-    main.scrollLeft = top.scrollLeft;
+    setAllScrollLeft(ev.currentTarget as HTMLElement);
     syncing = false;
   };
 
   update();
-  main.addEventListener("scroll", syncFromMain);
-  top.addEventListener("scroll", syncFromTop);
+  for (const el of scrollers) el.addEventListener("scroll", onScroll);
 
   const ro = new ResizeObserver(update);
   ro.observe(table);
@@ -3693,7 +3726,7 @@ function bindPortfolioTableScroll() {
 }
 
 function bindPortfolioColResize() {
-  const table = document.querySelector<HTMLTableElement>(".portfolio-table");
+  const table = document.querySelector<HTMLTableElement>(".portfolio-thead-table");
   if (!table) return;
 
   table.querySelectorAll<HTMLElement>("[data-col-resize]").forEach((handle) => {
@@ -3715,8 +3748,7 @@ function bindPortfolioColResize() {
 
       const onMove = (ev: PointerEvent) => {
         const next = Math.max(min, Math.round(startW + (ev.clientX - startX)));
-        th.style.width = `${next}px`;
-        th.style.minWidth = `${min}px`;
+        applyPortfolioColWidth(col, next, min);
       };
 
       const onUp = (ev: PointerEvent) => {
@@ -3730,7 +3762,7 @@ function bindPortfolioColResize() {
         const widths = loadColWidths();
         widths[col] = finalW;
         saveColWidths(widths);
-        th.style.width = `${finalW}px`;
+        applyPortfolioColWidth(col, finalW, min);
         void ev;
       };
 

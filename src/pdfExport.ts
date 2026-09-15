@@ -18,7 +18,7 @@ function prepareCaptureLayout(root: HTMLElement): () => void {
     root,
     ...Array.from(
       root.querySelectorAll<HTMLElement>(
-        ".timeline, .table-scroll, .table-scroll-wrap, .table-scroll-top, .panel, .gantt-layout, .gantt-rows",
+        ".timeline, .table-scroll, .table-scroll-wrap, .table-scroll-top, .portfolio-thead-scroll, .panel, .gantt-layout, .gantt-rows",
       ),
     ),
   ];
@@ -116,7 +116,7 @@ export async function downloadElementPdf(
         cloned.style.position = "static";
         cloned
           .querySelectorAll<HTMLElement>(
-            ".timeline, .table-scroll, .table-scroll-wrap, .table-scroll-top, .panel, .panel-sticky, .portfolio-sticky, .gantt-layout, .gantt-rows",
+            ".timeline, .table-scroll, .table-scroll-wrap, .table-scroll-top, .portfolio-thead-scroll, .panel, .panel-sticky, .portfolio-sticky, .gantt-layout, .gantt-rows",
           )
           .forEach((el) => {
             el.style.overflow = "visible";
