@@ -1264,6 +1264,7 @@ body.prio-dragging {
 
 .live-eta-details {
   margin: 0;
+  font-size: 11px;
 }
 
 .live-eta-summary {
@@ -1274,6 +1275,7 @@ body.prio-dragging {
   align-items: baseline;
   gap: 8px 12px;
   user-select: none;
+  font-size: 12px;
 }
 
 .live-eta-summary::-webkit-details-marker {
@@ -1308,8 +1310,17 @@ body.prio-dragging {
 
 .live-eta-body {
   margin-top: 8px;
-  font-size: 13px;
+  font-size: inherit;
   color: var(--ink);
+  line-height: 1.4;
+}
+
+.live-eta-details .eta-final {
+  font-size: 12px;
+}
+
+.live-eta-details .eta-final-line {
+  font-size: 11px;
 }
 
 /* Compact top metadata block in functionality card modal */
