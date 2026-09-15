@@ -627,12 +627,17 @@ table {
 
 th.finance-cell {
   white-space: normal;
-  text-align: right;
+  text-align: center;
   vertical-align: middle;
 }
 
 th.finance-cell .th-label {
-  text-align: right;
+  text-align: center;
+}
+
+td.finance-cell {
+  text-align: center;
+  vertical-align: middle !important;
 }
 
 .portfolio-table thead th.prio-cell {
