@@ -2410,7 +2410,8 @@ function editorHtml(item: WorkItem | null): string {
           </div>
         </div>
         <div class="modal-body">
-          <div class="modal-meta-fields">
+          <div class="modal-section modal-meta-fields">
+            <div class="modal-section-title">Основные данные</div>
             <p class="meta modal-entity-hint">Функциональность — задачи → бизнес-результат с эффектом; живёт в продукте или проекте.</p>
             <div class="field">
               <label>Функциональность</label>
@@ -2446,12 +2447,14 @@ function editorHtml(item: WorkItem | null): string {
               </div>
             </div>
           </div>
-          <div class="field">
-            <label>Команды: майка и дата старта (отдельно по каждой)</label>
-            <div class="team-assign-list" id="teamAssignList">${teamRows}</div>
-            <div class="meta">${sizeRangesSummary(szRanges())}. Итого ~<strong class="mono" id="liveTotalEst">${totalEstimateWeeks(draft, szRanges())}</strong> чел·нед. Старт — не раньше указанной даты; если очередь занята, сдвинется позже.</div>
+          <div class="modal-section modal-teams-block">
+            <div class="field">
+              <label>Команды: майка и дата старта (отдельно по каждой)</label>
+              <div class="team-assign-list" id="teamAssignList">${teamRows}</div>
+              <div class="meta">${sizeRangesSummary(szRanges())}. Итого ~<strong class="mono" id="liveTotalEst">${totalEstimateWeeks(draft, szRanges())}</strong> чел·нед. Старт — не раньше указанной даты; если очередь занята, сдвинется позже.</div>
+            </div>
           </div>
-          <div class="callout" style="margin:0" id="liveEtaBox">
+          <div class="callout modal-section" style="margin:0" id="liveEtaBox">
             <strong>Пересчёт ETA</strong> (с учётом очереди и стартов)
             <div id="liveEta" style="margin-top:8px;font-size:13px;color:var(--ink)">${previewHtml}</div>
           </div>

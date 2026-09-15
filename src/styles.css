@@ -952,7 +952,7 @@ th.sortable.sorted {
 }
 
 .modal-wide {
-  width: min(833px, 100%);
+  width: min(980px, 100%);
 }
 
 @media (max-width: 640px) {
@@ -1237,6 +1237,30 @@ body.prio-dragging {
   line-height: 1.35;
 }
 
+/* Thematic blocks in functionality card modal */
+.modal-section {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.modal-section-title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--neutral-ink);
+  letter-spacing: 0.01em;
+}
+
+.modal-section > .field {
+  margin: 0;
+}
+
+.modal-section.callout {
+  margin: 0;
+}
+
 /* Compact top metadata block in functionality card modal */
 .modal-meta-fields {
   display: grid;
@@ -1260,6 +1284,13 @@ body.prio-dragging {
 .modal-meta-fields .field > .meta {
   margin-top: 3px;
   line-height: 1.25;
+}
+
+.modal-teams-block > .field > label {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--neutral-ink);
 }
 
 .field > .meta {
@@ -2414,7 +2445,7 @@ button.cap-cell:last-child {
 .modal-body {
   padding: 16px 18px 20px;
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .grid-2 {
