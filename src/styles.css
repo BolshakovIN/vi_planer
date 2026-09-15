@@ -1386,6 +1386,21 @@ body.prio-dragging {
   color: var(--neutral-ink);
 }
 
+.modal-rice-block {
+  display: grid;
+  gap: 10px;
+}
+
+.modal-rice-block .score-box {
+  background: var(--surface);
+}
+
+.modal-rice-block .rice-formula {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+
 .field > .meta {
   margin-top: 6px;
   font-size: 11px;

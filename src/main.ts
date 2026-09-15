@@ -2673,25 +2673,28 @@ function editorHtml(item: WorkItem | null): string {
             </summary>
             <div id="liveEta" class="live-eta-body">${previewHtml}</div>
           </details>
-          <div class="score-grid">
-            <div class="score-box"><div class="k">Охват</div><div class="v"><input id="f_reach" type="number" min="0" step="1" value="${draft.reach}" title="Пользователей / период" style="width:72px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
-            <div class="score-box"><div class="k">Влияние</div><div class="v"><select id="f_impact" title="Сила эффекта" style="width:auto;text-align:center;border:none;background:transparent;font:inherit;font-weight:700">${RICE_IMPACT_OPTIONS.map(
-              (v) =>
-                `<option value="${v}" ${draft.impact === v ? "selected" : ""}>${v} · ${RICE_IMPACT_LABELS[v]}</option>`
-            ).join("")}</select></div></div>
-            <div class="score-box"><div class="k">Уверенность, %</div><div class="v"><input id="f_conf" type="number" min="0" max="100" step="5" value="${confPct}" title="0–100%" style="width:64px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
-            <div class="score-box"><div class="k">Трудозатраты</div><div class="v mono" id="liveEffort" title="Сумма чел·нед по маечной оценке">${effort}</div></div>
-          </div>
-          <div class="callout" style="margin:0">RICE = (Охват × Влияние × Уверенность) / Трудозатраты → <strong class="mono" id="liveRice">${score}</strong></div>
-          <div class="grid-2">
-            <div class="field">
-              <label>Приоритет (уникальный, 1 = выше)</label>
-              <input id="f_rank" type="number" min="1" step="1" value="${draft.manualRank ?? nextPriority(state.items)}" />
-              <div class="meta">При занятом номере очередь пересоберётся после подтверждения рядом с полем.</div>
+          <div class="modal-section modal-rice-block">
+            <div class="modal-section-title">Приоритизация RICE</div>
+            <div class="score-grid">
+              <div class="score-box"><div class="k">Охват</div><div class="v"><input id="f_reach" type="number" min="0" step="1" value="${draft.reach}" title="Пользователей / период" style="width:72px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
+              <div class="score-box"><div class="k">Влияние</div><div class="v"><select id="f_impact" title="Сила эффекта" style="width:auto;text-align:center;border:none;background:transparent;font:inherit;font-weight:700">${RICE_IMPACT_OPTIONS.map(
+                (v) =>
+                  `<option value="${v}" ${draft.impact === v ? "selected" : ""}>${v} · ${RICE_IMPACT_LABELS[v]}</option>`
+              ).join("")}</select></div></div>
+              <div class="score-box"><div class="k">Уверенность, %</div><div class="v"><input id="f_conf" type="number" min="0" max="100" step="5" value="${confPct}" title="0–100%" style="width:64px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
+              <div class="score-box"><div class="k">Трудозатраты</div><div class="v mono" id="liveEffort" title="Сумма чел·нед по маечной оценке">${effort}</div></div>
             </div>
-            <div class="field">
-              <label>Заметки</label>
-              <textarea id="f_notes">${escapeHtml(draft.notes ?? "")}</textarea>
+            <div class="callout rice-formula">RICE = (Охват × Влияние × Уверенность) / Трудозатраты → <strong class="mono" id="liveRice">${score}</strong></div>
+            <div class="grid-2">
+              <div class="field">
+                <label>Приоритет (уникальный, 1 = выше)</label>
+                <input id="f_rank" type="number" min="1" step="1" value="${draft.manualRank ?? nextPriority(state.items)}" />
+                <div class="meta">При занятом номере очередь пересоберётся после подтверждения рядом с полем.</div>
+              </div>
+              <div class="field">
+                <label>Заметки</label>
+                <textarea id="f_notes">${escapeHtml(draft.notes ?? "")}</textarea>
+              </div>
             </div>
           </div>
         </div>
