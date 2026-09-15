@@ -2586,14 +2586,12 @@ function editorHtml(item: WorkItem | null): string {
             <span class="team-dot" style="background:${t.color}"></span>
             <span class="team-assign-name">${escapeHtml(t.name)}</span>
           </label>
-          <label class="team-assign-field">
-            <span class="meta">Маечная оценка</span>
-            <select class="f_team_size" data-team="${t.id}" ${on ? "" : "disabled"}>${sizeSelectOptions(sz)}</select>
-          </label>
-          <label class="team-assign-field">
-            <span class="meta">Старт работы</span>
-            <input type="date" class="f_team_start" data-team="${t.id}" value="${start}" ${on ? "" : "disabled"} />
-          </label>
+          <div class="team-assign-field">
+            <select class="f_team_size" data-team="${t.id}" ${on ? "" : "disabled"} aria-label="Маечная оценка">${sizeSelectOptions(sz)}</select>
+          </div>
+          <div class="team-assign-field">
+            <input type="date" class="f_team_start" data-team="${t.id}" value="${start}" ${on ? "" : "disabled"} aria-label="Старт работы" />
+          </div>
         </div>
       `;
     })
@@ -2669,7 +2667,14 @@ function editorHtml(item: WorkItem | null): string {
           <div class="modal-section modal-teams-block">
             <div class="field">
               <label>Команды: маечная оценка и дата старта (отдельно по каждой)</label>
-              <div class="team-assign-list" id="teamAssignList">${teamRows}</div>
+              <div class="team-assign-list" id="teamAssignList">
+                <div class="team-assign-head" aria-hidden="true">
+                  <span></span>
+                  <span>Маечная оценка</span>
+                  <span>Старт работы</span>
+                </div>
+                ${teamRows}
+              </div>
               <div class="meta">${sizeRangesSummary(szRanges())}. Итого ~<strong class="mono" id="liveTotalEst">${totalEstimateWeeks(draft, szRanges())}</strong> чел·нед. Старт — не раньше указанной даты; если очередь занята, сдвинется позже.</div>
             </div>
           </div>

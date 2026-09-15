@@ -843,14 +843,12 @@ ${W}${ee}`;Fo(e,le,()=>{pe.items=pe.items.map(oe=>oe.id!==n?oe:{...oe,assignment
             <span class="team-dot" style="background:${d.color}"></span>
             <span class="team-assign-name">${wt(d.name)}</span>
           </label>
-          <label class="team-assign-field">
-            <span class="meta">Маечная оценка</span>
-            <select class="f_team_size" data-team="${d.id}" ${u?"":"disabled"}>${GL(g)}</select>
-          </label>
-          <label class="team-assign-field">
-            <span class="meta">Старт работы</span>
-            <input type="date" class="f_team_start" data-team="${d.id}" value="${v}" ${u?"":"disabled"} />
-          </label>
+          <div class="team-assign-field">
+            <select class="f_team_size" data-team="${d.id}" ${u?"":"disabled"} aria-label="Маечная оценка">${GL(g)}</select>
+          </div>
+          <div class="team-assign-field">
+            <input type="date" class="f_team_start" data-team="${d.id}" value="${v}" ${u?"":"disabled"} aria-label="Старт работы" />
+          </div>
         </div>
       `}).join("");return`
     <div class="modal-backdrop" id="modal">
@@ -913,7 +911,14 @@ ${W}${ee}`;Fo(e,le,()=>{pe.items=pe.items.map(oe=>oe.id!==n?oe:{...oe,assignment
           <div class="modal-section modal-teams-block">
             <div class="field">
               <label>Команды: маечная оценка и дата старта (отдельно по каждой)</label>
-              <div class="team-assign-list" id="teamAssignList">${c}</div>
+              <div class="team-assign-list" id="teamAssignList">
+                <div class="team-assign-head" aria-hidden="true">
+                  <span></span>
+                  <span>Маечная оценка</span>
+                  <span>Старт работы</span>
+                </div>
+                ${c}
+              </div>
               <div class="meta">${Jf(er())}. Итого ~<strong class="mono" id="liveTotalEst">${GA(e,er())}</strong> чел·нед. Старт — не раньше указанной даты; если очередь занята, сдвинется позже.</div>
             </div>
           </div>

@@ -780,19 +780,28 @@ th.sortable.sorted {
 .team-assign-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 10px 12px;
   background: var(--surface-2);
 }
 
+.team-assign-head,
 .team-assign-row {
   display: grid;
   grid-template-columns: minmax(140px, 1.2fr) 110px 150px;
   gap: 10px;
-  align-items: end;
+  align-items: center;
   font-size: 13px;
+}
+
+.team-assign-head {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 0 0 2px;
 }
 
 .team-assign-check {
@@ -800,13 +809,13 @@ th.sortable.sorted {
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  padding-bottom: 6px;
+  min-height: 32px;
 }
 
 .team-assign-field {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  min-width: 0;
 }
 
 .team-assign-field input {
@@ -988,8 +997,13 @@ th.sortable.sorted {
 }
 
 @media (max-width: 640px) {
+  .team-assign-head {
+    display: none;
+  }
+
   .team-assign-row {
     grid-template-columns: 1fr;
+    gap: 6px;
   }
 }
 
