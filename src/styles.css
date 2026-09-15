@@ -1262,6 +1262,56 @@ body.prio-dragging {
   margin: 0;
 }
 
+.live-eta-details {
+  margin: 0;
+}
+
+.live-eta-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+  user-select: none;
+}
+
+.live-eta-summary::-webkit-details-marker {
+  display: none;
+}
+
+.live-eta-summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 5px solid var(--muted);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  flex-shrink: 0;
+  align-self: center;
+  transition: transform 0.15s ease;
+}
+
+.live-eta-details[open] > .live-eta-summary::before {
+  transform: rotate(90deg);
+}
+
+.live-eta-summary-date:empty {
+  display: none;
+}
+
+.live-eta-summary-date:not(:empty)::before {
+  content: "· ";
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.live-eta-body {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
 /* Compact top metadata block in functionality card modal */
 .modal-meta-fields {
   display: grid;

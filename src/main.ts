@@ -2639,10 +2639,13 @@ function editorHtml(item: WorkItem | null): string {
               <div class="meta">${sizeRangesSummary(szRanges())}. Итого ~<strong class="mono" id="liveTotalEst">${totalEstimateWeeks(draft, szRanges())}</strong> чел·нед. Старт — не раньше указанной даты; если очередь занята, сдвинется позже.</div>
             </div>
           </div>
-          <div class="callout modal-section" style="margin:0" id="liveEtaBox">
-            <strong>Пересчёт даты реализации</strong> (с учётом очереди и стартов)
-            <div id="liveEta" style="margin-top:8px;font-size:13px;color:var(--ink)">${previewHtml}</div>
-          </div>
+          <details class="callout modal-section live-eta-details" id="liveEtaBox">
+            <summary class="live-eta-summary">
+              <strong>Расчёт даты завершения</strong>
+              <span class="eta-final mono live-eta-summary-date" id="liveEtaSummaryDate">${preview ? formatDate(preview.endDate) : ""}</span>
+            </summary>
+            <div id="liveEta" class="live-eta-body">${previewHtml}</div>
+          </details>
           <div class="score-grid">
             <div class="score-box"><div class="k">Охват</div><div class="v"><input id="f_reach" type="number" min="0" step="1" value="${draft.reach}" title="Пользователей / период" style="width:72px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
             <div class="score-box"><div class="k">Влияние</div><div class="v"><select id="f_impact" title="Сила эффекта" style="width:auto;text-align:center;border:none;background:transparent;font:inherit;font-weight:700">${RICE_IMPACT_OPTIONS.map(
@@ -3434,6 +3437,7 @@ function readAssignments(): TeamAssignment[] {
 function refreshLiveEta() {
   const liveEst = document.querySelector("#liveTotalEst");
   const liveEta = document.querySelector("#liveEta");
+  const liveEtaSummaryDate = document.querySelector("#liveEtaSummaryDate");
   const assignments = readAssignments();
   if (liveEst) {
     liveEst.textContent = String(
@@ -3444,6 +3448,7 @@ function refreshLiveEta() {
   if (!assignments.length) {
     liveEta.innerHTML =
       '<div class="meta">Отметьте команду, чтобы увидеть расчёт даты реализации</div>';
+    if (liveEtaSummaryDate) liveEtaSummaryDate.textContent = "";
     return;
   }
   const base =
@@ -3501,7 +3506,11 @@ function refreshLiveEta() {
   const preview = previewScheduleFor(draft);
   if (!preview) {
     liveEta.innerHTML = '<div class="meta">Нет расчёта</div>';
+    if (liveEtaSummaryDate) liveEtaSummaryDate.textContent = "";
     return;
+  }
+  if (liveEtaSummaryDate) {
+    liveEtaSummaryDate.textContent = formatDate(preview.endDate);
   }
   liveEta.innerHTML = formatLiveEtaHtml(preview, assignments);
 }
