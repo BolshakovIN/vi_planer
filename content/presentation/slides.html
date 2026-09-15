@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VI Planer — продукт</title>
+  <style>
+    :root {
+      --bg: #f4f4f4;
+      --surface: #ffffff;
+      --ink: #1a1a1a;
+      --muted: #737373;
+      --line: #e0e0e0;
+      --accent: #d60000;
+      --accent-soft: #fff0f0;
+      --neutral: #455a64;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      background: #ddd;
+      color: var(--ink);
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    @page {
+      size: 297mm 167mm;
+      margin: 0;
+    }
+
+    .deck {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .slide {
+      width: 297mm;
+      height: 167mm;
+      background: var(--surface);
+      position: relative;
+      overflow: hidden;
+      page-break-after: always;
+      break-after: page;
+      display: flex;
+      flex-direction: column;
+      padding: 18mm 20mm 14mm;
+    }
+
+    .slide:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+
+    .slide::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 6px;
+      background: var(--accent);
+    }
+
+    .slide-footer {
+      margin-top: auto;
+      padding-top: 10mm;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+    }
+
+    .slide-footer .brand {
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: 0.02em;
+    }
+
+    .slide-footer .brand span {
+      color: var(--accent);
+    }
+
+    .kicker {
+      font-size: 13px;
+      font-weight: 650;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      font-size: 42px;
+      font-weight: 750;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+
+    h2 {
+      font-size: 32px;
+      font-weight: 750;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      margin-bottom: 14px;
+    }
+
+    .lead {
+      font-size: 18px;
+      line-height: 1.45;
+      color: var(--neutral);
+      max-width: 42em;
+    }
+
+    .title-slide {
+      justify-content: center;
+      background:
+        linear-gradient(180deg, #ffffff 0%, #fafafa 55%, #fff0f0 100%);
+    }
+
+    .title-slide h1 {
+      font-size: 56px;
+      margin-bottom: 8px;
+    }
+
+    .title-slide h1 .vi {
+      color: var(--accent);
+    }
+
+    .title-meta {
+      margin-top: 28px;
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .pillars {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: 22px;
+    }
+
+    .pillar {
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--accent);
+      background: #fafafa;
+      padding: 14px 16px;
+      min-height: 88px;
+    }
+
+    .pillar strong {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 6px;
+    }
+
+    .pillar p {
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--neutral);
+    }
+
+    ul.points {
+      list-style: none;
+      margin-top: 8px;
+    }
+
+    ul.points li {
+      position: relative;
+      padding: 10px 0 10px 22px;
+      font-size: 17px;
+      line-height: 1.4;
+      border-bottom: 1px solid var(--line);
+    }
+
+    ul.points li:last-child { border-bottom: none; }
+
+    ul.points li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 18px;
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+    }
+
+    .modes {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .mode {
+      border: 1px solid var(--line);
+      padding: 16px;
+      background: #fafafa;
+    }
+
+    .mode .num {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .mode strong {
+      display: block;
+      font-size: 16px;
+      margin-bottom: 8px;
+    }
+
+    .mode p {
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--neutral);
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 10px;
+      flex: 1;
+    }
+
+    .box {
+      border: 1px solid var(--line);
+      padding: 18px;
+      background: #fafafa;
+    }
+
+    .box h3 {
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+
+    .box ul {
+      list-style: none;
+    }
+
+    .box li {
+      font-size: 14px;
+      line-height: 1.45;
+      padding: 6px 0 6px 16px;
+      position: relative;
+      color: var(--neutral);
+    }
+
+    .box li::before {
+      content: "–";
+      position: absolute;
+      left: 0;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .outcome-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .outcome {
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      padding: 14px 16px;
+    }
+
+    .outcome strong {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+
+    .outcome span {
+      font-size: 13px;
+      color: var(--neutral);
+      line-height: 1.4;
+    }
+
+    .next-list {
+      margin-top: 12px;
+      counter-reset: next;
+    }
+
+    .next-list li {
+      counter-increment: next;
+      list-style: none;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 16px;
+      line-height: 1.4;
+    }
+
+    .next-list li::before {
+      content: counter(next, decimal-leading-zero);
+      color: var(--accent);
+      font-weight: 750;
+      font-size: 14px;
+      letter-spacing: 0.04em;
+      min-width: 2em;
+      padding-top: 2px;
+    }
+
+    @media print {
+      body, html { background: white; }
+      .deck { padding: 0; gap: 0; }
+      .slide {
+        width: 297mm;
+        height: 167mm;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck">
+
+    <!-- 1. Title -->
+    <section class="slide title-slide">
+      <div class="kicker">Внутренний инструмент планирования · ВИ.ру</div>
+      <h1><span class="vi">VI</span> Planer</h1>
+      <p class="lead">Единый портфель инициатив со сквозным приоритетом (WSJF), сроками и ёмкостью команд.</p>
+      <div class="title-meta">
+        Краткий продуктовый обзор · 2–3 минуты<br />
+        Live: bolshakovin.github.io/vi_planer
+      </div>
+      <div class="slide-footer">
+        <div class="brand"><span>VI</span> Planer</div>
+        <div>1 / 8</div>
+      </div>
+    </section>
+
+    <!-- 2. Problem -->
+    <section class="slide">
+      <div class="kicker">Проблема</div>
+      <h2>Портфель разъезжается,<br />ETA по командам — в голове</h2>
+      <ul class="points">
+        <li>Продукты и проекты живут в разных бэклогах — нет единого «что первым».</li>
+        <li>Мультикомандные инициативы: оценки есть, а общий срок — нет.</li>
+        <li>What-if по FTE и приоритетам требует таблицы и ручного пересчёта.</li>
+        <li>Стейкхолдерам сложно быстро увидеть план и bottleneck.</li>
+      </ul>
+      <div class="slide-footer">
+        <div class="brand"><span>VI</span> Planer</div>
+        <div>2 / 8</div>
+      </div>
+    </section>
+
+    <!-- 3. What it is -->
+    <section class="slide">
+      <div class="kicker">Что это</div>
+      <h2>SPA для портфельного планирования</h2>
+      <p class="lead">Один экран: приоритет → оценка команд → срок с учётом ёмкости. Без смены трекера.</p>
+      <div class="pillars">
+        <div class="pillar">
+          <strong>Портфель + WSJF</strong>
+          <p>Инициативы (продукты и проекты), сквозной приоритет и ценность/срочность.</p>
+        </div>
+        <div class="pillar">
+          <strong>Сроки и ёмкость</strong>
+          <p>Gantt, очереди команд, три режима планирования capacity.</p>
+        </div>
+        <div class="pillar">
+          <strong>Общие данные</strong>
+          <p>Supabase / API — одна картина для команды; PDF на выходе.</p>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <div class="brand"><span>VI</span> Planer</div>
+        <div>3 / 8</div>
+      </div>
+    </section>
+
+    <!-- 4. Portfolio + WSJF -->
+    <section class="slide">
+      <div class="kicker">Портфель</div>
+      <h2>Сквозной приоритет и WSJF</h2>
+      <div class="two-col">
+        <div class="box">
+          <h3>Инициативы</h3>
+          <ul>
+            <li>Тип: продукт или проект</li>
+            <li>Несколько команд с оценками (S/M/L)</li>
+            <li>Статус, владелец, заметки</li>
+            <li>Фильтры и сортировки по срезу</li>
+          </ul>
+        </div>
+        <div class="box">
+          <h3>Приоритет</h3>
+          <ul>
+            <li>Ручной сквозной порядок 1…n</li>
+            <li>WSJF: ценность / срочность / размер</li>
+            <li>Ответ на «что делаем первым»</li>
+            <li>Единый взгляд для PO и тимлидов</li>
+          </ul>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <div class="brand"><span>VI</span> Planer</div>
+        <div>4 / 8</div>
+      </div>
+    </section>
+
+    <!-- 5. Gantt & capacity -->
+    <section class="slide">
+      <div class="kicker">Gantt и ёмкость</div>
+      <h2>Три режима capacity</h2>
+      <p class="lead">Сроки считаются от очередей команд и доступной ёмкости — не из «пальца».</p>
+      <div class="modes">
+        <div class="mode">
+          <div class="num">Режим 1</div>
+          <strong>Ручной</strong>
+          <p>Старт задаёте сами; удобно для зафиксированных дат и ограничений.</p>
+        </div>
+        <div class="mode">
+          <div class="num">Режим 2</div>
+          <strong>Последовательный</strong>
+          <p>Инициативы выстраиваются в очередь команды друг за другом.</p>
+        </div>
+        <div class="mode">
+          <div class="num">Режим 3</div>
+          <strong>Max utilization</strong>
+          <p>Максимальная утилизация ёмкости — плотнее по времени, честный ETA.</p>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <div class="brand"><span>VI</span> Planer</div>
+        <div>5 / 8</div>
+      </div>
+    </section>
+
+    <!-- 6. Shared / collaboration -->
+    <section class="slide">
+      <div class="kicker">Совместная работа</div>
+      <h2>Одна ссылка — общая картина</h2>
+      <ul class="points">
+        <li>GitHub Pages: открывается в браузере, без установки.</li>
+        <li>Supabase (или API + Postgres): общее состояние для команды.</li>
+        <li>Вкладки: Портфель → Gantt/Сроки → Очередь команд → Настройки.</li>
+        <li>Цветной PDF-экспорт метрик и активной вкладки для стейкхолдеров.</li>
+      </ul>
+      <div class="slide-footer">
+        <div class="brand"><span>VI</span> Planer</div>
+        <div>6 / 8</div>
+      </div>
+    </section>
+
+    <!-- 7. Outcomes -->
+    <section class="slide">
+      <div class="kicker">Результат</div>
+      <h2>Для кого и зачем</h2>
+      <div class="outcome-grid">
+        <div class="outcome">
+          <strong>Product / Portfolio Owner</strong>
+          <span>Единый приоритет и ETA по всему портфелю.</span>
+        </div>
+        <div class="outcome">
+          <strong>Team Lead</strong>
+          <span>Очередь своей команды и загрузка ёмкости.</span>
+        </div>
+        <div class="outcome">
+          <strong>Стейкхолдер</strong>
+          <span>Быстрый обзор плана и PDF по ссылке.</span>
+        </div>
+        <div class="outcome">
+          <strong>Исход</strong>
+          <span>«Что первым» и «когда закончим» — в одном месте.</span>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <div class="brand"><span>VI</span> Planer</div>
+        <div>7 / 8</div>
+      </div>
+    </section>
+
+    <!-- 8. Next steps -->
+    <section class="slide">
+      <div class="kicker">Дальше</div>
+      <h2>Следующие шаги</h2>
+      <ol class="next-list">
+        <li>Открыть live и пройтись по демо-портфелю на реальных инициативах.</li>
+        <li>Завести команды и FTE в Настройках, проверить очередь и Gantt.</li>
+        <li>Сверить приоритет/WSJF с текущим планом — зафиксировать «источник правды».</li>
+        <li>При необходимости — углубить интеграции и роли (вне v1).</li>
+      </ol>
+      <div class="slide-footer">
+        <div class="brand"><span>VI</span> Planer</div>
+        <div>8 / 8</div>
+      </div>
+    </section>
+
+  </div>
+</body>
+</html>

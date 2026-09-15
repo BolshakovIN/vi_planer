@@ -18,7 +18,8 @@
     "start": "tsx server/index.ts",
     "start:py": "python3 -m server_py",
     "preview": "npm run build && npm start",
-    "preview:py": "npm run build && npm run start:py"
+    "preview:py": "npm run build && npm run start:py",
+    "build:presentation": "node scripts/build-presentation-pdf.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
