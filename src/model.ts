@@ -163,7 +163,10 @@ export interface WorkItem {
   /** One or more teams; each has its own remaining effort */
   assignments: TeamAssignment[];
   status: ItemStatus;
+  /** Заказчик — UI «Заказчик»; stored as owner */
   owner: string;
+  /** Исполнитель — empty if unset */
+  assignee: string;
   /** RICE Reach — how many users/period */
   reach: number;
   /** RICE Impact — 0.25 / 0.5 / 1 / 2 / 3 */
@@ -185,7 +188,49 @@ export interface AppState {
   startDate: string;
   /** T-shirt size ranges in weeks (editable in Settings) */
   sizeRanges: SizeRanges;
+  /** Заказчики (Roles → picker Заказчик) */
+  customers: string[];
+  /** Исполнители (Roles → picker Исполнитель) */
+  executors: string[];
+  /** Проекты (Проекты tab → backlog when type=project) */
+  projects: string[];
+  /** Продукты (Проекты tab → backlog when type=product) */
+  products: string[];
   version: 3;
+}
+
+/** Unique non-empty catalog names; drops «—»; stable ru sort. */
+export function uniqCatalogNames(names: Iterable<string>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of names) {
+    const n = String(raw ?? "").trim();
+    if (!n || n === "—") continue;
+    const key = n.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(n);
+  }
+  return out.sort((a, b) => a.localeCompare(b, "ru"));
+}
+
+function parseCatalogNameList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return uniqCatalogNames(raw.map((x) => String(x)));
+}
+
+/** Product/project container name from backlog (legacy «… backlog · Name» ok). */
+export function containerNameFromBacklog(backlog: string): string {
+  const trimmed = backlog.trim();
+  if (!trimmed) return "";
+  const parts = trimmed
+    .split(" · ")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length >= 2 && /backlog/i.test(parts.slice(0, -1).join(" · "))) {
+    return parts[parts.length - 1]!;
+  }
+  return trimmed;
 }
 
 /** One team's slice of an initiative in that team's queue */
@@ -407,7 +452,7 @@ export function riceEffortWeeks(
   return Math.max(totalEstimateWeeks(item, ranges), 0.5);
 }
 
-/** RICE = (Reach × Impact × Confidence) / Effort (чел·нед по майкам). */
+/** RICE = (Reach × Impact × Confidence) / Effort (чел·нед по маечной оценке). */
 export function rice(
   item: WorkItem,
   ranges: SizeRanges = DEFAULT_SIZE_RANGES
@@ -1117,6 +1162,7 @@ export function normalizeState(raw: unknown): AppState | null {
         ? r.status
         : "idea") as ItemStatus,
       owner: String(r.owner ?? "—"),
+      assignee: String(r.assignee ?? ""),
       ...riceFieldsFromRaw(r),
       notes: r.notes != null ? String(r.notes) : undefined,
       manualRank:
@@ -1127,11 +1173,47 @@ export function normalizeState(raw: unknown): AppState | null {
   });
 
   const parsedRanges = normalizeSizeRanges(data.sizeRanges);
+
+  let customers = parseCatalogNameList(data.customers);
+  let executors = parseCatalogNameList(data.executors);
+  let projects = parseCatalogNameList(data.projects);
+  let products = parseCatalogNameList(data.products);
+  if (data.roles && typeof data.roles === "object") {
+    const roles = data.roles as Record<string, unknown>;
+    customers = uniqCatalogNames([
+      ...customers,
+      ...parseCatalogNameList(roles.customers),
+    ]);
+    executors = uniqCatalogNames([
+      ...executors,
+      ...parseCatalogNameList(roles.executors),
+    ]);
+  }
+
+  customers = uniqCatalogNames([...customers, ...items.map((i) => i.owner)]);
+  executors = uniqCatalogNames([...executors, ...items.map((i) => i.assignee)]);
+  projects = uniqCatalogNames([
+    ...projects,
+    ...items
+      .filter((i) => i.type === "project")
+      .map((i) => containerNameFromBacklog(i.backlog)),
+  ]);
+  products = uniqCatalogNames([
+    ...products,
+    ...items
+      .filter((i) => i.type === "product")
+      .map((i) => containerNameFromBacklog(i.backlog)),
+  ]);
+
   return {
     version: 3,
     startDate: planStart,
     teams,
     sizeRanges: parsedRanges,
+    customers,
+    executors,
+    projects,
+    products,
     items: ensureUniquePriorities(items, parsedRanges),
   };
 }

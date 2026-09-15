@@ -45,6 +45,8 @@ import {
   utilizationPct,
   nearestSizeForCalendarWeeks,
   calendarWeeksForSize,
+  uniqCatalogNames,
+  containerNameFromBacklog,
 } from "./model";
 import { SEED } from "./seed";
 import {
@@ -59,7 +61,14 @@ import { downloadElementPdf, downloadMarkdownAsPdf } from "./pdfExport";
 /** Release / deploy stamp in the header (DD.MM.YYYY) */
 const RELEASE_UPDATED = "15.09.2026";
 
-type Tab = "portfolio" | "timeline" | "queuesTest" | "capacity" | "settings";
+type Tab =
+  | "portfolio"
+  | "timeline"
+  | "queuesTest"
+  | "capacity"
+  | "roles"
+  | "projects"
+  | "settings";
 type SortKey = "priority" | "rice" | "estimate" | "eta";
 type SortDir = "asc" | "desc";
 type GanttBarDragMode = "move" | "resize-left" | "resize-right";
@@ -69,6 +78,8 @@ const TAB_LABELS: Record<Tab, string> = {
   timeline: "Gantt/Сроки",
   queuesTest: "Очередь команд",
   capacity: "Команды",
+  roles: "Роли",
+  projects: "Проекты",
   settings: "Настройки",
 };
 
@@ -80,6 +91,8 @@ function normalizeTab(tab: string | undefined | null): Tab {
     tab === "timeline" ||
     tab === "queuesTest" ||
     tab === "capacity" ||
+    tab === "roles" ||
+    tab === "projects" ||
     tab === "settings"
   ) {
     return tab;
@@ -122,7 +135,7 @@ const SCHEDULE_MODE_META: Record<
   },
   maxUtilization: {
     label: "Максимальная утилизация ресурса",
-    hint: "Все команды одной функциональности стартуют вместе; дата реализации = max по командам.",
+    hint: "Все команды одной функциональности стартуют вместе; дата завершения = max по командам.",
   },
 };
 
@@ -252,6 +265,7 @@ function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
       item.title.toLowerCase().includes(q) ||
       item.backlog.toLowerCase().includes(q) ||
       item.owner.toLowerCase().includes(q) ||
+      item.assignee.toLowerCase().includes(q) ||
       teamsLabel(item).toLowerCase().includes(q)
     );
   });
@@ -326,11 +340,11 @@ const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
   priority: "Приоритет",
   type: "Тип",
   title: "Функциональность",
-  teams: "Команды (майка · старт)",
+  teams: "Команды (оценка · старт)",
   status: "Статус",
   rice: "RICE",
-  estimate: "Оценка, маек",
-  eta: "Дата реализации",
+  estimate: "Маечная оценка",
+  eta: "Дата завершения",
 };
 
 const PORTFOLIO_COL_DEFAULTS: Record<PortfolioCol, number> = {
@@ -604,8 +618,8 @@ function portfolioTheadCellsHtml(): string {
     ${resizableTh("Команды (оценка · старт)", "teams")}
     ${resizableTh("Статус", "status", "status-cell")}
     ${sortHeader("RICE", "rice", "rice-cell")}
-    ${sortHeader("Оценка, маек", "estimate", "estimate-cell")}
-    ${sortHeader("Дата реализации", "eta")}
+    ${sortHeader("Маечная оценка", "estimate", "estimate-cell")}
+    ${sortHeader("Дата завершения", "eta")}
   `;
 }
 
@@ -724,22 +738,16 @@ function metricsHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string 
  * Uses the full trimmed field; legacy «… backlog · Name» keeps the last segment.
  */
 function productProjectName(backlog: string): string {
-  const trimmed = backlog.trim();
-  if (!trimmed) return "";
-  const parts = trimmed
-    .split(" · ")
-    .map((p) => p.trim())
-    .filter(Boolean);
-  if (parts.length >= 2 && /backlog/i.test(parts.slice(0, -1).join(" · "))) {
-    return parts[parts.length - 1]!;
-  }
-  return trimmed;
+  return containerNameFromBacklog(backlog);
 }
 
 function functionalitySubtitleHtml(item: WorkItem): string {
   const owner = item.owner.trim();
-  if (!owner) return "";
-  return `Владелец: ${escapeHtml(owner)}`;
+  const assignee = item.assignee.trim();
+  const bits: string[] = [];
+  if (owner && owner !== "—") bits.push(`Заказчик: ${escapeHtml(owner)}`);
+  if (assignee) bits.push(`Исполнитель: ${escapeHtml(assignee)}`);
+  return bits.join(" · ");
 }
 
 function columnsHelpHtml(): string {
@@ -749,12 +757,12 @@ function columnsHelpHtml(): string {
       <div class="cols-help">
         <div><span class="cols-help-k">Приоритет</span> — сквозной ранг (1 = выше); тяните строку за ⋮⋮, чтобы переставить. Сортировка других колонок приоритет не меняет</div>
         <div><span class="cols-help-k">Тип</span> — продукт или проект и название (колонка «Название проекта / продукта»)</div>
-        <div><span class="cols-help-k">Функциональность</span> — набор задач → бизнес-результат с эффектом; в ячейке — название и владелец</div>
-        <div><span class="cols-help-k">Команды</span> — кто делает, майка (S/M/L) и план старта</div>
+        <div><span class="cols-help-k">Функциональность</span> — набор задач → бизнес-результат с эффектом; в ячейке — название, заказчик и исполнитель</div>
+        <div><span class="cols-help-k">Команды</span> — кто делает, маечная оценка (S/M/L) и план старта</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
-        <div><span class="cols-help-k">RICE</span> — (Охват × Влияние × Уверенность) / Трудозатраты (чел·нед по майкам)</div>
-        <div><span class="cols-help-k">Оценка</span> — маек S / M / L (недели в Настройках)</div>
-        <div><span class="cols-help-k">Дата реализации</span> — когда закончила последняя команда (bottleneck)</div>
+        <div><span class="cols-help-k">RICE</span> — (Охват × Влияние × Уверенность) / Трудозатраты (чел·нед по маечной оценке)</div>
+        <div><span class="cols-help-k">Маечная оценка</span> — S / M / L (недели в Настройках)</div>
+        <div><span class="cols-help-k">Дата завершения</span> — когда закончила последняя команда (bottleneck)</div>
       </div>
     </details>
   `;
@@ -1346,11 +1354,16 @@ function showGanttLabelTip(anchor: HTMLElement) {
   const product = anchor.dataset.tipProduct?.trim() || "";
   const eta = anchor.dataset.tipEta?.trim() || "";
   const owner = anchor.dataset.tipOwner?.trim() || "";
+  const assignee = anchor.dataset.tipAssignee?.trim() || "";
   const note = anchor.dataset.tipNote?.trim() || "";
 
   const metaBits: string[] = [];
   if (product) metaBits.push(escapeHtml(product));
-  if (eta) metaBits.push(`Дата реализации ${escapeHtml(eta)}`);
+  if (eta) metaBits.push(`Дата завершения ${escapeHtml(eta)}`);
+
+  const peopleBits: string[] = [];
+  if (owner) peopleBits.push(`Заказчик: ${escapeHtml(owner)}`);
+  if (assignee) peopleBits.push(`Исполнитель: ${escapeHtml(assignee)}`);
 
   const pop = document.createElement("div");
   pop.id = "ganttLabelTip";
@@ -1364,8 +1377,8 @@ function showGanttLabelTip(anchor: HTMLElement) {
         : ""
     }
     ${
-      owner
-        ? `<div class="gantt-label-tip-owner">Владелец: ${escapeHtml(owner)}</div>`
+      peopleBits.length
+        ? `<div class="gantt-label-tip-owner">${peopleBits.join(" · ")}</div>`
         : ""
     }
     ${
@@ -1572,7 +1585,7 @@ function bindGanttBarEdit() {
         const sizeLine = sizeChanged
           ? `Оценка: <span class="accent">${oldSize}</span> (${sizePlanWeeks(oldSize, szRanges())} чел·нед) → <span class="accent">${newSize}</span> (${sizePlanWeeks(newSize, szRanges())} чел·нед)${
               scheduledSpan !== newSpan
-                ? `<br/><span class="meta">после сохранения полоска ≈ ${scheduledSpan} нед. по майке ${newSize}</span>`
+                ? `<br/><span class="meta">после сохранения полоска ≈ ${scheduledSpan} нед. по маечной оценке ${newSize}</span>`
                 : ""
             }`
           : `Оценка: <span class="accent">${oldSize}</span> (без изменений)`;
@@ -1778,7 +1791,7 @@ function timelineHtml(
                 : "старт очереди";
             })()
           : schedMode === "maxUtilization"
-            ? "макс. утилизация · дата реализации = max команд"
+            ? "макс. утилизация · дата завершения = max команд"
             : "как задано · без сдвига очереди";
       const depHint =
         schedMode === "teamQueue"
@@ -1793,11 +1806,12 @@ function timelineHtml(
       const { trackH, rowH } = rowMetrics[rowIdx];
       const containerName = productProjectName(item.backlog);
       const etaMetaLine = containerName
-        ? `${escapeHtml(containerName)} · Дата реализации ${formatDate(r.endDate)}`
-        : `Дата реализации ${formatDate(r.endDate)}`;
+        ? `${escapeHtml(containerName)} · Дата завершения ${formatDate(r.endDate)}`
+        : `Дата завершения ${formatDate(r.endDate)}`;
       const ownerRaw = item.owner.trim();
       const ownerTip =
         ownerRaw && ownerRaw !== "—" ? ownerRaw : "";
+      const assigneeTip = item.assignee.trim();
       const bars = packed
         .map(({ slice: s, lane: barLane }) => {
           const team = teamById(s.teamId);
@@ -1826,6 +1840,7 @@ function timelineHtml(
           data-tip-product="${escapeAttr(containerName)}"
           data-tip-eta="${escapeAttr(formatDate(r.endDate))}"
           data-tip-owner="${escapeAttr(ownerTip)}"
+          data-tip-assignee="${escapeAttr(assigneeTip)}"
           data-tip-note="${escapeAttr(scheduleNote)}"
         >
           <div class="name"><span class="prio-mini">${item.manualRank ?? "—"}</span> ${escapeHtml(item.title)}</div>
@@ -1886,7 +1901,7 @@ function timelineHtml(
               schedMode === "teamQueue"
                 ? "Стрелки: очередь одной команды (цвет = команда), от конца полоски к началу следующей — не кросс-командные зависимости функциональности."
                 : schedMode === "maxUtilization"
-                  ? "Максимальная утилизация ресурса: полоски одной функциональности стартуют вместе (параллельно ≥ даты старта). Стрелки FS скрыты; дата реализации = max по командам."
+                  ? "Максимальная утилизация ресурса: полоски одной функциональности стартуют вместе (параллельно ≥ даты старта). Стрелки FS скрыты; дата завершения = max по командам."
                   : "Режим «Как задано»: даты полосок = старты из карточек. Выберите режим утилизации выше, чтобы сдвигать работы под ёмкость (и увидеть стрелки FS в последовательном режиме)."
             }
           </p>
@@ -1951,10 +1966,10 @@ function timelineHtml(
       </div>
       <p class="footer-note" style="padding:0 16px 16px;margin:0">${
         schedMode === "teamQueue"
-          ? "Шкала — недели от старта планирования (понедельник). Стрелки FS одной команды: правый край полоски → левый край следующей работы этой же команды в очереди по приоритету (цвет = команда; не связи между разными командами одной функциональности). Подпись «после #N (команда)» — кто стоит перед этой полоской в очереди. Дата реализации = конец bottleneck-полоски."
+          ? "Шкала — недели от старта планирования (понедельник). Стрелки FS одной команды: правый край полоски → левый край следующей работы этой же команды в очереди по приоритету (цвет = команда; не связи между разными командами одной функциональности). Подпись «после #N (команда)» — кто стоит перед этой полоской в очереди. Дата завершения = конец bottleneck-полоски."
           : schedMode === "maxUtilization"
-            ? "Шкала — недели от старта планирования (понедельник). Режим «Максимальная утилизация ресурса»: функциональности по приоритету; все команды одной функциональности делят общий старт и идут параллельно (дата реализации = max по командам), без FS-очереди, которая раздвигает сроки. Ниже по приоритету ждут свободной ёмкости, но при старте тоже параллельны."
-            : "Шкала — недели от старта планирования (понедельник). Даты полосок = заданные старты (без сдвига по ёмкости); стрелки очереди скрыты. Дата реализации = конец bottleneck-полоски; параллельная работа может перегрузить команду."
+            ? "Шкала — недели от старта планирования (понедельник). Режим «Максимальная утилизация ресурса»: функциональности по приоритету; все команды одной функциональности делят общий старт и идут параллельно (дата завершения = max по командам), без FS-очереди, которая раздвигает сроки. Ниже по приоритету ждут свободной ёмкости, но при старте тоже параллельны."
+            : "Шкала — недели от старта планирования (понедельник). Даты полосок = заданные старты (без сдвига по ёмкости); стрелки очереди скрыты. Дата завершения = конец bottleneck-полоски; параллельная работа может перегрузить команду."
       } Красная подсветка — загрузка команды по расписанию (как на Gantt) выше ёмкости в эту неделю.</p>
     </div>
   `;
@@ -2151,7 +2166,7 @@ function teamsManageHtml(): string {
   return `
     <div class="callout">
       <strong>Ёмкость</strong> — сколько человеко-недель команда может отдать за календарную неделю.
-      Оценки функциональностей задаются майками (недели — в блоке ниже).
+      Оценки функциональностей задаются маечной оценкой (недели — в блоке ниже).
     </div>
     <div class="panel panel-sticky-host">
       <div class="panel-sticky">
@@ -2174,6 +2189,131 @@ function teamsManageHtml(): string {
 
 function capacityHtml(): string {
   return `<div class="settings-stack">${teamsManageHtml()}</div>`;
+}
+
+type CatalogKind = "customers" | "executors" | "projects" | "products";
+
+function catalogListHtml(
+  kind: CatalogKind,
+  title: string,
+  addLabel: string
+): string {
+  const names = state[kind];
+  const rows = names
+    .map(
+      (name, idx) => `
+      <div class="role-row" data-catalog-kind="${kind}" data-catalog-idx="${idx}">
+        <input
+          class="role-name-input"
+          type="text"
+          data-catalog-name="${kind}"
+          data-catalog-idx="${idx}"
+          value="${escapeAttr(name)}"
+          aria-label="${escapeAttr(title)}"
+        />
+        <button
+          type="button"
+          class="btn btn-ghost team-delete-btn"
+          data-catalog-delete="${kind}"
+          data-catalog-idx="${idx}"
+          title="Удалить"
+        >Удалить</button>
+      </div>`
+    )
+    .join("");
+
+  return `
+    <div class="panel panel-sticky-host">
+      <div class="panel-sticky">
+        <div class="panel-header">
+          <h2>${escapeHtml(title)}</h2>
+        </div>
+      </div>
+      <div class="role-list" data-catalog-list="${kind}">
+        ${rows || `<div class="empty">Нет имён — добавьте ниже</div>`}
+      </div>
+      <div class="team-add-bar role-add-bar">
+        <input
+          id="newCatalog_${kind}"
+          type="text"
+          placeholder="Новое имя"
+          aria-label="Новое имя: ${escapeAttr(title)}"
+        />
+        <button class="btn btn-primary" data-catalog-add="${kind}">${escapeHtml(addLabel)}</button>
+      </div>
+    </div>
+  `;
+}
+
+function rolesHtml(): string {
+  return `
+    <div class="settings-stack">
+      <div class="callout">
+        Списки <strong>Заказчик</strong> и <strong>Исполнитель</strong> задают допустимые значения
+        в карточке функциональности. Имена из старых данных подтягиваются автоматически.
+      </div>
+      ${catalogListHtml("customers", "Заказчик", "+ Заказчик")}
+      ${catalogListHtml("executors", "Исполнитель", "+ Исполнитель")}
+    </div>
+  `;
+}
+
+function projectsTabHtml(): string {
+  return `
+    <div class="settings-stack">
+      <div class="callout">
+        Списки <strong>Проекты</strong> и <strong>Продукты</strong> задают варианты поля
+        «Название проекта / продукта» в карточке (по выбранному типу).
+      </div>
+      ${catalogListHtml("projects", "Проекты", "+ Проект")}
+      ${catalogListHtml("products", "Продукты", "+ Продукт")}
+    </div>
+  `;
+}
+
+/** Strict select from a catalog list; keeps orphan value once if missing. */
+function catalogSelectHtml(
+  id: string,
+  names: string[],
+  selected: string,
+  emptyLabel = "—"
+): string {
+  const sel = selected.trim();
+  const meaningful = Boolean(sel && sel !== "—");
+  const inList = meaningful && names.some((n) => n === sel);
+  const orphan =
+    meaningful && !inList
+      ? `<option value="${escapeAttr(sel)}" selected>${escapeHtml(sel)}</option>`
+      : "";
+  const opts = names
+    .map(
+      (n) =>
+        `<option value="${escapeAttr(n)}" ${n === sel ? "selected" : ""}>${escapeHtml(n)}</option>`
+    )
+    .join("");
+  return `
+    <select id="${id}">
+      <option value="" ${!meaningful ? "selected" : ""}>${escapeHtml(emptyLabel)}</option>
+      ${orphan}
+      ${opts}
+    </select>
+  `;
+}
+
+function backlogNamesForType(type: ItemType): string[] {
+  return type === "project" ? state.projects : state.products;
+}
+
+function refillBacklogSelect(type: ItemType, keep: string) {
+  const sel = document.querySelector<HTMLSelectElement>("#f_backlog");
+  if (!sel) return;
+  const names = backlogNamesForType(type);
+  const keepVal = keep.trim();
+  const ok = Boolean(keepVal && names.includes(keepVal));
+  const tmp = document.createElement("div");
+  tmp.innerHTML = catalogSelectHtml("f_backlog", names, ok ? keepVal : "");
+  const next = tmp.querySelector("select");
+  if (next) sel.innerHTML = next.innerHTML;
 }
 
 function settingsHtml(rollups: ItemSchedule[]): string {
@@ -2243,13 +2383,13 @@ function settingsHtml(rollups: ItemSchedule[]): string {
         </div>
       </div>
       <div class="callout">
-        Диапазоны майок — <strong>сколько недель</strong> заложено в оценке проекта (S / M / L). Для плана берётся середина диапазона.
+        Диапазоны маечной оценки — <strong>сколько недель</strong> заложено в оценке проекта (S / M / L). Для плана берётся середина диапазона.
         Изменения сразу перестраивают дату реализации и Gantt.
       </div>
       <div class="panel panel-sticky-host">
         <div class="panel-sticky">
           <div class="panel-header">
-            <h2>Майки (S / M / L)</h2>
+            <h2>Маечная оценка (S / M / L)</h2>
             <button type="button" class="btn" id="resetSizeRanges">Сбросить по умолчанию</button>
           </div>
         </div>
@@ -2265,7 +2405,7 @@ function settingsHtml(rollups: ItemSchedule[]): string {
             <strong class="mono">${active.length}</strong>
           </div>
           <div class="settings-preview-row">
-            <span>Шкала майок</span>
+            <span>Шкала маечной оценки</span>
             <strong id="settingsRangesSummary">${sizeRangesSummary(r)}</strong>
           </div>
         </div>
@@ -2356,6 +2496,7 @@ function editorHtml(item: WorkItem | null): string {
       ],
       status: "idea",
       owner: "",
+      assignee: "",
       reach: 100,
       impact: 1,
       confidence: 0.8,
@@ -2392,7 +2533,7 @@ function editorHtml(item: WorkItem | null): string {
             <span class="team-assign-name">${escapeHtml(t.name)}</span>
           </label>
           <label class="team-assign-field">
-            <span class="meta">Майка</span>
+            <span class="meta">Маечная оценка</span>
             <select class="f_team_size" data-team="${t.id}" ${on ? "" : "disabled"}>${sizeSelectOptions(sz)}</select>
           </label>
           <label class="team-assign-field">
@@ -2433,8 +2574,12 @@ function editorHtml(item: WorkItem | null): string {
               </div>
               <div class="field">
                 <label>Название проекта / продукта</label>
-                <input id="f_backlog" value="${escapeAttr(draft.backlog)}" placeholder="ЛК B2B" />
-                <div class="meta">Название продукта или проекта, в котором живёт функциональность; показывается в колонке Тип.</div>
+                ${catalogSelectHtml(
+                  "f_backlog",
+                  backlogNamesForType(draft.type),
+                  productProjectName(draft.backlog) || draft.backlog
+                )}
+                <div class="meta">Список зависит от типа (Проект / Продукт); правится на вкладке «Проекты».</div>
               </div>
               <div class="field">
                 <label>Статус</label>
@@ -2448,14 +2593,18 @@ function editorHtml(item: WorkItem | null): string {
                 </select>
               </div>
               <div class="field">
-                <label>Владелец</label>
-                <input id="f_owner" value="${escapeAttr(draft.owner)}" />
+                <label>Заказчик</label>
+                ${catalogSelectHtml("f_owner", state.customers, draft.owner)}
+              </div>
+              <div class="field">
+                <label>Исполнитель</label>
+                ${catalogSelectHtml("f_assignee", state.executors, draft.assignee)}
               </div>
             </div>
           </div>
           <div class="modal-section modal-teams-block">
             <div class="field">
-              <label>Команды: майка и дата старта (отдельно по каждой)</label>
+              <label>Команды: маечная оценка и дата старта (отдельно по каждой)</label>
               <div class="team-assign-list" id="teamAssignList">${teamRows}</div>
               <div class="meta">${sizeRangesSummary(szRanges())}. Итого ~<strong class="mono" id="liveTotalEst">${totalEstimateWeeks(draft, szRanges())}</strong> чел·нед. Старт — не раньше указанной даты; если очередь занята, сдвинется позже.</div>
             </div>
@@ -2471,7 +2620,7 @@ function editorHtml(item: WorkItem | null): string {
                 `<option value="${v}" ${draft.impact === v ? "selected" : ""}>${v} · ${RICE_IMPACT_LABELS[v]}</option>`
             ).join("")}</select></div></div>
             <div class="score-box"><div class="k">Уверенность, %</div><div class="v"><input id="f_conf" type="number" min="0" max="100" step="5" value="${confPct}" title="0–100%" style="width:64px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
-            <div class="score-box"><div class="k">Трудозатраты</div><div class="v mono" id="liveEffort" title="Сумма чел·нед по майкам">${effort}</div></div>
+            <div class="score-box"><div class="k">Трудозатраты</div><div class="v mono" id="liveEffort" title="Сумма чел·нед по маечной оценке">${effort}</div></div>
           </div>
           <div class="callout" style="margin:0">RICE = (Охват × Влияние × Уверенность) / Трудозатраты → <strong class="mono" id="liveRice">${score}</strong></div>
           <div class="grid-2">
@@ -2555,15 +2704,15 @@ function formatLiveEtaHtml(
 
   const modeNote =
     activeScheduleMode() === "manual"
-      ? `Дата реализации по заданным стартам = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`
+      ? `Дата завершения по заданным стартам = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`
       : activeScheduleMode() === "teamQueue"
-        ? `Дата реализации с учётом очереди команды = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`
-        : `Дата реализации (макс. утилизация) = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`;
+        ? `Дата завершения с учётом очереди команды = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`
+        : `Дата завершения (макс. утилизация) = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`;
 
   return (
     lines +
     `<div class="eta-final-line">${modeNote}</div>` +
-    `<div class="meta">Дата реализации только от ваших стартов/оценок (без чужого бэклога) = <strong class="mono">${formatDate(planOnlyMax)}</strong> — меняется сразу при смене даты</div>`
+    `<div class="meta">Дата завершения только от ваших стартов/оценок (без чужого бэклога) = <strong class="mono">${formatDate(planOnlyMax)}</strong> — меняется сразу при смене даты</div>`
   );
 }
 
@@ -3190,6 +3339,8 @@ function render() {
         <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Gantt/Сроки</button>
         <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очередь команд</button>
         <button class="tab tab-end ${ui.tab === "capacity" ? "active" : ""}" data-tab="capacity">Команды</button>
+        <button class="tab ${ui.tab === "roles" ? "active" : ""}" data-tab="roles">Роли</button>
+        <button class="tab ${ui.tab === "projects" ? "active" : ""}" data-tab="projects">Проекты</button>
         <button class="tab ${ui.tab === "settings" ? "active" : ""}" data-tab="settings">Настройки</button>
       </div>
       <div class="tab-print-root" id="tabPrintRoot">
@@ -3202,7 +3353,11 @@ function render() {
               ? timelineHtml(rollups, slices, load, overflowByTeam)
               : ui.tab === "capacity"
                 ? capacityHtml()
-                : settingsHtml(rollups)
+                : ui.tab === "roles"
+                  ? rolesHtml()
+                  : ui.tab === "projects"
+                    ? projectsTabHtml()
+                    : settingsHtml(rollups)
       }
       </div>
       </div>
@@ -3267,6 +3422,7 @@ function refreshLiveEta() {
       assignments,
       status: "ready",
       owner: "—",
+      assignee: "",
       reach: 100,
       impact: 1,
       confidence: 0.8,
@@ -3331,13 +3487,31 @@ function readForm(): Omit<WorkItem, "id"> | null {
 
   const rankRaw = val("f_rank").trim();
   const priority = Math.max(1, Math.round(Number(rankRaw) || nextPriority(state.items)));
+  const type = val("f_type") as ItemType;
+  const ownerRaw = val("f_owner").trim();
+  const assigneeRaw = val("f_assignee").trim();
+  const backlogRaw = val("f_backlog").trim();
+  if (ownerRaw && ownerRaw !== "—") {
+    state.customers = uniqCatalogNames([...state.customers, ownerRaw]);
+  }
+  if (assigneeRaw) {
+    state.executors = uniqCatalogNames([...state.executors, assigneeRaw]);
+  }
+  if (backlogRaw) {
+    if (type === "project") {
+      state.projects = uniqCatalogNames([...state.projects, backlogRaw]);
+    } else {
+      state.products = uniqCatalogNames([...state.products, backlogRaw]);
+    }
+  }
   return {
     title: val("f_title").trim() || "Без названия",
-    type: val("f_type") as ItemType,
-    backlog: val("f_backlog").trim(),
+    type,
+    backlog: backlogRaw,
     assignments,
     status: val("f_status") as ItemStatus,
-    owner: val("f_owner").trim() || "—",
+    owner: ownerRaw || "—",
+    assignee: assigneeRaw,
     reach: Math.max(0, num("f_reach", 100)),
     impact: parseRiceImpact(num("f_impact", 1), 1),
     confidence: clamp(num("f_conf", 80), 0, 100) / 100,
@@ -3681,6 +3855,7 @@ function bind() {
         assignments,
         status: "idea" as ItemStatus,
         owner: "",
+        assignee: "",
         reach: 100,
         impact: 1 as RiceImpact,
         confidence: 0.8,
@@ -3781,6 +3956,126 @@ function bind() {
       });
     }
   );
+
+  const isCatalogKind = (k: string | undefined): k is CatalogKind =>
+    k === "customers" ||
+    k === "executors" ||
+    k === "projects" ||
+    k === "products";
+
+  document.querySelectorAll<HTMLInputElement>("[data-catalog-name]").forEach((input) => {
+    const commit = () => {
+      const kind = input.dataset.catalogName;
+      const idx = Number(input.dataset.catalogIdx);
+      if (!isCatalogKind(kind)) return;
+      if (!Number.isFinite(idx) || idx < 0 || idx >= state[kind].length) return;
+      const prev = state[kind][idx]!;
+      const next = input.value.trim();
+      if (!next) {
+        input.value = prev;
+        return;
+      }
+      if (next === prev) return;
+      const list = [...state[kind]];
+      list[idx] = next;
+      state[kind] = uniqCatalogNames(list);
+      if (kind === "customers") {
+        state.items = state.items.map((it) =>
+          it.owner === prev ? { ...it, owner: next } : it
+        );
+      } else if (kind === "executors") {
+        state.items = state.items.map((it) =>
+          it.assignee === prev ? { ...it, assignee: next } : it
+        );
+      } else if (kind === "projects") {
+        state.items = state.items.map((it) =>
+          it.type === "project" && productProjectName(it.backlog) === prev
+            ? { ...it, backlog: next }
+            : it
+        );
+      } else {
+        state.items = state.items.map((it) =>
+          it.type === "product" && productProjectName(it.backlog) === prev
+            ? { ...it, backlog: next }
+            : it
+        );
+      }
+      persist();
+    };
+    input.addEventListener("change", commit);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        input.blur();
+      }
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-catalog-delete]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const kind = btn.dataset.catalogDelete;
+      const idx = Number(btn.dataset.catalogIdx);
+      if (!isCatalogKind(kind)) return;
+      if (!Number.isFinite(idx) || idx < 0 || idx >= state[kind].length) return;
+      const removed = state[kind][idx]!;
+      state[kind] = state[kind].filter((_, i) => i !== idx);
+      if (kind === "customers") {
+        state.items = state.items.map((it) =>
+          it.owner === removed ? { ...it, owner: "—" } : it
+        );
+      } else if (kind === "executors") {
+        state.items = state.items.map((it) =>
+          it.assignee === removed ? { ...it, assignee: "" } : it
+        );
+      } else if (kind === "projects") {
+        state.items = state.items.map((it) =>
+          it.type === "project" && productProjectName(it.backlog) === removed
+            ? { ...it, backlog: "" }
+            : it
+        );
+      } else {
+        state.items = state.items.map((it) =>
+          it.type === "product" && productProjectName(it.backlog) === removed
+            ? { ...it, backlog: "" }
+            : it
+        );
+      }
+      persist();
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-catalog-add]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const kind = btn.dataset.catalogAdd;
+      if (!isCatalogKind(kind)) return;
+      const input = document.querySelector<HTMLInputElement>(`#newCatalog_${kind}`);
+      const name = input?.value.trim() || "";
+      if (!name) {
+        input?.focus();
+        return;
+      }
+      state[kind] = uniqCatalogNames([...state[kind], name]);
+      if (input) input.value = "";
+      persist();
+    });
+  });
+
+  document.querySelectorAll<HTMLInputElement>("[id^='newCatalog_']").forEach((input) => {
+    input.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const kind = input.id.replace("newCatalog_", "");
+      document
+        .querySelector<HTMLButtonElement>(`[data-catalog-add="${kind}"]`)
+        ?.click();
+    });
+  });
+
+  document.querySelector<HTMLSelectElement>("#f_type")?.addEventListener("change", (e) => {
+    const type = (e.target as HTMLSelectElement).value as ItemType;
+    const cur = document.querySelector<HTMLSelectElement>("#f_backlog")?.value ?? "";
+    refillBacklogSelect(type, cur);
+  });
 
   document.querySelectorAll<HTMLButtonElement>("[data-team-color]").forEach(
     (btn) => {

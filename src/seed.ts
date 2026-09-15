@@ -1,4 +1,12 @@
-import { AppState, addWeeks, mondayOf, ensureUniquePriorities, DEFAULT_SIZE_RANGES } from "./model";
+import {
+  AppState,
+  addWeeks,
+  mondayOf,
+  ensureUniquePriorities,
+  DEFAULT_SIZE_RANGES,
+  uniqCatalogNames,
+  containerNameFromBacklog,
+} from "./model";
 
 const S0 = mondayOf();
 const S1 = addWeeks(S0, 1);
@@ -43,6 +51,10 @@ const SEED_RAW: AppState = {
       color: "#e65100",
     },
   ],
+  customers: [],
+  executors: [],
+  projects: [],
+  products: [],
   items: [
     {
       id: "p2",
@@ -52,6 +64,7 @@ const SEED_RAW: AppState = {
       assignments: [{ teamId: "mobile", size: "M", workStartDate: S0 }],
       status: "ready",
       owner: "Маша Л.",
+      assignee: "Ира М.",
       reach: 5000,
       impact: 2,
       confidence: 0.8,
@@ -65,6 +78,7 @@ const SEED_RAW: AppState = {
       assignments: [{ teamId: "crm", size: "S", workStartDate: S1 }],
       status: "ready",
       owner: "Сергей М.",
+      assignee: "Никита П.",
       reach: 40,
       impact: 1,
       confidence: 0.7,
@@ -78,6 +92,7 @@ const SEED_RAW: AppState = {
       assignments: [{ teamId: "mobile", size: "S", workStartDate: S4 }],
       status: "idea",
       owner: "Маша Л.",
+      assignee: "",
       reach: 8000,
       impact: 1,
       confidence: 0.6,
@@ -91,6 +106,7 @@ const SEED_RAW: AppState = {
       assignments: [{ teamId: "data", size: "S", workStartDate: S0 }],
       status: "ready",
       owner: "Павел Р.",
+      assignee: "Лена Ф.",
       reach: 12,
       impact: 2,
       confidence: 0.9,
@@ -105,6 +121,7 @@ const SEED_RAW: AppState = {
       assignments: [{ teamId: "platform", size: "S", workStartDate: S6 }],
       status: "idea",
       owner: "Аня К.",
+      assignee: "",
       reach: 25,
       impact: 0.5,
       confidence: 0.85,
@@ -121,6 +138,7 @@ const SEED_RAW: AppState = {
       ],
       status: "in_progress",
       owner: "Аня К.",
+      assignee: "Коля Д.",
       reach: 10000,
       impact: 3,
       confidence: 0.8,
@@ -138,6 +156,7 @@ const SEED_RAW: AppState = {
       ],
       status: "ready",
       owner: "Игорь С.",
+      assignee: "Саша В.",
       reach: 1,
       impact: 2,
       confidence: 0.85,
@@ -155,6 +174,7 @@ const SEED_RAW: AppState = {
       ],
       status: "ready",
       owner: "Денис В.",
+      assignee: "",
       reach: 200,
       impact: 2,
       confidence: 0.7,
@@ -172,6 +192,7 @@ const SEED_RAW: AppState = {
       ],
       status: "ready",
       owner: "Павел Р.",
+      assignee: "Лена Ф.",
       reach: 5,
       impact: 1,
       confidence: 0.75,
@@ -190,6 +211,7 @@ const SEED_RAW: AppState = {
       ],
       status: "in_progress",
       owner: "Оля Т.",
+      assignee: "Миша К.",
       reach: 3000,
       impact: 3,
       confidence: 0.8,
@@ -208,6 +230,7 @@ const SEED_RAW: AppState = {
       ],
       status: "blocked",
       owner: "Игорь С.",
+      assignee: "",
       reach: 500,
       impact: 2,
       confidence: 0.9,
@@ -226,6 +249,7 @@ const SEED_RAW: AppState = {
       ],
       status: "idea",
       owner: "Катя Н.",
+      assignee: "Дима Р.",
       reach: 15000,
       impact: 2,
       confidence: 0.5,
@@ -235,8 +259,20 @@ const SEED_RAW: AppState = {
   ],
 };
 
-/** Unique priorities assigned by RICE (1 = highest) */
+/** Unique priorities + catalogs from demo names */
 export const SEED: AppState = {
   ...SEED_RAW,
+  customers: uniqCatalogNames(SEED_RAW.items.map((i) => i.owner)),
+  executors: uniqCatalogNames(SEED_RAW.items.map((i) => i.assignee)),
+  projects: uniqCatalogNames(
+    SEED_RAW.items
+      .filter((i) => i.type === "project")
+      .map((i) => containerNameFromBacklog(i.backlog))
+  ),
+  products: uniqCatalogNames(
+    SEED_RAW.items
+      .filter((i) => i.type === "product")
+      .map((i) => containerNameFromBacklog(i.backlog))
+  ),
   items: ensureUniquePriorities(SEED_RAW.items),
 };

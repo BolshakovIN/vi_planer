@@ -2862,3 +2862,28 @@ body.pdf-capturing .table-scroll-top {
     content: none !important;
   }
 }
+
+
+/* Catalog lists on Роли / Проекты tabs */
+.role-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.role-row:last-child {
+  border-bottom: none;
+}
+
+.role-name-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.role-add-bar {
+  border-top: 1px solid var(--line);
+}
