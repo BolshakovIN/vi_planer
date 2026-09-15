@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VI Planer — gap-анализ</title>
+  <style>
+    :root {
+      --ink: #1a1a1a;
+      --muted: #5c5c5c;
+      --line: #e0e0e0;
+      --accent: #d60000;
+      --soft: #f7f7f7;
+      --ok: #2e7d32;
+      --warn: #e65100;
+      --gap: #c62828;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: #ddd;
+      color: var(--ink);
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.45;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    @page {
+      size: A4;
+      margin: 14mm 14mm 16mm;
+    }
+    .doc {
+      width: 210mm;
+      margin: 0 auto;
+      background: #fff;
+      padding: 16mm 16mm 18mm;
+    }
+    .banner {
+      height: 5px;
+      background: var(--accent);
+      margin: -16mm -16mm 14mm;
+    }
+    h1 {
+      font-size: 20pt;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 9.5pt;
+      margin-bottom: 14px;
+    }
+    .verdict {
+      background: var(--soft);
+      border-left: 4px solid var(--accent);
+      padding: 10px 12px;
+      margin-bottom: 16px;
+      font-size: 10.5pt;
+    }
+    h2 {
+      font-size: 13pt;
+      margin: 16px 0 8px;
+      padding-bottom: 3px;
+      border-bottom: 1px solid var(--line);
+      page-break-after: avoid;
+    }
+    h3 {
+      font-size: 11pt;
+      margin: 10px 0 6px;
+      color: var(--ink);
+      page-break-after: avoid;
+    }
+    p { margin-bottom: 8px; }
+    ul, ol { margin: 0 0 10px 1.2em; }
+    li { margin-bottom: 3px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0 12px;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 5px 7px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: var(--soft);
+      font-size: 8.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--muted);
+    }
+    .tag {
+      display: inline-block;
+      font-size: 8pt;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    .tag-partial { background: #fff3e0; color: var(--warn); }
+    .tag-gap { background: #ffebee; color: var(--gap); }
+    .tag-extra { background: #e8f5e9; color: var(--ok); }
+    .must { color: var(--gap); font-weight: 700; }
+    .should { color: var(--warn); font-weight: 700; }
+    .could { color: #455a64; font-weight: 700; }
+    .footer {
+      margin-top: 18px;
+      padding-top: 8px;
+      border-top: 1px solid var(--line);
+      font-size: 8.5pt;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+    }
+    .cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 14px;
+      margin-bottom: 8px;
+    }
+    .box {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      background: #fff;
+      page-break-inside: avoid;
+    }
+    .box h3 { margin-top: 0; font-size: 10pt; }
+    .box ul { margin-bottom: 0; }
+    @media print {
+      html, body { background: #fff; }
+      .doc { width: auto; margin: 0; padding: 0; }
+      .banner { margin: 0 0 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="doc">
+    <div class="banner"></div>
+    <h1>VI Planer — gap-анализ</h1>
+    <p class="meta">
+      15.09.2026 · Текущий SPA (master) vs целевое ТЗ (Jira + сессии + RBAC).<br />
+      Jira <strong>не интегрирован</strong>. Live: bolshakovin.github.io/vi_planer
+    </p>
+
+    <div class="verdict">
+      <strong>Вердикт.</strong> VI Planer закрывает портфельное планирование ёмкости
+      (RICE, сквозной приоритет, Gantt, очереди). Целевое ТЗ — управляемое изменение
+      приоритетов в Jira/Structure с окном встречи, ролями и аудитом. Пересечение —
+      таблица приоритетов и тип продукт/проект; платформа и governance — разные продукты.
+    </div>
+
+    <h2>1. Что уже покрывает</h2>
+    <table>
+      <thead>
+        <tr><th>Целевое</th><th>Сейчас</th><th></th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Сквозной приоритет + перенумерация</td>
+          <td><code>manualRank</code>, drag, confirm</td>
+          <td><span class="tag tag-partial">частично</span></td>
+        </tr>
+        <tr>
+          <td>Контуры продукт / проект</td>
+          <td>type + фильтр; один общий ранг</td>
+          <td><span class="tag tag-partial">частично</span></td>
+        </tr>
+        <tr>
+          <td>Имя, статус, заказчик, исполнитель, майка</td>
+          <td>Портфель + карточка; «Роли» ещё не в навигации</td>
+          <td><span class="tag tag-partial">частично</span></td>
+        </tr>
+        <tr>
+          <td>Дата завершения / старт</td>
+          <td>Bottleneck + workStartDate по командам</td>
+          <td><span class="tag tag-partial">частично</span></td>
+        </tr>
+        <tr>
+          <td>Gantt / ёмкость / what-if</td>
+          <td>Режимы утилизации, очереди, PDF</td>
+          <td><span class="tag tag-extra">сверх ТЗ</span></td>
+        </tr>
+        <tr>
+          <td>Хранение / доступ по ссылке</td>
+          <td>Supabase / API / localStorage — не Jira</td>
+          <td><span class="tag tag-partial">иное</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>2. Пробелы</h2>
+    <div class="cols">
+      <div class="box">
+        <h3>Governance и сессии</h3>
+        <ul>
+          <li>«Открыть / закрыть сессию», snapshot</li>
+          <li>Yandex Calendar, тип «Планирование приоритетов»</li>
+          <li>Edit только в окне встречи</li>
+          <li>Глава PMO post-close + причина</li>
+          <li>История + обязательный комментарий → Jira</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>Роли и контуры</h3>
+        <ul>
+          <li>Viewer / PMO admin / product team</li>
+          <li>Запрет чужого контура</li>
+          <li>Режим «Проекты» | «Продукты» как раздельные ранги</li>
+          <li>Structure folders, домены PMO-tag</li>
+          <li>Справочники команд из Jira</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>Колонки таблицы</h3>
+        <ul>
+          <li>Код задачи (Jira key)</li>
+          <li>Первоначальная / актуальная даты</li>
+          <li>Дата создания; старт после ≠ new</li>
+          <li>ЧП и ROI (RUB, 12 мес.)</li>
+          <li>Editable на встрече: приоритет, дата, майка, статус</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>Платформа</h3>
+        <ul>
+          <li>Jira API / Forge / Structure sync</li>
+          <li>Auth / SSO / RBAC (сейчас публичный store)</li>
+          <li>Серверный запрет пустого приоритета и чужого контура</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>3. Противоречия</h2>
+    <table>
+      <thead>
+        <tr><th>Тема</th><th>VI Planer</th><th>Целевое ТЗ</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Платформа</td>
+          <td>Отдельный SPA + Supabase/API</td>
+          <td>Интерфейс на базе Jira + Structure</td>
+        </tr>
+        <tr>
+          <td>Когда менять приоритет</td>
+          <td>В любой момент</td>
+          <td>Только в запланированной встрече</td>
+        </tr>
+        <tr>
+          <td>Модель приоритета</td>
+          <td>Ручной ранг + RICE</td>
+          <td>Meeting-bound reorder; RICE не заявлен</td>
+        </tr>
+        <tr>
+          <td>Контуры</td>
+          <td>Один список, фильтр type</td>
+          <td>Два независимых контура и права</td>
+        </tr>
+        <tr>
+          <td>Безопасность / аудит</td>
+          <td>Нет пользователей и истории</td>
+          <td>RBAC + полная история + Jira comments</td>
+        </tr>
+        <tr>
+          <td>Фокус продукта</td>
+          <td>«Когда закончим» (capacity)</td>
+          <td>«Кто/когда меняет приоритет»</td>
+        </tr>
+        <tr>
+          <td>Roadmap v1</td>
+          <td>Jira, auth, audit — out of scope</td>
+          <td>Это ядро целевого решения</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      <strong>Стратегия:</strong> выбрать явно (A) эволюция SPA как planning twin,
+      (B) новый Jira-модуль governance, (C) гибрид (чтение Jira, запись приоритетов только из сессии).
+    </p>
+
+    <h2>4. Бэклог доработок</h2>
+    <h3><span class="must">Must</span></h3>
+    <ol>
+      <li>Решение по архитектуре A/B/C</li>
+      <li>Сессии планирования (open/close, read-only, snapshot)</li>
+      <li>RBAC контуров (PMO ↔ Projects; PM ↔ свой Product)</li>
+      <li>Обязательный комментарий + audit log</li>
+      <li>Два независимых ранга + режим UI «Проекты» | «Продукты»</li>
+    </ol>
+    <h3><span class="should">Should</span></h3>
+    <ol start="6">
+      <li>Yandex Calendar / keywords типа встречи</li>
+      <li>Синхронизация с Jira (key, status, assignee, comments) — при A или C</li>
+      <li>Колонки: key, даты, фильтр доменов</li>
+      <li>Серверные запреты пустого приоритета и чужого контура</li>
+      <li>Глава PMO post-close с формальной причиной</li>
+    </ol>
+    <h3><span class="could">Could</span></h3>
+    <ol start="11">
+      <li>Поля ЧП / ROI (12 мес., RUB)</li>
+      <li>Structure-like дерево / импорт folders</li>
+      <li>Ретро-сравнение snapshots</li>
+      <li>RICE/Gantt как аналитический слой рядом с meeting-priority</li>
+    </ol>
+
+    <h2>5. Сценарии → покрытие</h2>
+    <table>
+      <thead>
+        <tr><th>Сценарий</th><th>Покрытие</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Встреча PMO, контур Projects</td>
+          <td><span class="tag tag-gap">нет</span> сессии/календаря; приоритет всегда editable</td>
+        </tr>
+        <tr>
+          <td>Product manager, контур Products</td>
+          <td><span class="tag tag-partial">фильтр</span> type=product; нет изоляции прав</td>
+        </tr>
+        <tr>
+          <td>View-only вне окна</td>
+          <td><span class="tag tag-gap">нет</span> — shared store без auth</td>
+        </tr>
+        <tr>
+          <td>Глава PMO после закрытия + причина</td>
+          <td><span class="tag tag-gap">нет</span> ролей и post-close workflow</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>6. Рекомендация</h2>
+    <p>
+      Зафиксировать выбор A/B/C. Если цель — compliance приоритизации PMO: прототип
+      <strong>сессии + RBAC + audit</strong> (даже на SPA), параллельно оценка Jira Forge/Structure.
+      Не позиционировать текущий RICE/Gantt SPA как уже реализованный «Jira priority control».
+    </p>
+
+    <div class="footer">
+      <span class="brand"><strong>VI Planer</strong> · gap-анализ</span>
+      <span>Не спецификация Jira-плагина · 15.09.2026</span>
+    </div>
+  </div>
+</body>
+</html>
