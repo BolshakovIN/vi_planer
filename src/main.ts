@@ -697,9 +697,9 @@ function productProjectName(backlog: string): string {
 }
 
 function functionalitySubtitleHtml(item: WorkItem): string {
-  const typeLabel = item.type === "product" ? "Продукт" : "Проект";
-  const bits = [typeLabel, item.owner].filter((b) => b.trim());
-  return escapeHtml(bits.join(" · "));
+  const owner = item.owner.trim();
+  if (!owner) return "";
+  return `Владелец: ${escapeHtml(owner)}`;
 }
 
 function columnsHelpHtml(): string {
@@ -732,6 +732,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
       const total = totalEstimateWeeks(item, szRanges());
       const prio = item.manualRank ?? "—";
       const container = productProjectName(item.backlog);
+      const ownerSub = functionalitySubtitleHtml(item);
       const etaMeta = r
         ? `<div class="eta-teams">${r.slices
             .map((s) => {
@@ -774,7 +775,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           </td>
           <td${tdAttrs("title", "title-cell")}>
             <div class="name">${escapeHtml(item.title)}</div>
-            <div class="meta">${functionalitySubtitleHtml(item)}</div>
+            ${ownerSub ? `<div class="meta">${ownerSub}</div>` : ""}
           </td>
           <td${tdAttrs("teams", "teams-cell")}>${teamsCellHtml(item)}</td>
           <td${tdAttrs("status", "status-cell")}><span class="badge badge-status-${item.status}">${statusLabel(item.status)}</span></td>
@@ -2198,7 +2199,7 @@ function editorHtml(item: WorkItem | null): string {
             <div class="field">
               <label>Название проекта / продукта</label>
               <input id="f_backlog" value="${escapeAttr(draft.backlog)}" placeholder="ЛК B2B" />
-              <div class="meta" style="margin-top:6px">Название продукта или проекта, в котором живёт функциональность; показывается в колонке Тип.</div>
+              <div class="meta">Название продукта или проекта, в котором живёт функциональность; показывается в колонке Тип.</div>
             </div>
             <div class="field">
               <label>Статус</label>
@@ -2219,7 +2220,7 @@ function editorHtml(item: WorkItem | null): string {
           <div class="field">
             <label>Команды: майка и дата старта (отдельно по каждой)</label>
             <div class="team-assign-list" id="teamAssignList">${teamRows}</div>
-            <div class="meta" style="margin-top:6px">${sizeRangesSummary(szRanges())}. Итого ~<strong class="mono" id="liveTotalEst">${totalEstimateWeeks(draft, szRanges())}</strong> чел·нед. Старт — не раньше указанной даты; если очередь занята, сдвинется позже.</div>
+            <div class="meta">${sizeRangesSummary(szRanges())}. Итого ~<strong class="mono" id="liveTotalEst">${totalEstimateWeeks(draft, szRanges())}</strong> чел·нед. Старт — не раньше указанной даты; если очередь занята, сдвинется позже.</div>
           </div>
           <div class="callout" style="margin:0" id="liveEtaBox">
             <strong>Пересчёт ETA</strong> (с учётом очереди и стартов)
@@ -2239,7 +2240,7 @@ function editorHtml(item: WorkItem | null): string {
             <div class="field">
               <label>Приоритет (уникальный, 1 = выше)</label>
               <input id="f_rank" type="number" min="1" step="1" value="${draft.manualRank ?? nextPriority(state.items)}" />
-              <div class="meta" style="margin-top:6px">При занятом номере очередь пересоберётся после подтверждения рядом с полем.</div>
+              <div class="meta">При занятом номере очередь пересоберётся после подтверждения рядом с полем.</div>
             </div>
             <div class="field">
               <label>Заметки</label>

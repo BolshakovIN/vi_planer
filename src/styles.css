@@ -1230,6 +1230,17 @@ body.prio-dragging {
 
 .modal-entity-hint {
   margin: 0 0 12px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.field > .meta {
+  margin-top: 6px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--muted);
   line-height: 1.35;
 }
 

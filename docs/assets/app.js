@@ -162,7 +162,7 @@ ${w}`}class Kr extends Error{constructor({message:e,code:t,cause:A,name:n}){var 
         />
       </label>
     </div>
-  `}function LT(r){const e=r.trim();if(!e)return"";const t=e.split(" · ").map(A=>A.trim()).filter(Boolean);return t.length>=2&&/backlog/i.test(t.slice(0,-1).join(" · "))?t[t.length-1]:e}function kT(r){const t=[r.type==="product"?"Продукт":"Проект",r.owner].filter(A=>A.trim());return Pt(t.join(" · "))}function OT(){return`
+  `}function LT(r){const e=r.trim();if(!e)return"";const t=e.split(" · ").map(A=>A.trim()).filter(Boolean);return t.length>=2&&/backlog/i.test(t.slice(0,-1).join(" · "))?t[t.length-1]:e}function kT(r){const e=r.owner.trim();return e?`Владелец: ${Pt(e)}`:""}function OT(){return`
     <details class="callout callout-cols agenda">
       <summary class="agenda-summary">Адженда</summary>
       <div class="cols-help">
@@ -176,7 +176,7 @@ ${w}`}class Kr extends Error{constructor({message:e,code:t,cause:A,name:n}){var 
         <div><span class="cols-help-k">ETA</span> — дата готовности (когда закончила последняя команда)</div>
       </div>
     </details>
-  `}function RT(r,e){const t=j1(r),A=yT(r),n=xe.sortKey==="priority",i=A.map(s=>{const a=t.get(s.id),o=Sn(s,cr()),l=di(s,cr()),c=s.manualRank??"—",h=LT(s.backlog),d=a?`<div class="eta-teams">${a.slices.map(u=>{const p=Xn(u.teamId);return`<div class="eta-team"><span class="eta-team-name" style="color:${(p==null?void 0:p.color)??"#64748b"}">${Pt((p==null?void 0:p.name)??u.teamId)}</span>: ${Tt(u.startDate)}→${Tt(u.endDate)}</div>`}).join("")}</div>`:"";return`
+  `}function RT(r,e){const t=j1(r),A=yT(r),n=xe.sortKey==="priority",i=A.map(s=>{const a=t.get(s.id),o=Sn(s,cr()),l=di(s,cr()),c=s.manualRank??"—",h=LT(s.backlog),d=kT(s),u=a?`<div class="eta-teams">${a.slices.map(p=>{const v=Xn(p.teamId);return`<div class="eta-team"><span class="eta-team-name" style="color:${(v==null?void 0:v.color)??"#64748b"}">${Pt((v==null?void 0:v.name)??p.teamId)}</span>: ${Tt(p.startDate)}→${Tt(p.endDate)}</div>`}).join("")}</div>`:"";return`
         <tr class="clickable ${n?"row-draggable":""}" data-edit="${s.id}" data-row-id="${s.id}">
           <td${vs("priority","prio-cell")}>
             <div class="prio-edit" data-stop-edit>
@@ -201,7 +201,7 @@ ${w}`}class Kr extends Error{constructor({message:e,code:t,cause:A,name:n}){var 
           </td>
           <td${vs("title","title-cell")}>
             <div class="name">${Pt(s.title)}</div>
-            <div class="meta">${kT(s)}</div>
+            ${d?`<div class="meta">${d}</div>`:""}
           </td>
           <td${vs("teams","teams-cell")}>${wT(s)}</td>
           <td${vs("status","status-cell")}><span class="badge badge-status-${s.status}">${vd(s.status)}</span></td>
@@ -212,7 +212,7 @@ ${w}`}class Kr extends Error{constructor({message:e,code:t,cause:A,name:n}){var 
           </td>
           <td${vs("eta",`mono eta-cell ${a&&a.waitWeeks>4?"eta-late":"eta-good"}`)}>
             ${a?`<span class="eta-final">${Tt(a.endDate)}</span>`:"—"}
-            ${d}
+            ${u}
           </td>
         </tr>
       `}).join("");return`
@@ -607,7 +607,7 @@ ${W}${te}`;Bo(e,le,()=>{Ee.items=Ee.items.map(oe=>oe.id!==A?oe:{...oe,assignment
             <div class="field">
               <label>Название проекта / продукта</label>
               <input id="f_backlog" value="${Er(e.backlog)}" placeholder="ЛК B2B" />
-              <div class="meta" style="margin-top:6px">Название продукта или проекта, в котором живёт функциональность; показывается в колонке Тип.</div>
+              <div class="meta">Название продукта или проекта, в котором живёт функциональность; показывается в колонке Тип.</div>
             </div>
             <div class="field">
               <label>Статус</label>
@@ -623,7 +623,7 @@ ${W}${te}`;Bo(e,le,()=>{Ee.items=Ee.items.map(oe=>oe.id!==A?oe:{...oe,assignment
           <div class="field">
             <label>Команды: майка и дата старта (отдельно по каждой)</label>
             <div class="team-assign-list" id="teamAssignList">${c}</div>
-            <div class="meta" style="margin-top:6px">${Rf(cr())}. Итого ~<strong class="mono" id="liveTotalEst">${di(e,cr())}</strong> чел·нед. Старт — не раньше указанной даты; если очередь занята, сдвинется позже.</div>
+            <div class="meta">${Rf(cr())}. Итого ~<strong class="mono" id="liveTotalEst">${di(e,cr())}</strong> чел·нед. Старт — не раньше указанной даты; если очередь занята, сдвинется позже.</div>
           </div>
           <div class="callout" style="margin:0" id="liveEtaBox">
             <strong>Пересчёт ETA</strong> (с учётом очереди и стартов)
@@ -640,7 +640,7 @@ ${W}${te}`;Bo(e,le,()=>{Ee.items=Ee.items.map(oe=>oe.id!==A?oe:{...oe,assignment
             <div class="field">
               <label>Приоритет (уникальный, 1 = выше)</label>
               <input id="f_rank" type="number" min="1" step="1" value="${e.manualRank??dl(Ee.items)}" />
-              <div class="meta" style="margin-top:6px">При занятом номере очередь пересоберётся после подтверждения рядом с полем.</div>
+              <div class="meta">При занятом номере очередь пересоберётся после подтверждения рядом с полем.</div>
             </div>
             <div class="field">
               <label>Заметки</label>
