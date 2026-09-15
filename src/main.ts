@@ -56,7 +56,11 @@ import {
   onSyncStatusChange,
   syncStatusLabel,
 } from "./storage";
-import { downloadElementPdf, downloadMarkdownAsPdf } from "./pdfExport";
+import {
+  downloadMarkdownAsPdf,
+  downloadPlanerReportPdf,
+  type PlanerReportData,
+} from "./pdfExport";
 
 /** Release / deploy stamp in the header (DD.MM.YYYY) */
 const RELEASE_UPDATED = "15.09.2026";
@@ -697,7 +701,10 @@ function bindColPickerOutsideClose(colPicker: HTMLDetailsElement) {
     if (colPicker.contains(t)) return;
     closeColPickerOutside();
     ui.colPickerOpen = false;
-    render();
+    // Close in place — do NOT render() on mousedown. A full re-render destroys
+    // the click target before click fires, so «+ Функциональность» / «Экспорт PDF»
+    // appear dead while the column picker is open.
+    colPicker.open = false;
   };
   const cleanup = () => {
     document.removeEventListener("mousedown", onDoc);
@@ -3630,6 +3637,24 @@ function persist() {
 }
 
 function bind() {
+  // Critical actions first so a later bind helper throw cannot orphan these buttons.
+  document.querySelector("#addItem")?.addEventListener("click", () => {
+    ui.creating = true;
+    ui.editingId = null;
+    render();
+  });
+  document.querySelector("#exportPdfBtn")?.addEventListener("click", () => {
+    void exportPortfolioReportPdf();
+  });
+
+  try {
+    bindUiRest();
+  } catch (err) {
+    console.error("UI bind failed after critical handlers", err);
+  }
+}
+
+function bindUiRest() {
   document.querySelector("#brandHomeBtn")?.addEventListener("click", () => {
     ui.tab = "portfolio";
     render();
@@ -3687,12 +3712,6 @@ function bind() {
     });
 
   bindOverloadExplain();
-
-  document.querySelector("#addItem")?.addEventListener("click", () => {
-    ui.creating = true;
-    ui.editingId = null;
-    render();
-  });
 
   document.querySelector("#resetFilters")?.addEventListener("click", () => {
     ui.typeFilter = "all";
@@ -4253,10 +4272,6 @@ function bind() {
       }
     });
 
-  document.querySelector("#exportPdfBtn")?.addEventListener("click", () => {
-    void exportCurrentTabPdf();
-  });
-
   document.querySelector("#downloadReqsBtn")?.addEventListener("click", () => {
     void downloadRequirementsDoc();
   });
@@ -4534,14 +4549,93 @@ async function downloadRequirementsDoc() {
   }
 }
 
-async function exportCurrentTabPdf() {
-  const btn = document.querySelector<HTMLButtonElement>("#exportPdfBtn");
-  const capture = document.querySelector<HTMLElement>("#pdfCapture");
-  if (!capture) {
-    alert("Не удалось найти содержимое для экспорта");
-    return;
-  }
+function buildPlanerReportData(
+  rollups: ItemSchedule[],
+  slices: ScheduledSlice[],
+): PlanerReportData {
+  const byId = rollupById(rollups);
+  const active = state.items.filter((i) => i.status !== "done");
+  const products = active.filter((i) => i.type === "product").length;
+  const projects = active.filter((i) => i.type === "project").length;
+  const multi = active.filter((i) => i.assignments.length > 1).length;
+  const ends = rollups.map((s) => s.endWeek);
+  const horizon = ends.length ? Math.max(...ends) + 1 : 0;
+  const overloaded = state.teams.filter((t) => {
+    const demandDays = teamQueuePw(slices, t.id);
+    return demandDays > t.capacityPw * 8;
+  }).length;
+  const mode = activeScheduleMode();
+  const modeMeta = SCHEDULE_MODE_META[mode];
+  const items = filteredItems(rollups);
 
+  const portfolioRows = items.map((item) => {
+    const r = byId.get(item.id);
+    const container = productProjectName(item.backlog);
+    const typeLabel =
+      item.type === "product"
+        ? container
+          ? `Продукт · ${container}`
+          : "Продукт"
+        : container
+          ? `Проект · ${container}`
+          : "Проект";
+    const teamBits = item.assignments
+      .map((a) => {
+        const t = teamById(a.teamId);
+        return `${t?.name ?? a.teamId} ${a.size}`;
+      })
+      .join(", ");
+    return {
+      priority: String(item.manualRank ?? "—"),
+      type: typeLabel,
+      title: item.title,
+      teams: teamBits || "—",
+      status: statusLabel(item.status),
+      rice: String(rice(item, szRanges())),
+      cashFlow: formatMlrd(item.cashFlow12m),
+      roi: formatPercent(item.roi12m),
+      estimate: `${sizesSummary(item)} (~${totalEstimateWeeks(item, szRanges())} чел·нед)`,
+      eta: r ? formatDate(r.endDate) : "—",
+    };
+  });
+
+  return {
+    generatedAt: new Date().toLocaleString("ru-RU"),
+    planStart: formatDate(state.startDate),
+    scheduleModeLabel: modeMeta.label,
+    scheduleModeHint: modeMeta.hint,
+    metrics: [
+      {
+        label: "Активных в портфеле",
+        value: String(active.length),
+        hint: `${products} продуктов · ${projects} проектов · ${multi} кросс-командных`,
+      },
+      {
+        label: "Горизонт портфеля",
+        value: `${horizon} нед.`,
+        hint: "до закрытия (по bottleneck-команде)",
+      },
+      {
+        label: "Команд под риском",
+        value: String(overloaded),
+        hint: "очередь длиннее 8 недель",
+      },
+      {
+        label: "Старт планирования",
+        value: formatDate(state.startDate),
+        hint: "якорь шкалы Gantt (пн)",
+      },
+    ],
+    portfolioRows,
+    teams: state.teams.map((t) => ({
+      name: t.name,
+      capacity: `${t.capacityPw} чел·нед/нед`,
+    })),
+  };
+}
+
+async function exportPortfolioReportPdf() {
+  const btn = document.querySelector<HTMLButtonElement>("#exportPdfBtn");
   const prevLabel = btn?.textContent ?? "Экспорт PDF";
   if (btn) {
     btn.disabled = true;
@@ -4549,30 +4643,16 @@ async function exportCurrentTabPdf() {
   }
 
   const stamp = new Date().toISOString().slice(0, 10);
-  const title = `VI Planer — ${TAB_LABELS[ui.tab]} · ${stamp}`;
-  const filename = `VI-Planer-${TAB_LABELS[ui.tab]}-${stamp}.pdf`.replaceAll(
-    " ",
-    "_",
-  );
-
-  window.scrollTo(0, 0);
-  document.body.classList.add("pdf-capturing");
-  // Let sticky/tabs layout settle after pdf-capturing CSS applies.
-  await new Promise<void>((r) =>
-    requestAnimationFrame(() => requestAnimationFrame(() => r())),
-  );
+  const filename = `VI-Planer-report-${stamp}.pdf`;
 
   try {
-    const tabRoot = document.querySelector<HTMLElement>("#tabPrintRoot");
-    if (!tabRoot || tabRoot.childElementCount === 0) {
-      throw new Error("Active tab content is empty");
-    }
-    await downloadElementPdf(capture, filename, title);
+    const { slices, rollups } = scheduleState();
+    const data = buildPlanerReportData(rollups, slices);
+    await downloadPlanerReportPdf(data, filename);
   } catch (err) {
     console.error(err);
     alert("Не удалось создать PDF. Попробуйте ещё раз или обновите страницу.");
   } finally {
-    document.body.classList.remove("pdf-capturing");
     if (btn) {
       btn.disabled = false;
       btn.textContent = prevLabel;

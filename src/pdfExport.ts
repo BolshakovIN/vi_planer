@@ -429,3 +429,297 @@ export async function downloadMarkdownAsPdf(
     host.remove();
   }
 }
+
+/** Structured portfolio report (not a live-UI screenshot). */
+export type PlanerReportMetric = {
+  label: string;
+  value: string;
+  hint?: string;
+};
+
+export type PlanerReportRow = {
+  priority: string;
+  type: string;
+  title: string;
+  teams: string;
+  status: string;
+  rice: string;
+  cashFlow: string;
+  roi: string;
+  estimate: string;
+  eta: string;
+};
+
+export type PlanerReportTeam = {
+  name: string;
+  capacity: string;
+};
+
+export type PlanerReportData = {
+  generatedAt: string;
+  planStart: string;
+  scheduleModeLabel: string;
+  scheduleModeHint: string;
+  metrics: PlanerReportMetric[];
+  portfolioRows: PlanerReportRow[];
+  teams: PlanerReportTeam[];
+};
+
+/** Capture width for landscape A4 report (readable table). */
+const REPORT_PDF_CAPTURE_WIDTH_PX = 1280;
+
+const REPORT_PDF_STYLES = `
+  .report-pdf-root {
+    box-sizing: border-box;
+    width: ${REPORT_PDF_CAPTURE_WIDTH_PX}px;
+    padding: 4px 0 20px;
+    background: #ffffff;
+    color: #1a1a1a;
+    font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+  .report-pdf-root * { box-sizing: border-box; }
+  .report-pdf-brand {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 10px;
+    border-bottom: 3px solid #d60000;
+    margin-bottom: 14px;
+  }
+  .report-pdf-brand h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #1a1a1a;
+  }
+  .report-pdf-brand .meta {
+    margin: 0;
+    font-size: 12px;
+    color: #737373;
+    text-align: right;
+  }
+  .report-pdf-root h2 {
+    margin: 18px 0 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #1a1a1a;
+  }
+  .report-pdf-lead {
+    margin: 0 0 12px;
+    color: #737373;
+    font-size: 12px;
+  }
+  .report-pdf-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0 0 8px;
+  }
+  .report-pdf-metric {
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    background: #fafafa;
+  }
+  .report-pdf-metric .k {
+    font-size: 10px;
+    color: #737373;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .report-pdf-metric .v {
+    font-size: 16px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .report-pdf-metric .h {
+    margin-top: 2px;
+    font-size: 10px;
+    color: #737373;
+  }
+  .report-pdf-note {
+    margin: 0 0 14px;
+    padding: 8px 10px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 11.5px;
+    color: #37474f;
+  }
+  .report-pdf-note strong { color: #1a1a1a; }
+  .report-pdf-root table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 14px;
+    font-size: 10.5px;
+  }
+  .report-pdf-root th,
+  .report-pdf-root td {
+    border: 1px solid #e0e0e0;
+    padding: 5px 6px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .report-pdf-root th {
+    background: #f5f5f5;
+    font-weight: 650;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  .report-pdf-root td.num {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .report-pdf-root td.prio {
+    text-align: center;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .report-pdf-empty {
+    color: #737373;
+    font-style: italic;
+    margin: 0 0 12px;
+  }
+  .report-pdf-foot {
+    margin-top: 8px;
+    font-size: 10px;
+    color: #737373;
+  }
+`;
+
+function reportEscape(text: string): string {
+  return escapeHtml(text);
+}
+
+function buildPlanerReportHtml(data: PlanerReportData): string {
+  const metrics = data.metrics
+    .map(
+      (m) => `
+      <div class="report-pdf-metric">
+        <div class="k">${reportEscape(m.label)}</div>
+        <div class="v">${reportEscape(m.value)}</div>
+        ${m.hint ? `<div class="h">${reportEscape(m.hint)}</div>` : ""}
+      </div>`,
+    )
+    .join("");
+
+  const rows =
+    data.portfolioRows.length === 0
+      ? ""
+      : data.portfolioRows
+          .map(
+            (r) => `
+      <tr>
+        <td class="prio">${reportEscape(r.priority)}</td>
+        <td>${reportEscape(r.type)}</td>
+        <td>${reportEscape(r.title)}</td>
+        <td>${reportEscape(r.teams)}</td>
+        <td>${reportEscape(r.status)}</td>
+        <td class="num">${reportEscape(r.rice)}</td>
+        <td class="num">${reportEscape(r.cashFlow)}</td>
+        <td class="num">${reportEscape(r.roi)}</td>
+        <td class="num">${reportEscape(r.estimate)}</td>
+        <td class="num">${reportEscape(r.eta)}</td>
+      </tr>`,
+          )
+          .join("");
+
+  const teamRows =
+    data.teams.length === 0
+      ? `<p class="report-pdf-empty">Команды не заданы</p>`
+      : `<table>
+        <thead>
+          <tr><th>Команда</th><th>Ёмкость</th></tr>
+        </thead>
+        <tbody>
+          ${data.teams
+            .map(
+              (t) =>
+                `<tr><td>${reportEscape(t.name)}</td><td class="num">${reportEscape(t.capacity)}</td></tr>`,
+            )
+            .join("")}
+        </tbody>
+      </table>`;
+
+  return `
+    <div class="report-pdf-brand">
+      <h1>VI Planer</h1>
+      <p class="meta">Отчёт по портфелю<br/>${reportEscape(data.generatedAt)}</p>
+    </div>
+    <p class="report-pdf-lead">
+      Сводка функциональностей, метрик и ёмкости команд. Старт планирования: <strong>${reportEscape(data.planStart)}</strong>.
+    </p>
+    <h2>Сводка</h2>
+    <div class="report-pdf-metrics">${metrics}</div>
+    <div class="report-pdf-note">
+      <strong>Режим планирования:</strong> ${reportEscape(data.scheduleModeLabel)}
+      — ${reportEscape(data.scheduleModeHint)}
+    </div>
+    <h2>Портфель функциональностей</h2>
+    ${
+      data.portfolioRows.length === 0
+        ? `<p class="report-pdf-empty">Нет элементов в портфеле</p>`
+        : `<table>
+        <thead>
+          <tr>
+            <th>Приоритет</th>
+            <th>Тип</th>
+            <th>Функциональность</th>
+            <th>Команды</th>
+            <th>Статус</th>
+            <th>RICE</th>
+            <th>ЧП, млрд ₽</th>
+            <th>ROI, %</th>
+            <th>Маечная оценка</th>
+            <th>Дата завершения</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`
+    }
+    <h2>Ёмкость команд</h2>
+    ${teamRows}
+    <p class="report-pdf-foot">VI Planer · документ сформирован автоматически · не скриншот интерфейса</p>
+  `;
+}
+
+/**
+ * Build a dedicated report HTML (off-screen), capture to multi-page landscape A4 PDF.
+ * Cyrillic-safe via html2canvas (same approach as requirements PDF).
+ */
+export async function downloadPlanerReportPdf(
+  data: PlanerReportData,
+  filename: string,
+): Promise<void> {
+  const host = document.createElement("div");
+  host.setAttribute("aria-hidden", "true");
+  Object.assign(host.style, {
+    position: "fixed",
+    left: "-10000px",
+    top: "0",
+    width: `${REPORT_PDF_CAPTURE_WIDTH_PX}px`,
+    opacity: "0",
+    pointerEvents: "none",
+    zIndex: "-1",
+  });
+  host.innerHTML = `<style>${REPORT_PDF_STYLES}</style><div class="report-pdf-root">${buildPlanerReportHtml(data)}</div>`;
+  document.body.appendChild(host);
+
+  try {
+    await waitTwoFrames();
+    const root = host.querySelector<HTMLElement>(".report-pdf-root");
+    if (!root) throw new Error("Report PDF root missing");
+    await downloadElementPdf(root, filename, "", {
+      orientation: "landscape",
+      backgroundColor: "#ffffff",
+      marginMm: 12,
+    });
+  } finally {
+    host.remove();
+  }
+}
