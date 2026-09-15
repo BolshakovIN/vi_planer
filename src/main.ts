@@ -24,7 +24,12 @@ import {
   normalizeSizeRanges,
   hasTeam,
   uid,
-  wsjf,
+  rice,
+  riceEffortWeeks,
+  parseRiceImpact,
+  RICE_IMPACT_OPTIONS,
+  RICE_IMPACT_LABELS,
+  RiceImpact,
   snapToMonday,
   addDays,
   addWeeks,
@@ -52,10 +57,10 @@ import {
 import { downloadElementPdf, downloadMarkdownAsPdf } from "./pdfExport";
 
 /** Release / deploy stamp in the header (DD.MM.YYYY) */
-const RELEASE_UPDATED = "08.09.2026";
+const RELEASE_UPDATED = "15.09.2026";
 
 type Tab = "portfolio" | "timeline" | "queuesTest" | "settings";
-type SortKey = "priority" | "wsjf" | "estimate" | "eta";
+type SortKey = "priority" | "rice" | "estimate" | "eta";
 type SortDir = "asc" | "desc";
 type GanttBarDragMode = "move" | "resize-left" | "resize-right";
 
@@ -258,8 +263,8 @@ function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
   const dir = ui.sortDir === "asc" ? 1 : -1;
   return [...filtered].sort((a, b) => {
     let cmp = 0;
-    if (ui.sortKey === "wsjf") {
-      cmp = wsjf(a) - wsjf(b);
+    if (ui.sortKey === "rice") {
+      cmp = rice(a, szRanges()) - rice(b, szRanges());
     } else if (ui.sortKey === "estimate") {
       cmp = totalEstimateWeeks(a, szRanges()) - totalEstimateWeeks(b, szRanges());
     } else {
@@ -286,7 +291,7 @@ type PortfolioCol =
   | "title"
   | "teams"
   | "status"
-  | "wsjf"
+  | "rice"
   | "estimate"
   | "eta";
 
@@ -296,7 +301,7 @@ const HIDEABLE_PORTFOLIO_COLS: HideablePortfolioCol[] = [
   "type",
   "teams",
   "status",
-  "wsjf",
+  "rice",
   "estimate",
   "eta",
 ];
@@ -307,7 +312,7 @@ const ALL_PORTFOLIO_COLS: PortfolioCol[] = [
   "title",
   "teams",
   "status",
-  "wsjf",
+  "rice",
   "estimate",
   "eta",
 ];
@@ -318,7 +323,7 @@ const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
   title: "Инициатива / исходный бэклог",
   teams: "Команды (майка · старт)",
   status: "Статус",
-  wsjf: "WSJF",
+  rice: "RICE",
   estimate: "Оценка, маек",
   eta: "ETA",
 };
@@ -329,7 +334,7 @@ const PORTFOLIO_COL_DEFAULTS: Record<PortfolioCol, number> = {
   title: 260,
   teams: 220,
   status: 130,
-  wsjf: 72,
+  rice: 72,
   estimate: 120,
   eta: 140,
 };
@@ -338,7 +343,12 @@ function loadColWidths(): Partial<Record<PortfolioCol, number>> {
   try {
     const raw = localStorage.getItem(COL_WIDTH_KEY);
     if (!raw) return {};
-    return JSON.parse(raw) as Partial<Record<PortfolioCol, number>>;
+    const parsed = JSON.parse(raw) as Record<string, number>;
+    if (parsed.wsjf != null && parsed.rice == null) {
+      parsed.rice = parsed.wsjf;
+      delete parsed.wsjf;
+    }
+    return parsed as Partial<Record<PortfolioCol, number>>;
   } catch {
     return {};
   }
@@ -358,9 +368,11 @@ function loadHiddenCols(): HideablePortfolioCol[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((c): c is HideablePortfolioCol =>
-      HIDEABLE_PORTFOLIO_COLS.includes(c as HideablePortfolioCol),
-    );
+    return parsed
+      .map((c) => (c === "wsjf" ? "rice" : c))
+      .filter((c): c is HideablePortfolioCol =>
+        HIDEABLE_PORTFOLIO_COLS.includes(c as HideablePortfolioCol),
+      );
   } catch {
     return [];
   }
@@ -524,7 +536,7 @@ function resizableTh(
 function sortHeader(label: string, key: SortKey, extraClass = ""): string {
   const colMap: Partial<Record<SortKey, PortfolioCol>> = {
     priority: "priority",
-    wsjf: "wsjf",
+    rice: "rice",
     estimate: "estimate",
     eta: "eta",
   };
@@ -551,7 +563,7 @@ function portfolioTheadCellsHtml(): string {
     ${resizableTh("Инициатива / исходный бэклог", "title", "title-cell")}
     ${resizableTh("Команды (оценка · старт)", "teams")}
     ${resizableTh("Статус", "status", "status-cell")}
-    ${sortHeader("WSJF", "wsjf", "wsjf-cell")}
+    ${sortHeader("RICE", "rice", "rice-cell")}
     ${sortHeader("Оценка, маек", "estimate", "estimate-cell")}
     ${sortHeader("ETA", "eta")}
   `;
@@ -614,8 +626,8 @@ function toggleSort(key: SortKey) {
     ui.sortDir = ui.sortDir === "asc" ? "desc" : "asc";
   } else {
     ui.sortKey = key;
-    // priority: 1 first (asc); WSJF: high first (desc); estimate/ETA: smaller/sooner first
-    ui.sortDir = key === "wsjf" ? "desc" : "asc";
+    // priority: 1 first (asc); RICE: high first (desc); estimate/ETA: smaller/sooner first
+    ui.sortDir = key === "rice" ? "desc" : "asc";
   }
   render();
 }
@@ -677,7 +689,7 @@ function columnsHelpHtml(): string {
         <div><span class="cols-help-k">Инициатива</span> — название, исходный бэклог и владелец</div>
         <div><span class="cols-help-k">Команды</span> — кто делает, майка (S/M/L) и план старта</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
-        <div><span class="cols-help-k">WSJF</span> — (BV + TC + RR) / Job Size</div>
+        <div><span class="cols-help-k">RICE</span> — (Охват × Влияние × Уверенность) / Трудозатраты (чел·нед по майкам)</div>
         <div><span class="cols-help-k">Оценка</span> — маек S / M / L (недели в Настройках)</div>
         <div><span class="cols-help-k">ETA</span> — дата готовности (когда закончила последняя команда)</div>
       </div>
@@ -693,7 +705,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
   const rows = visible
     .map((item) => {
       const r = byId.get(item.id);
-      const score = wsjf(item);
+      const score = rice(item, szRanges());
       const total = totalEstimateWeeks(item, szRanges());
       const prio = item.manualRank ?? "—";
       const etaMeta = r
@@ -737,7 +749,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           </td>
           <td${tdAttrs("teams", "teams-cell")}>${teamsCellHtml(item)}</td>
           <td${tdAttrs("status", "status-cell")}><span class="badge badge-status-${item.status}">${statusLabel(item.status)}</span></td>
-          <td${tdAttrs("wsjf", "wsjf-cell mono metric-num")}>${score}</td>
+          <td${tdAttrs("rice", "rice-cell mono metric-num")}>${score}</td>
           <td${tdAttrs("estimate", "estimate-cell mono metric-num")}>
             <span class="size-badge">${sizesSummary(item)}</span>
             <div class="meta">~${total} чел·нед</div>
@@ -2081,15 +2093,16 @@ function editorHtml(item: WorkItem | null): string {
       ],
       status: "idea",
       owner: "",
-      businessValue: 5,
-      timeCriticality: 5,
-      riskReduction: 5,
-      jobSize: 5,
+      reach: 100,
+      impact: 1,
+      confidence: 0.8,
       notes: "",
       manualRank: nextPriority(state.items),
     } satisfies WorkItem);
 
-  const score = wsjf(draft);
+  const score = rice(draft, szRanges());
+  const effort = riceEffortWeeks(draft, szRanges());
+  const confPct = Math.round(draft.confidence * 100);
   const selected = new Set(draft.assignments.map((a) => a.teamId));
   const sizeMap = new Map(
     draft.assignments.map((a) => [a.teamId, a.size])
@@ -2182,12 +2195,15 @@ function editorHtml(item: WorkItem | null): string {
             <div id="liveEta" style="margin-top:8px;font-size:13px;color:var(--ink)">${previewHtml}</div>
           </div>
           <div class="score-grid">
-            <div class="score-box"><div class="k">Business Value</div><div class="v"><input id="f_bv" type="number" min="1" max="10" value="${draft.businessValue}" style="width:64px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
-            <div class="score-box"><div class="k">Time Criticality</div><div class="v"><input id="f_tc" type="number" min="1" max="10" value="${draft.timeCriticality}" style="width:64px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
-            <div class="score-box"><div class="k">Risk / Opportunity</div><div class="v"><input id="f_rr" type="number" min="1" max="10" value="${draft.riskReduction}" style="width:64px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
-            <div class="score-box"><div class="k">Job Size</div><div class="v"><input id="f_js" type="number" min="1" max="10" value="${draft.jobSize}" style="width:64px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
+            <div class="score-box"><div class="k">Охват</div><div class="v"><input id="f_reach" type="number" min="0" step="1" value="${draft.reach}" title="Пользователей / период" style="width:72px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
+            <div class="score-box"><div class="k">Влияние</div><div class="v"><select id="f_impact" title="Сила эффекта" style="width:auto;text-align:center;border:none;background:transparent;font:inherit;font-weight:700">${RICE_IMPACT_OPTIONS.map(
+              (v) =>
+                `<option value="${v}" ${draft.impact === v ? "selected" : ""}>${v} · ${RICE_IMPACT_LABELS[v]}</option>`
+            ).join("")}</select></div></div>
+            <div class="score-box"><div class="k">Уверенность, %</div><div class="v"><input id="f_conf" type="number" min="0" max="100" step="5" value="${confPct}" title="0–100%" style="width:64px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
+            <div class="score-box"><div class="k">Трудозатраты</div><div class="v mono" id="liveEffort" title="Сумма чел·нед по майкам">${effort}</div></div>
           </div>
-          <div class="callout" style="margin:0">WSJF = (BV + TC + RR) / Job Size → <strong class="mono" id="liveWsjf">${score}</strong></div>
+          <div class="callout" style="margin:0">RICE = (Охват × Влияние × Уверенность) / Трудозатраты → <strong class="mono" id="liveRice">${score}</strong></div>
           <div class="grid-2">
             <div class="field">
               <label>Приоритет (уникальный, 1 = выше)</label>
@@ -2889,7 +2905,7 @@ function render() {
           <button class="btn" id="exportPdfBtn">Экспорт PDF</button>
         </div>
         <p class="subtitle">
-          Единый портфель проектов и продуктов: сквозной WSJF, несколько команд на инициативу
+          Единый портфель проектов и продуктов: сквозной RICE, несколько команд на инициативу
           со своими оценками и ETA, bottleneck-срок готовности.
         </p>
       </div>
@@ -2978,10 +2994,9 @@ function refreshLiveEta() {
       assignments,
       status: "ready",
       owner: "—",
-      businessValue: 5,
-      timeCriticality: 5,
-      riskReduction: 5,
-      jobSize: 5,
+      reach: 100,
+      impact: 1,
+      confidence: 0.8,
       manualRank: null,
     } satisfies WorkItem);
   const draft: WorkItem = {
@@ -2997,18 +3012,19 @@ function refreshLiveEta() {
     status:
       (document.querySelector<HTMLSelectElement>("#f_status")
         ?.value as ItemStatus) || base.status,
-    businessValue: Number(
-      document.querySelector<HTMLInputElement>("#f_bv")?.value
-    ) || base.businessValue,
-    timeCriticality: Number(
-      document.querySelector<HTMLInputElement>("#f_tc")?.value
-    ) || base.timeCriticality,
-    riskReduction: Number(
-      document.querySelector<HTMLInputElement>("#f_rr")?.value
-    ) || base.riskReduction,
-    jobSize: Number(
-      document.querySelector<HTMLInputElement>("#f_js")?.value
-    ) || base.jobSize,
+    reach: Number(
+      document.querySelector<HTMLInputElement>("#f_reach")?.value
+    ) || base.reach,
+    impact: (Number(
+      document.querySelector<HTMLSelectElement>("#f_impact")?.value
+    ) || base.impact) as RiceImpact,
+    confidence: (() => {
+      const raw = Number(
+        document.querySelector<HTMLInputElement>("#f_conf")?.value
+      );
+      if (!Number.isFinite(raw)) return base.confidence;
+      return Math.min(1, Math.max(0, raw > 1 ? raw / 100 : raw));
+    })(),
     manualRank: (() => {
       const raw = document.querySelector<HTMLInputElement>("#f_rank")?.value;
       const n = Math.round(Number(raw));
@@ -3049,10 +3065,9 @@ function readForm(): Omit<WorkItem, "id"> | null {
     assignments,
     status: val("f_status") as ItemStatus,
     owner: val("f_owner").trim() || "—",
-    businessValue: clamp(num("f_bv", 5), 1, 10),
-    timeCriticality: clamp(num("f_tc", 5), 1, 10),
-    riskReduction: clamp(num("f_rr", 5), 1, 10),
-    jobSize: clamp(num("f_js", 5), 1, 10),
+    reach: Math.max(0, num("f_reach", 100)),
+    impact: parseRiceImpact(num("f_impact", 1), 1),
+    confidence: clamp(num("f_conf", 80), 0, 100) / 100,
     notes: val("f_notes").trim(),
     manualRank: priority,
   };
@@ -3236,7 +3251,7 @@ function bind() {
       if ((e.target as HTMLElement).closest("[data-col-resize]")) return;
       e.stopPropagation();
       const key = th.dataset.sort as SortKey | undefined;
-      if (key === "wsjf" || key === "estimate" || key === "eta" || key === "priority")
+      if (key === "rice" || key === "estimate" || key === "eta" || key === "priority")
         toggleSort(key);
     });
   });
@@ -3374,15 +3389,60 @@ function bind() {
     persist();
   });
 
-  ["f_bv", "f_tc", "f_rr", "f_js"].forEach((id) => {
-    document.querySelector(`#${id}`)?.addEventListener("input", () => {
-      const live = document.querySelector("#liveWsjf");
-      if (!live) return;
-      const draft = readForm();
-      if (!draft) return;
-      live.textContent = String(wsjf({ ...draft, id: "x", manualRank: null }));
-    });
+  const refreshLiveRice = () => {
+    const live = document.querySelector("#liveRice");
+    const liveEffort = document.querySelector("#liveEffort");
+    if (!live && !liveEffort) return;
+    const assignments = readAssignments();
+    const base =
+      (ui.editingId
+        ? state.items.find((i) => i.id === ui.editingId)
+        : null) ??
+      ({
+        id: "x",
+        title: "",
+        type: "product" as ItemType,
+        backlog: "",
+        assignments,
+        status: "idea" as ItemStatus,
+        owner: "",
+        reach: 100,
+        impact: 1 as RiceImpact,
+        confidence: 0.8,
+        manualRank: null,
+      } satisfies WorkItem);
+    const confRaw = Number(
+      document.querySelector<HTMLInputElement>("#f_conf")?.value
+    );
+    const item: WorkItem = {
+      ...base,
+      id: "x",
+      assignments: assignments.length ? assignments : base.assignments,
+      reach: Math.max(
+        0,
+        Number(document.querySelector<HTMLInputElement>("#f_reach")?.value) ||
+          base.reach
+      ),
+      impact: parseRiceImpact(
+        document.querySelector<HTMLSelectElement>("#f_impact")?.value,
+        base.impact
+      ),
+      confidence: Number.isFinite(confRaw)
+        ? Math.min(1, Math.max(0, confRaw > 1 ? confRaw / 100 : confRaw))
+        : base.confidence,
+      manualRank: null,
+    };
+    if (live) live.textContent = String(rice(item, szRanges()));
+    if (liveEffort)
+      liveEffort.textContent = String(riceEffortWeeks(item, szRanges()));
+  };
+
+  ["f_reach", "f_impact", "f_conf"].forEach((id) => {
+    document.querySelector(`#${id}`)?.addEventListener("input", refreshLiveRice);
+    document.querySelector(`#${id}`)?.addEventListener("change", refreshLiveRice);
   });
+  teamList?.addEventListener("input", refreshLiveRice);
+  teamList?.addEventListener("change", refreshLiveRice);
 
   const ganttWeeks = document.querySelector<HTMLInputElement>("#ganttWeeks");
   ganttWeeks?.addEventListener("input", () => {

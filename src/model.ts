@@ -161,14 +161,12 @@ export interface WorkItem {
   assignments: TeamAssignment[];
   status: ItemStatus;
   owner: string;
-  /** Business Value 1–10 */
-  businessValue: number;
-  /** Time Criticality 1–10 */
-  timeCriticality: number;
-  /** Risk Reduction / Opportunity Enablement 1–10 */
-  riskReduction: number;
-  /** Job size 1–10 (higher = larger) */
-  jobSize: number;
+  /** RICE Reach — how many users/period */
+  reach: number;
+  /** RICE Impact — 0.25 / 0.5 / 1 / 2 / 3 */
+  impact: RiceImpact;
+  /** RICE Confidence — 0–1 (UI may show %) */
+  confidence: number;
   notes?: string;
   /**
    * Explicit portfolio priority (1 = highest). Unique across items.
@@ -194,7 +192,7 @@ export interface ScheduledSlice {
   size: TShirtSize;
   /** Person-weeks of effort (from t-shirt size) */
   estimatePw: number;
-  wsjf: number;
+  rice: number;
   effectiveRank: number;
   /** User-planned earliest start */
   plannedStartDate: string;
@@ -213,7 +211,7 @@ export interface ScheduledSlice {
 export interface ItemSchedule {
   item: WorkItem;
   slices: ScheduledSlice[];
-  wsjf: number;
+  rice: number;
   totalEstimateWeeks: number;
   startWeek: number;
   endWeek: number;
@@ -351,10 +349,99 @@ export function concurrentOverloadWeeks(
   return scheduledOverloadWeeks(concurrentTeamLoad(state, maxWeeks));
 }
 
-export function wsjf(item: WorkItem): number {
-  const costOfDelay =
-    item.businessValue + item.timeCriticality + item.riskReduction;
-  return Math.round((costOfDelay / Math.max(item.jobSize, 0.5)) * 100) / 100;
+/** Standard RICE impact scale (Intercom / product ops). */
+export const RICE_IMPACT_OPTIONS = [0.25, 0.5, 1, 2, 3] as const;
+export type RiceImpact = (typeof RICE_IMPACT_OPTIONS)[number];
+
+export const RICE_IMPACT_LABELS: Record<RiceImpact, string> = {
+  0.25: "Минимальное",
+  0.5: "Низкое",
+  1: "Среднее",
+  2: "Высокое",
+  3: "Огромное",
+};
+
+/** Map legacy WSJF Business Value (1–10) → RICE Impact. */
+export function impactFromBusinessValue(bv: number): RiceImpact {
+  if (bv <= 2) return 0.25;
+  if (bv <= 4) return 0.5;
+  if (bv <= 6) return 1;
+  if (bv <= 8) return 2;
+  return 3;
+}
+
+export function parseRiceImpact(
+  raw: unknown,
+  fallback: RiceImpact = 1
+): RiceImpact {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  for (const opt of RICE_IMPACT_OPTIONS) {
+    if (Math.abs(n - opt) < 0.001) return opt;
+  }
+  return fallback;
+}
+
+/** Accept 0–1 or 0–100; clamp to 0–1. */
+export function parseRiceConfidence(
+  raw: unknown,
+  fallback = 0.8
+): number {
+  let n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  if (n > 1) n = n / 100;
+  return Math.round(Math.min(1, Math.max(0, n)) * 100) / 100;
+}
+
+/**
+ * RICE Effort = sum of t-shirt person-weeks (replaces WSJF Job Size).
+ * Denominator never below 0.5.
+ */
+export function riceEffortWeeks(
+  item: WorkItem,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): number {
+  return Math.max(totalEstimateWeeks(item, ranges), 0.5);
+}
+
+/** RICE = (Reach × Impact × Confidence) / Effort (чел·нед по майкам). */
+export function rice(
+  item: WorkItem,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): number {
+  const score =
+    (item.reach * item.impact * item.confidence) /
+    riceEffortWeeks(item, ranges);
+  return Math.round(score * 100) / 100;
+}
+
+/**
+ * Migrate legacy WSJF fields → RICE when reach/impact/confidence absent.
+ * - businessValue → impact (buckets)
+ * - reach → 100 (no WSJF analogue)
+ * - confidence → clamp((TC+RR)/20, 0.5..1)
+ * - jobSize dropped; Effort = t-shirt weeks
+ */
+export function riceFieldsFromRaw(
+  r: Record<string, unknown>
+): Pick<WorkItem, "reach" | "impact" | "confidence"> {
+  const hasRice =
+    r.reach != null || r.impact != null || r.confidence != null;
+  if (hasRice) {
+    return {
+      reach: Math.max(0, Number(r.reach) || 100),
+      impact: parseRiceImpact(r.impact, 1),
+      confidence: parseRiceConfidence(r.confidence, 0.8),
+    };
+  }
+  const bv = Number(r.businessValue) || 5;
+  const tc = Number(r.timeCriticality) || 5;
+  const rr = Number(r.riskReduction) || 5;
+  return {
+    reach: 100,
+    impact: impactFromBusinessValue(bv),
+    confidence: Math.max(0.5, parseRiceConfidence((tc + rr) / 20, 0.8)),
+  };
 }
 
 export function totalEstimateWeeks(
@@ -439,7 +526,7 @@ export function weekIndex(planStart: string, dateIso: string): number {
   return Math.max(0, Math.round((b - a) / (7 * 24 * 3600 * 1000)));
 }
 
-/** Sort by explicit priority (1 first); missing ranks fall back to WSJF */
+/** Sort by explicit priority (1 first); missing ranks fall back to RICE */
 export function sortByPriority(
   items: WorkItem[],
   ranges: SizeRanges = DEFAULT_SIZE_RANGES
@@ -450,8 +537,8 @@ export function sortByPriority(
     if (pa != null && pb != null && pa !== pb) return pa - pb;
     if (pa != null && pb == null) return -1;
     if (pa == null && pb != null) return 1;
-    const dw = wsjf(b) - wsjf(a);
-    if (dw !== 0) return dw;
+    const dr = rice(b, ranges) - rice(a, ranges);
+    if (dr !== 0) return dr;
     return totalEstimateWeeks(a, ranges) - totalEstimateWeeks(b, ranges);
   });
 }
@@ -549,22 +636,22 @@ export function nextPriority(items: WorkItem[]): number {
 
 /**
  * Ensure every item has a unique integer priority.
- * Keeps valid unique ranks; fills gaps / fixes duplicates by WSJF order.
+ * Keeps valid unique ranks; fills gaps / fixes duplicates by RICE order.
  */
 export function ensureUniquePriorities(
   items: WorkItem[],
   ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): WorkItem[] {
-  const byWsjf = [...items].sort((a, b) => {
-    const dw = wsjf(b) - wsjf(a);
-    if (dw !== 0) return dw;
+  const byRice = [...items].sort((a, b) => {
+    const dr = rice(b, ranges) - rice(a, ranges);
+    if (dr !== 0) return dr;
     return totalEstimateWeeks(a, ranges) - totalEstimateWeeks(b, ranges);
   });
 
   const used = new Set<number>();
   const kept = new Map<string, number>();
 
-  for (const item of byWsjf) {
+  for (const item of byRice) {
     const r = item.manualRank;
     if (r != null && Number.isFinite(r) && r >= 1 && !used.has(r)) {
       used.add(r);
@@ -799,7 +886,7 @@ export function schedulePortfolio(
           teamId: t.team.id,
           size: t.size,
           estimatePw: t.estimatePw,
-          wsjf: wsjf(item),
+          rice: rice(item, ranges),
           effectiveRank: itemIdx + 1,
           plannedStartDate: t.workStartDate,
           startWeek: commonStart,
@@ -876,7 +963,7 @@ export function schedulePortfolio(
           teamId: team.id,
           size: entry.size,
           estimatePw,
-          wsjf: wsjf(entry.item),
+          rice: rice(entry.item, ranges),
           effectiveRank: idx + 1,
           plannedStartDate: entry.workStartDate,
           startWeek,
@@ -926,7 +1013,7 @@ export function schedulePortfolio(
             ? 1
             : -1
       ),
-      wsjf: wsjf(item),
+      rice: rice(item, ranges),
       totalEstimateWeeks: totalEstimateWeeks(item, ranges),
       startWeek: earliest.startWeek,
       endWeek: bottleneck.endWeek,
@@ -939,7 +1026,7 @@ export function schedulePortfolio(
 
   slices.sort((a, b) => {
     if (a.startWeek !== b.startWeek) return a.startWeek - b.startWeek;
-    return b.wsjf - a.wsjf;
+    return b.rice - a.rice;
   });
 
   return { slices, rollups, load };
@@ -1027,10 +1114,7 @@ export function normalizeState(raw: unknown): AppState | null {
         ? r.status
         : "idea") as ItemStatus,
       owner: String(r.owner ?? "—"),
-      businessValue: Number(r.businessValue) || 5,
-      timeCriticality: Number(r.timeCriticality) || 5,
-      riskReduction: Number(r.riskReduction) || 5,
-      jobSize: Number(r.jobSize) || 5,
+      ...riceFieldsFromRaw(r),
       notes: r.notes != null ? String(r.notes) : undefined,
       manualRank:
         r.manualRank == null || r.manualRank === ""

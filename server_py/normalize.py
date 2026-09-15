@@ -99,13 +99,44 @@ def size_plan_weeks(size: str, ranges: dict[str, dict[str, int]] | None = None) 
     return round(((r["min"] + r["max"]) / 2) * 10) / 10
 
 
-def wsjf(item: dict[str, Any]) -> float:
-    job = float(item.get("jobSize") or 5) or 5
-    return (
-        float(item.get("businessValue") or 5)
-        + float(item.get("timeCriticality") or 5)
-        + float(item.get("riskReduction") or 5)
-    ) / job
+RICE_IMPACT_OPTIONS = (0.25, 0.5, 1, 2, 3)
+
+
+def impact_from_business_value(bv: float) -> float:
+    if bv <= 2:
+        return 0.25
+    if bv <= 4:
+        return 0.5
+    if bv <= 6:
+        return 1.0
+    if bv <= 8:
+        return 2.0
+    return 3.0
+
+
+def parse_rice_impact(raw: Any, fallback: float = 1.0) -> float:
+    try:
+        n = float(raw)
+    except (TypeError, ValueError):
+        return fallback
+    if not math.isfinite(n):
+        return fallback
+    for opt in RICE_IMPACT_OPTIONS:
+        if abs(n - opt) < 0.001:
+            return opt
+    return fallback
+
+
+def parse_rice_confidence(raw: Any, fallback: float = 0.8) -> float:
+    try:
+        n = float(raw)
+    except (TypeError, ValueError):
+        return fallback
+    if not math.isfinite(n):
+        return fallback
+    if n > 1:
+        n = n / 100
+    return round(min(1.0, max(0.0, n)) * 100) / 100
 
 
 def total_estimate_weeks(
@@ -118,19 +149,59 @@ def total_estimate_weeks(
     )
 
 
+def rice_effort_weeks(
+    item: dict[str, Any], ranges: dict[str, dict[str, int]] | None = None
+) -> float:
+    return max(total_estimate_weeks(item, ranges), 0.5)
+
+
+def rice(
+    item: dict[str, Any], ranges: dict[str, dict[str, int]] | None = None
+) -> float:
+    score = (
+        float(item.get("reach") or 100)
+        * float(item.get("impact") or 1)
+        * float(item.get("confidence") or 0.8)
+    ) / rice_effort_weeks(item, ranges)
+    return round(score * 100) / 100
+
+
+def rice_fields_from_raw(r: dict[str, Any]) -> dict[str, float]:
+    """Migrate legacy WSJF → RICE when reach/impact/confidence absent."""
+    has_rice = (
+        r.get("reach") is not None
+        or r.get("impact") is not None
+        or r.get("confidence") is not None
+    )
+    if has_rice:
+        return {
+            "reach": max(0.0, _num(r.get("reach"), 100)),
+            "impact": parse_rice_impact(r.get("impact"), 1.0),
+            "confidence": parse_rice_confidence(r.get("confidence"), 0.8),
+        }
+    bv = _num(r.get("businessValue"), 5)
+    tc = _num(r.get("timeCriticality"), 5)
+    rr = _num(r.get("riskReduction"), 5)
+    return {
+        "reach": 100.0,
+        "impact": impact_from_business_value(bv),
+        "confidence": max(0.5, parse_rice_confidence((tc + rr) / 20, 0.8)),
+    }
+
+
 def ensure_unique_priorities(
     items: list[dict[str, Any]],
     ranges: dict[str, dict[str, int]] | None = None,
 ) -> list[dict[str, Any]]:
     ranges = ranges or DEFAULT_SIZE_RANGES
-    by_wsjf = sorted(
+    by_rice = sorted(
         items,
-        key=lambda it: (-wsjf(it), total_estimate_weeks(it, ranges)),
+        key=lambda it: (-rice(it, ranges), total_estimate_weeks(it, ranges)),
     )
     used: set[float] = set()
     kept: dict[str, float] = {}
 
-    for item in by_wsjf:
+    for item in by_rice:
         r = item.get("manualRank")
         if r is None:
             continue
@@ -270,6 +341,7 @@ def normalize_state(raw: Any) -> dict[str, Any] | None:
             except (TypeError, ValueError):
                 manual_rank = None
 
+        rice = rice_fields_from_raw(r)
         item: dict[str, Any] = {
             "id": str(r.get("id") or uid("item")),
             "title": str(r.get("title") or "Без названия"),
@@ -278,10 +350,9 @@ def normalize_state(raw: Any) -> dict[str, Any] | None:
             "assignments": assignments,
             "status": status,
             "owner": str(r.get("owner") or "—"),
-            "businessValue": _num(r.get("businessValue"), 5),
-            "timeCriticality": _num(r.get("timeCriticality"), 5),
-            "riskReduction": _num(r.get("riskReduction"), 5),
-            "jobSize": _num(r.get("jobSize"), 5),
+            "reach": rice["reach"],
+            "impact": rice["impact"],
+            "confidence": rice["confidence"],
             "manualRank": manual_rank,
         }
         if r.get("notes") is not None:
