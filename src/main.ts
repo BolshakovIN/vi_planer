@@ -249,8 +249,8 @@ function teamsCellHtml(item: WorkItem): string {
     .map((a) => {
       const t = teamById(a.teamId);
       const name = t?.name ?? a.teamId;
-      const tip = `${name} ${a.size} · старт ${formatDate(a.workStartDate)}`;
-      return `<span class="team-chip" title="${escapeAttr(tip)}"><span class="team-chip-name"><span class="team-dot" style="background:${t?.color ?? "#94a3b8"}"></span><span class="team-chip-text">${escapeHtml(name)}</span></span><span class="team-chip-estimate"><span class="size-badge mono">${a.size}</span><span class="mono muted-inline">старт ${formatDate(a.workStartDate)}</span></span></span>`;
+      const tip = `${name} ${a.size} · план старт ${formatDate(a.workStartDate)}`;
+      return `<span class="team-chip" title="${escapeAttr(tip)}"><span class="team-chip-name"><span class="team-dot" style="background:${t?.color ?? "#94a3b8"}"></span><span class="team-chip-text">${escapeHtml(name)}</span></span><span class="team-chip-estimate"><span class="size-badge mono">${a.size}</span><span class="mono muted-inline">план старт ${formatDate(a.workStartDate)}</span></span></span>`;
     })
     .join("");
   return `<div class="teams-stack">${chips}</div>`;
