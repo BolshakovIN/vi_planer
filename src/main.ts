@@ -319,7 +319,7 @@ const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
   teams: "Команды (майка · старт)",
   status: "Статус",
   wsjf: "WSJF",
-  estimate: "Оценка, майки",
+  estimate: "Оценка, маек",
   eta: "ETA",
 };
 
@@ -552,7 +552,7 @@ function portfolioTheadCellsHtml(): string {
     ${resizableTh("Команды (оценка · старт)", "teams")}
     ${resizableTh("Статус", "status", "status-cell")}
     ${sortHeader("WSJF", "wsjf", "wsjf-cell")}
-    ${sortHeader("Оценка, майки", "estimate", "estimate-cell")}
+    ${sortHeader("Оценка, маек", "estimate", "estimate-cell")}
     ${sortHeader("ETA", "eta")}
   `;
 }
@@ -678,7 +678,7 @@ function columnsHelpHtml(): string {
         <div><span class="cols-help-k">Команды</span> — кто делает, майка (S/M/L) и план старта</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
         <div><span class="cols-help-k">WSJF</span> — (BV + TC + RR) / Job Size</div>
-        <div><span class="cols-help-k">Оценка</span> — майки S / M / L (недели в Настройках)</div>
+        <div><span class="cols-help-k">Оценка</span> — маек S / M / L (недели в Настройках)</div>
         <div><span class="cols-help-k">ETA</span> — дата готовности (когда закончила последняя команда)</div>
       </div>
     </details>
