@@ -122,7 +122,7 @@ const SCHEDULE_MODE_META: Record<
   },
   maxUtilization: {
     label: "Максимальная утилизация ресурса",
-    hint: "Все команды одной функциональности стартуют вместе; ETA = max по командам.",
+    hint: "Все команды одной функциональности стартуют вместе; дата реализации = max по командам.",
   },
 };
 
@@ -330,7 +330,7 @@ const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
   status: "Статус",
   rice: "RICE",
   estimate: "Оценка, маек",
-  eta: "ETA",
+  eta: "Дата реализации",
 };
 
 const PORTFOLIO_COL_DEFAULTS: Record<PortfolioCol, number> = {
@@ -341,7 +341,7 @@ const PORTFOLIO_COL_DEFAULTS: Record<PortfolioCol, number> = {
   status: 130,
   rice: 72,
   estimate: 120,
-  eta: 140,
+  eta: 168,
 };
 
 function loadColWidths(): Partial<Record<PortfolioCol, number>> {
@@ -605,7 +605,7 @@ function portfolioTheadCellsHtml(): string {
     ${resizableTh("Статус", "status", "status-cell")}
     ${sortHeader("RICE", "rice", "rice-cell")}
     ${sortHeader("Оценка, маек", "estimate", "estimate-cell")}
-    ${sortHeader("ETA", "eta")}
+    ${sortHeader("Дата реализации", "eta")}
   `;
 }
 
@@ -754,7 +754,7 @@ function columnsHelpHtml(): string {
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
         <div><span class="cols-help-k">RICE</span> — (Охват × Влияние × Уверенность) / Трудозатраты (чел·нед по майкам)</div>
         <div><span class="cols-help-k">Оценка</span> — маек S / M / L (недели в Настройках)</div>
-        <div><span class="cols-help-k">ETA</span> — дата готовности (когда закончила последняя команда)</div>
+        <div><span class="cols-help-k">Дата реализации</span> — когда закончила последняя команда (bottleneck)</div>
       </div>
     </details>
   `;
@@ -1348,7 +1348,7 @@ function showGanttLabelTip(anchor: HTMLElement) {
 
   const metaBits: string[] = [];
   if (product) metaBits.push(escapeHtml(product));
-  if (eta) metaBits.push(`ETA ${escapeHtml(eta)}`);
+  if (eta) metaBits.push(`Дата реализации ${escapeHtml(eta)}`);
 
   const pop = document.createElement("div");
   pop.id = "ganttLabelTip";
@@ -1776,7 +1776,7 @@ function timelineHtml(
                 : "старт очереди";
             })()
           : schedMode === "maxUtilization"
-            ? "макс. утилизация · ETA = max команд"
+            ? "макс. утилизация · дата реализации = max команд"
             : "как задано · без сдвига очереди";
       const depHint =
         schedMode === "teamQueue"
@@ -1791,8 +1791,8 @@ function timelineHtml(
       const { trackH, rowH } = rowMetrics[rowIdx];
       const containerName = productProjectName(item.backlog);
       const etaMetaLine = containerName
-        ? `${escapeHtml(containerName)} · ETA ${formatDate(r.endDate)}`
-        : `ETA ${formatDate(r.endDate)}`;
+        ? `${escapeHtml(containerName)} · Дата реализации ${formatDate(r.endDate)}`
+        : `Дата реализации ${formatDate(r.endDate)}`;
       const ownerRaw = item.owner.trim();
       const ownerTip =
         ownerRaw && ownerRaw !== "—" ? ownerRaw : "";
@@ -1884,7 +1884,7 @@ function timelineHtml(
               schedMode === "teamQueue"
                 ? "Стрелки: очередь одной команды (цвет = команда), от конца полоски к началу следующей — не кросс-командные зависимости функциональности."
                 : schedMode === "maxUtilization"
-                  ? "Максимальная утилизация ресурса: полоски одной функциональности стартуют вместе (параллельно ≥ даты старта). Стрелки FS скрыты; ETA = max по командам."
+                  ? "Максимальная утилизация ресурса: полоски одной функциональности стартуют вместе (параллельно ≥ даты старта). Стрелки FS скрыты; дата реализации = max по командам."
                   : "Режим «Как задано»: даты полосок = старты из карточек. Выберите режим утилизации выше, чтобы сдвигать работы под ёмкость (и увидеть стрелки FS в последовательном режиме)."
             }
           </p>
@@ -1949,10 +1949,10 @@ function timelineHtml(
       </div>
       <p class="footer-note" style="padding:0 16px 16px;margin:0">${
         schedMode === "teamQueue"
-          ? "Шкала — недели от старта планирования (понедельник). Стрелки FS одной команды: правый край полоски → левый край следующей работы этой же команды в очереди по приоритету (цвет = команда; не связи между разными командами одной функциональности). Подпись «после #N (команда)» — кто стоит перед этой полоской в очереди. ETA = конец bottleneck-полоски."
+          ? "Шкала — недели от старта планирования (понедельник). Стрелки FS одной команды: правый край полоски → левый край следующей работы этой же команды в очереди по приоритету (цвет = команда; не связи между разными командами одной функциональности). Подпись «после #N (команда)» — кто стоит перед этой полоской в очереди. Дата реализации = конец bottleneck-полоски."
           : schedMode === "maxUtilization"
-            ? "Шкала — недели от старта планирования (понедельник). Режим «Максимальная утилизация ресурса»: функциональности по приоритету; все команды одной функциональности делят общий старт и идут параллельно (ETA = max по командам), без FS-очереди, которая раздвигает сроки. Ниже по приоритету ждут свободной ёмкости, но при старте тоже параллельны."
-            : "Шкала — недели от старта планирования (понедельник). Даты полосок = заданные старты (без сдвига по ёмкости); стрелки очереди скрыты. ETA = конец bottleneck-полоски; параллельная работа может перегрузить команду."
+            ? "Шкала — недели от старта планирования (понедельник). Режим «Максимальная утилизация ресурса»: функциональности по приоритету; все команды одной функциональности делят общий старт и идут параллельно (дата реализации = max по командам), без FS-очереди, которая раздвигает сроки. Ниже по приоритету ждут свободной ёмкости, но при старте тоже параллельны."
+            : "Шкала — недели от старта планирования (понедельник). Даты полосок = заданные старты (без сдвига по ёмкости); стрелки очереди скрыты. Дата реализации = конец bottleneck-полоски; параллельная работа может перегрузить команду."
       } Красная подсветка — загрузка команды по расписанию (как на Gantt) выше ёмкости в эту неделю.</p>
     </div>
   `;
@@ -2242,7 +2242,7 @@ function settingsHtml(rollups: ItemSchedule[]): string {
       </div>
       <div class="callout">
         Диапазоны майок — <strong>сколько недель</strong> заложено в оценке проекта (S / M / L). Для плана берётся середина диапазона.
-        Изменения сразу перестраивают ETA и Gantt.
+        Изменения сразу перестраивают дату реализации и Gantt.
       </div>
       <div class="panel panel-sticky-host">
         <div class="panel-sticky">
@@ -2375,7 +2375,7 @@ function editorHtml(item: WorkItem | null): string {
   const preview = previewScheduleFor(draft);
   const previewHtml = preview
     ? formatLiveEtaHtml(preview, draft.assignments)
-    : `<div class="meta">Отметьте команду, чтобы увидеть расчёт ETA</div>`;
+    : `<div class="meta">Отметьте команду, чтобы увидеть расчёт даты реализации</div>`;
 
   const teamRows = state.teams
     .map((t) => {
@@ -2459,7 +2459,7 @@ function editorHtml(item: WorkItem | null): string {
             </div>
           </div>
           <div class="callout modal-section" style="margin:0" id="liveEtaBox">
-            <strong>Пересчёт ETA</strong> (с учётом очереди и стартов)
+            <strong>Пересчёт даты реализации</strong> (с учётом очереди и стартов)
             <div id="liveEta" style="margin-top:8px;font-size:13px;color:var(--ink)">${previewHtml}</div>
           </div>
           <div class="score-grid">
@@ -2553,15 +2553,15 @@ function formatLiveEtaHtml(
 
   const modeNote =
     activeScheduleMode() === "manual"
-      ? `ETA по заданным стартам = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`
+      ? `Дата реализации по заданным стартам = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`
       : activeScheduleMode() === "teamQueue"
-        ? `ETA с учётом очереди команды = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`
-        : `ETA (макс. утилизация) = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`;
+        ? `Дата реализации с учётом очереди команды = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`
+        : `Дата реализации (макс. утилизация) = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`;
 
   return (
     lines +
     `<div class="eta-final-line">${modeNote}</div>` +
-    `<div class="meta">ETA только от ваших стартов/оценок (без чужого бэклога) = <strong class="mono">${formatDate(planOnlyMax)}</strong> — меняется сразу при смене даты</div>`
+    `<div class="meta">Дата реализации только от ваших стартов/оценок (без чужого бэклога) = <strong class="mono">${formatDate(planOnlyMax)}</strong> — меняется сразу при смене даты</div>`
   );
 }
 
@@ -3174,7 +3174,7 @@ function render() {
         </div>
         <p class="subtitle">
           Единый портфель проектов и продуктов: сквозной RICE, несколько команд на функциональность
-          со своими оценками и ETA, bottleneck-срок готовности.
+          со своими оценками и датой реализации (bottleneck).
         </p>
       </div>
       <div id="pdfCapture">
@@ -3250,7 +3250,7 @@ function refreshLiveEta() {
   if (!liveEta) return;
   if (!assignments.length) {
     liveEta.innerHTML =
-      '<div class="meta">Отметьте команду, чтобы увидеть расчёт ETA</div>';
+      '<div class="meta">Отметьте команду, чтобы увидеть расчёт даты реализации</div>';
     return;
   }
   const base =
