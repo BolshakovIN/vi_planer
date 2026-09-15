@@ -1,9 +1,10 @@
-# VI Planer — скрипт короткого питча (~2–2,5 мин)
+# VI Planer — скрипт короткого питча (~2,5–3 мин)
 
 Говорить спокойно, по слайдам. Курсивом — опциональные ремарки. Не читать списки дословно.
 
 **Live:** https://bolshakovin.github.io/vi_planer/  
-**PDF:** [VI-Planer-presentation.pdf](./VI-Planer-presentation.pdf)
+**PDF презентации:** https://bolshakovin.github.io/vi_planer/VI-Planer-presentation.pdf  
+**Локально / в репо:** [VI-Planer-presentation.pdf](./VI-Planer-presentation.pdf)
 
 ---
 
@@ -87,13 +88,32 @@
 
 ---
 
-## Слайд 8 — Дальше (15 сек)
+## Слайд 8 — Стек (15 сек)
+
+**Сказать:**
+> Коротко по стеку: Vite + TypeScript SPA, экспорт PDF через html2canvas/jspdf.  
+> Общие данные — опциональный Supabase. Бэкенд по желанию: Python FastAPI или Node Express.  
+> Статика на GitHub Pages; для VPS — Docker Compose.
+
+- Frontend: Vite + TypeScript SPA  
+- PDF: html2canvas / jspdf  
+- Shared: Supabase (опционально)  
+- API: Python FastAPI (`server_py`) / Node Express  
+- Deploy: GitHub Pages (`docs/`)  
+- VPS: Docker Compose  
+
+**CTA — скачать презентацию:**  
+https://bolshakovin.github.io/vi_planer/VI-Planer-presentation.pdf
+
+---
+
+## Слайд 9 — Дальше (15 сек)
 
 **Сказать:**
 > Дальше: открыть live, прогнать свои инициативы, завести команды и FTE, сверить приоритет с текущим планом.  
-> Интеграции и роли — осознанно вне v1.
+> PDF презентации — по ссылке со слайда «Стек». Интеграции и роли — осознанно вне v1.
 
-- Закрыть приглашением открыть ссылку / задать вопросы  
+- Закрыть приглашением открыть ссылку / скачать PDF / задать вопросы  
 
 ---
 
@@ -108,7 +128,8 @@
 | 5 Gantt / capacity | 30 |
 | 6 Shared | 20 |
 | 7 Outcomes | 20 |
-| 8 Next | 15 |
-| **Итого** | **~2:30** |
+| 8 Стек + PDF | 15 |
+| 9 Next | 15 |
+| **Итого** | **~3:05** |
 
-Если осталось 90 секунд — держать 1–3–5–7, остальное одной фразой.
+Если осталось 90 секунд — держать 1–3–5–7, стек одной фразой + ссылка на PDF.

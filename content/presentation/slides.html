@@ -316,6 +316,63 @@
       padding-top: 2px;
     }
 
+    .stack-list {
+      list-style: none;
+      margin-top: 6px;
+      columns: 2;
+      column-gap: 28px;
+    }
+
+    .stack-list li {
+      break-inside: avoid;
+      padding: 8px 0 8px 18px;
+      font-size: 15px;
+      line-height: 1.35;
+      color: var(--neutral);
+      position: relative;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .stack-list li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 14px;
+      width: 7px;
+      height: 7px;
+      background: var(--accent);
+    }
+
+    .stack-list li strong {
+      color: var(--ink);
+      font-weight: 650;
+    }
+
+    .cta-box {
+      margin-top: 18px;
+      padding: 14px 18px;
+      background: var(--accent-soft);
+      border-left: 4px solid var(--accent);
+    }
+
+    .cta-box .cta-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+
+    .cta-box a,
+    .cta-box .cta-url {
+      font-size: 15px;
+      font-weight: 650;
+      color: var(--ink);
+      word-break: break-all;
+      text-decoration: none;
+    }
+
     @media print {
       body, html { background: white; }
       .deck { padding: 0; gap: 0; }
@@ -337,11 +394,12 @@
       <p class="lead">Единый портфель инициатив со сквозным приоритетом (WSJF), сроками и ёмкостью команд.</p>
       <div class="title-meta">
         Краткий продуктовый обзор · 2–3 минуты<br />
-        Live: bolshakovin.github.io/vi_planer
+        Live: bolshakovin.github.io/vi_planer<br />
+        PDF: bolshakovin.github.io/vi_planer/VI-Planer-presentation.pdf
       </div>
       <div class="slide-footer">
         <div class="brand"><span>VI</span> Planer</div>
-        <div>1 / 8</div>
+        <div>1 / 9</div>
       </div>
     </section>
 
@@ -357,7 +415,7 @@
       </ul>
       <div class="slide-footer">
         <div class="brand"><span>VI</span> Planer</div>
-        <div>2 / 8</div>
+        <div>2 / 9</div>
       </div>
     </section>
 
@@ -382,7 +440,7 @@
       </div>
       <div class="slide-footer">
         <div class="brand"><span>VI</span> Planer</div>
-        <div>3 / 8</div>
+        <div>3 / 9</div>
       </div>
     </section>
 
@@ -412,7 +470,7 @@
       </div>
       <div class="slide-footer">
         <div class="brand"><span>VI</span> Planer</div>
-        <div>4 / 8</div>
+        <div>4 / 9</div>
       </div>
     </section>
 
@@ -440,7 +498,7 @@
       </div>
       <div class="slide-footer">
         <div class="brand"><span>VI</span> Planer</div>
-        <div>5 / 8</div>
+        <div>5 / 9</div>
       </div>
     </section>
 
@@ -456,7 +514,7 @@
       </ul>
       <div class="slide-footer">
         <div class="brand"><span>VI</span> Planer</div>
-        <div>6 / 8</div>
+        <div>6 / 9</div>
       </div>
     </section>
 
@@ -484,11 +542,33 @@
       </div>
       <div class="slide-footer">
         <div class="brand"><span>VI</span> Planer</div>
-        <div>7 / 8</div>
+        <div>7 / 9</div>
       </div>
     </section>
 
-    <!-- 8. Next steps -->
+    <!-- 8. Stack + download -->
+    <section class="slide">
+      <div class="kicker">Стек</div>
+      <h2>Как устроено</h2>
+      <ul class="stack-list">
+        <li><strong>Frontend:</strong> Vite + TypeScript SPA</li>
+        <li><strong>PDF:</strong> html2canvas / jspdf</li>
+        <li><strong>Shared:</strong> Supabase (опционально)</li>
+        <li><strong>API:</strong> Python FastAPI (server_py) или Node Express</li>
+        <li><strong>Pages:</strong> деплой статики в docs/</li>
+        <li><strong>VPS:</strong> Docker Compose + Postgres</li>
+      </ul>
+      <div class="cta-box">
+        <div class="cta-label">Скачать презентацию (PDF)</div>
+        <div class="cta-url">https://bolshakovin.github.io/vi_planer/VI-Planer-presentation.pdf</div>
+      </div>
+      <div class="slide-footer">
+        <div class="brand"><span>VI</span> Planer</div>
+        <div>8 / 9</div>
+      </div>
+    </section>
+
+    <!-- 9. Next steps -->
     <section class="slide">
       <div class="kicker">Дальше</div>
       <h2>Следующие шаги</h2>
@@ -496,11 +576,11 @@
         <li>Открыть live и пройтись по демо-портфелю на реальных инициативах.</li>
         <li>Завести команды и FTE в Настройках, проверить очередь и Gantt.</li>
         <li>Сверить приоритет/WSJF с текущим планом — зафиксировать «источник правды».</li>
-        <li>При необходимости — углубить интеграции и роли (вне v1).</li>
+        <li>Скачать PDF-презентацию по ссылке со слайда «Стек».</li>
       </ol>
       <div class="slide-footer">
         <div class="brand"><span>VI</span> Planer</div>
-        <div>8 / 8</div>
+        <div>9 / 9</div>
       </div>
     </section>
 

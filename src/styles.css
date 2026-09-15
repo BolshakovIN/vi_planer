@@ -2271,6 +2271,8 @@ button.cap-cell:last-child {
   padding: 8px 20px 28px;
   display: flex;
   justify-content: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .req-dl-btn {
@@ -2284,6 +2286,11 @@ button.cap-cell:last-child {
   text-decoration: underline;
   text-underline-offset: 3px;
   opacity: 0.55;
+  font-family: inherit;
+}
+
+a.req-dl-btn {
+  display: inline-block;
 }
 
 .req-dl-btn:hover {

@@ -2764,6 +2764,7 @@ function render() {
       </div>
     </div>
     <div class="page-foot no-print">
+      <a class="req-dl-btn" id="downloadPresBtn" href="#" title="Скачать презентацию (PDF)">Презентация PDF</a>
       <button type="button" class="req-dl-btn" id="downloadReqsBtn" title="Скачать требования (PDF)">Требования PDF (BR / UC / FR / NFR)</button>
     </div>
     ${ui.creating || editing ? editorHtml(editing) : ""}
@@ -3332,6 +3333,15 @@ function bind() {
     void downloadRequirementsDoc();
   });
 
+  const presBtn = document.querySelector<HTMLAnchorElement>("#downloadPresBtn");
+  if (presBtn) {
+    const base = import.meta.env.BASE_URL || "./";
+    presBtn.href = new URL(
+      "VI-Planer-presentation.pdf",
+      new URL(base, window.location.href),
+    ).href;
+    presBtn.setAttribute("download", "VI-Planer-presentation.pdf");
+  }
 
   document.querySelector("#resetBtn")?.addEventListener("click", (e) => {
     e.stopPropagation();
