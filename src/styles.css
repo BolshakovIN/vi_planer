@@ -1693,6 +1693,40 @@ body.prio-dragging {
   flex-direction: column;
   gap: 8px;
   min-width: 720px;
+  position: relative;
+}
+
+.gantt-label-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--gantt-label-col) - 4px);
+  width: 8px;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  z-index: 6;
+}
+
+.gantt-label-resize::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 3px;
+  width: 2px;
+  border-radius: 1px;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+
+.gantt-layout:hover .gantt-label-resize::after,
+.gantt-label-resizing .gantt-label-resize::after {
+  background: var(--line);
+}
+
+.gantt-label-resizing .gantt-label-resize::after {
+  background: var(--accent);
 }
 
 .gantt-axis-row,
@@ -1845,6 +1879,52 @@ body.prio-dragging {
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: 8px;
+  cursor: default;
+}
+
+.gantt-label.gantt-label-tip-open {
+  border-color: var(--accent-border);
+  background: var(--surface);
+}
+
+.gantt-label-tip {
+  position: fixed;
+  z-index: 70;
+  width: min(360px, calc(100vw - 16px));
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
+  text-align: left;
+  pointer-events: none;
+}
+
+.gantt-label-tip-title {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.gantt-label-tip-meta,
+.gantt-label-tip-owner {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.gantt-label-tip-owner {
+  margin-top: 2px;
+}
+
+.gantt-label-tip-note {
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--accent);
 }
 
 .gantt-label .name,
@@ -2636,6 +2716,7 @@ body.pdf-capturing .schedule-toggles,
 body.pdf-capturing .col-picker,
 body.pdf-capturing .drag-handle,
 body.pdf-capturing .col-resize,
+body.pdf-capturing .gantt-label-resize,
 body.pdf-capturing .table-scroll-top {
   display: none !important;
 }

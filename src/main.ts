@@ -284,6 +284,10 @@ const SCHEDULE_MODE_KEY = "vi-planer-schedule-mode";
 const SCHEDULE_MODE_ENABLED_KEY = "vi-planer-schedule-mode-enabled";
 /** Legacy boolean toggle; migrated once into SCHEDULE_MODE_KEY */
 const AUTO_CAPACITY_SCHEDULE_KEY = "vi-planer-auto-capacity-schedule";
+const GANTT_LABEL_COL_KEY = "vi-planer-gantt-label-col";
+const GANTT_LABEL_COL_DEFAULT = 240;
+const GANTT_LABEL_COL_MIN = 160;
+const GANTT_LABEL_COL_MAX = 480;
 
 type PortfolioCol =
   | "priority"
@@ -360,6 +364,41 @@ function saveColWidths(widths: Partial<Record<PortfolioCol, number>>) {
 
 function resetColWidths() {
   localStorage.removeItem(COL_WIDTH_KEY);
+}
+
+function loadGanttLabelColWidth(): number {
+  try {
+    const raw = localStorage.getItem(GANTT_LABEL_COL_KEY);
+    if (!raw) return GANTT_LABEL_COL_DEFAULT;
+    const n = Math.round(Number(raw));
+    if (!Number.isFinite(n)) return GANTT_LABEL_COL_DEFAULT;
+    return Math.max(
+      GANTT_LABEL_COL_MIN,
+      Math.min(GANTT_LABEL_COL_MAX, n)
+    );
+  } catch {
+    return GANTT_LABEL_COL_DEFAULT;
+  }
+}
+
+function saveGanttLabelColWidth(width: number) {
+  const clamped = Math.max(
+    GANTT_LABEL_COL_MIN,
+    Math.min(GANTT_LABEL_COL_MAX, Math.round(width))
+  );
+  localStorage.setItem(GANTT_LABEL_COL_KEY, String(clamped));
+}
+
+function applyGanttLabelColWidth(width: number) {
+  const clamped = Math.max(
+    GANTT_LABEL_COL_MIN,
+    Math.min(GANTT_LABEL_COL_MAX, Math.round(width))
+  );
+  const px = `${clamped}px`;
+  document.documentElement.style.setProperty("--gantt-label-col", px);
+  document
+    .querySelectorAll<HTMLElement>(".gantt-layout")
+    .forEach((el) => el.style.setProperty("--gantt-label-col", px));
 }
 
 function loadHiddenCols(): HideablePortfolioCol[] {
@@ -1212,6 +1251,163 @@ function bindGanttDepArrowLayout() {
   if (svg) ro.observe(svg);
 }
 
+function bindGanttLabelResize() {
+  const handle = document.querySelector<HTMLElement>("[data-gantt-label-resize]");
+  const layout = document.querySelector<HTMLElement>(".gantt-layout");
+  if (!handle || !layout) return;
+
+  applyGanttLabelColWidth(loadGanttLabelColWidth());
+
+  handle.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const startX = e.clientX;
+    const startW =
+      parseFloat(
+        getComputedStyle(layout).getPropertyValue("--gantt-label-col")
+      ) || loadGanttLabelColWidth();
+    const pointerId = e.pointerId;
+    handle.setPointerCapture(pointerId);
+    document.body.classList.add("col-resizing");
+    layout.classList.add("gantt-label-resizing");
+
+    const onMove = (ev: PointerEvent) => {
+      applyGanttLabelColWidth(startW + (ev.clientX - startX));
+    };
+
+    const onUp = (ev: PointerEvent) => {
+      handle.releasePointerCapture(pointerId);
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      handle.removeEventListener("pointercancel", onUp);
+      document.body.classList.remove("col-resizing");
+      layout.classList.remove("gantt-label-resizing");
+
+      const finalW =
+        parseFloat(
+          getComputedStyle(layout).getPropertyValue("--gantt-label-col")
+        ) || loadGanttLabelColWidth();
+      saveGanttLabelColWidth(finalW);
+      applyGanttLabelColWidth(finalW);
+      layoutGanttDepArrows();
+      void ev;
+    };
+
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+    handle.addEventListener("pointercancel", onUp);
+  });
+}
+
+let ganttLabelTipTimer: number | null = null;
+let ganttLabelTipCleanup: (() => void) | null = null;
+
+function closeGanttLabelTip() {
+  if (ganttLabelTipTimer != null) {
+    window.clearTimeout(ganttLabelTipTimer);
+    ganttLabelTipTimer = null;
+  }
+  if (ganttLabelTipCleanup) {
+    ganttLabelTipCleanup();
+    ganttLabelTipCleanup = null;
+  }
+  document.querySelector("#ganttLabelTip")?.remove();
+  document
+    .querySelectorAll(".gantt-label-tip-open")
+    .forEach((el) => el.classList.remove("gantt-label-tip-open"));
+}
+
+function placeGanttLabelTip(anchor: HTMLElement, pop: HTMLElement) {
+  const rect = anchor.getBoundingClientRect();
+  const popRect = pop.getBoundingClientRect();
+  let left = rect.left;
+  let top = rect.bottom + 8;
+  if (left + popRect.width > window.innerWidth - 8) {
+    left = Math.max(8, window.innerWidth - popRect.width - 8);
+  }
+  if (top + popRect.height > window.innerHeight - 8) {
+    top = Math.max(8, rect.top - popRect.height - 8);
+  }
+  pop.style.left = `${left}px`;
+  pop.style.top = `${top}px`;
+}
+
+function showGanttLabelTip(anchor: HTMLElement) {
+  const title = anchor.dataset.tipTitle?.trim() || "";
+  if (!title) return;
+
+  closeGanttLabelTip();
+  anchor.classList.add("gantt-label-tip-open");
+
+  const product = anchor.dataset.tipProduct?.trim() || "";
+  const eta = anchor.dataset.tipEta?.trim() || "";
+  const owner = anchor.dataset.tipOwner?.trim() || "";
+  const note = anchor.dataset.tipNote?.trim() || "";
+
+  const metaBits: string[] = [];
+  if (product) metaBits.push(escapeHtml(product));
+  if (eta) metaBits.push(`ETA ${escapeHtml(eta)}`);
+
+  const pop = document.createElement("div");
+  pop.id = "ganttLabelTip";
+  pop.className = "gantt-label-tip";
+  pop.setAttribute("role", "tooltip");
+  pop.innerHTML = `
+    <div class="gantt-label-tip-title">${escapeHtml(title)}</div>
+    ${
+      metaBits.length
+        ? `<div class="gantt-label-tip-meta">${metaBits.join(" · ")}</div>`
+        : ""
+    }
+    ${
+      owner
+        ? `<div class="gantt-label-tip-owner">Владелец: ${escapeHtml(owner)}</div>`
+        : ""
+    }
+    ${
+      note
+        ? `<div class="gantt-label-tip-note">${escapeHtml(note)}</div>`
+        : ""
+    }
+  `;
+  document.body.appendChild(pop);
+  placeGanttLabelTip(anchor, pop);
+
+  const onScroll = () => placeGanttLabelTip(anchor, pop);
+  window.addEventListener("scroll", onScroll, true);
+  window.addEventListener("resize", onScroll);
+  ganttLabelTipCleanup = () => {
+    window.removeEventListener("scroll", onScroll, true);
+    window.removeEventListener("resize", onScroll);
+  };
+}
+
+function bindGanttLabelTips() {
+  closeGanttLabelTip();
+  document
+    .querySelectorAll<HTMLElement>("[data-gantt-label-tip]")
+    .forEach((label) => {
+      label.addEventListener("pointerenter", () => {
+        if (ganttLabelTipTimer != null) {
+          window.clearTimeout(ganttLabelTipTimer);
+          ganttLabelTipTimer = null;
+        }
+        ganttLabelTipTimer = window.setTimeout(() => {
+          ganttLabelTipTimer = null;
+          showGanttLabelTip(label);
+        }, 300);
+      });
+      label.addEventListener("pointerleave", () => {
+        if (ganttLabelTipTimer != null) {
+          window.clearTimeout(ganttLabelTipTimer);
+          ganttLabelTipTimer = null;
+        }
+        closeGanttLabelTip();
+      });
+    });
+}
+
 function applyGanttBarPreview(
   bar: HTMLElement,
   startWeek: number,
@@ -1558,7 +1754,7 @@ function timelineHtml(
 
   const rowsHtml = visible
     .map(({ item, r }, rowIdx) => {
-      const depHint =
+      const scheduleNote =
         schedMode === "teamQueue"
           ? (() => {
               const preds = r.slices
@@ -1575,12 +1771,20 @@ function timelineHtml(
                 .filter(Boolean);
               const uniqPreds = [...new Set(preds)];
               return uniqPreds.length
-                ? `<div class="meta gantt-dep-meta" title="Очередь той же команды по приоритету (Finish-to-Start)">после ${uniqPreds.join(", ")}</div>`
-                : `<div class="meta gantt-dep-meta">старт очереди</div>`;
+                ? `после ${uniqPreds.join(", ")}`
+                : "старт очереди";
             })()
           : schedMode === "maxUtilization"
-            ? `<div class="meta gantt-dep-meta" title="Параллельный старт команд функциональности по приоритету">макс. утилизация · ETA = max команд</div>`
-            : `<div class="meta gantt-dep-meta">как задано · без сдвига очереди</div>`;
+            ? "макс. утилизация · ETA = max команд"
+            : "как задано · без сдвига очереди";
+      const depHint =
+        schedMode === "teamQueue"
+          ? scheduleNote.startsWith("после")
+            ? `<div class="meta gantt-dep-meta" title="Очередь той же команды по приоритету (Finish-to-Start)">${escapeHtml(scheduleNote)}</div>`
+            : `<div class="meta gantt-dep-meta">${escapeHtml(scheduleNote)}</div>`
+          : schedMode === "maxUtilization"
+            ? `<div class="meta gantt-dep-meta" title="Параллельный старт команд функциональности по приоритету">${escapeHtml(scheduleNote)}</div>`
+            : `<div class="meta gantt-dep-meta">${escapeHtml(scheduleNote)}</div>`;
 
       const packed = packedByItem.get(item.id) ?? [];
       const { trackH, rowH } = rowMetrics[rowIdx];
@@ -1588,6 +1792,9 @@ function timelineHtml(
       const etaMetaLine = containerName
         ? `${escapeHtml(containerName)} · ETA ${formatDate(r.endDate)}`
         : `ETA ${formatDate(r.endDate)}`;
+      const ownerRaw = item.owner.trim();
+      const ownerTip =
+        ownerRaw && ownerRaw !== "—" ? ownerRaw : "";
       const bars = packed
         .map(({ slice: s, lane: barLane }) => {
           const team = teamById(s.teamId);
@@ -1609,7 +1816,15 @@ function timelineHtml(
 
       return `
       <div class="gantt-row" style="--gantt-row-h:${rowH}px;--gantt-track-h:${trackH}px">
-        <div class="gantt-label">
+        <div
+          class="gantt-label"
+          data-gantt-label-tip
+          data-tip-title="${escapeAttr(item.title)}"
+          data-tip-product="${escapeAttr(containerName)}"
+          data-tip-eta="${escapeAttr(formatDate(r.endDate))}"
+          data-tip-owner="${escapeAttr(ownerTip)}"
+          data-tip-note="${escapeAttr(scheduleNote)}"
+        >
           <div class="name"><span class="prio-mini">${item.manualRank ?? "—"}</span> ${escapeHtml(item.title)}</div>
           <div class="meta">${etaMetaLine}</div>
           ${depHint}
@@ -1690,7 +1905,15 @@ function timelineHtml(
       <div class="timeline">
         ${
           visible.length
-            ? `<div class="gantt-layout">
+            ? `<div class="gantt-layout" style="--gantt-label-col:${loadGanttLabelColWidth()}px">
+          <div
+            class="gantt-label-resize"
+            data-gantt-label-resize
+            title="Изменить ширину подписей"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Изменить ширину колонки подписей"
+          ></div>
           <div class="gantt-axis-row">
             <div class="gantt-axis-spacer">
               <label
@@ -3298,6 +3521,8 @@ function bind() {
   bindPortfolioTableScroll();
   bindStickyTabsOffset();
   bindGanttDepArrowLayout();
+  bindGanttLabelResize();
+  bindGanttLabelTips();
   bindGanttBarEdit();
   bindPlanStartDate();
 
