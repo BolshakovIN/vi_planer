@@ -2582,9 +2582,9 @@ function editorHtml(item: WorkItem | null): string {
       return `
         <div class="team-assign-row">
           <label class="team-assign-check">
-            <input type="checkbox" class="f_team_check" data-team="${t.id}" ${on ? "checked" : ""} />
             <span class="team-dot" style="background:${t.color}"></span>
             <span class="team-assign-name">${escapeHtml(t.name)}</span>
+            <input type="checkbox" class="f_team_check" data-team="${t.id}" ${on ? "checked" : ""} />
           </label>
           <div class="team-assign-field">
             <select class="f_team_size" data-team="${t.id}" ${on ? "" : "disabled"} aria-label="Маечная оценка">${sizeSelectOptions(sz)}</select>

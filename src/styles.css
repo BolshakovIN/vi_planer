@@ -813,16 +813,39 @@ th.sortable.sorted {
 }
 
 .team-assign-check {
-  display: flex;
+  display: inline-flex;
+  flex-direction: row;
   align-items: center;
   gap: 8px;
   cursor: pointer;
   min-height: 34px;
   margin: 0;
+  width: 100%;
+}
+
+.team-assign-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0 0 0 auto;
+  padding: 0;
+  flex: 0 0 16px;
+  align-self: center;
+  accent-color: var(--accent);
+}
+
+.team-assign-check .team-dot {
+  width: 8px;
+  height: 8px;
+  margin: 0;
+  flex: 0 0 8px;
+  align-self: center;
 }
 
 .team-assign-name {
-  line-height: 1.25;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.2;
+  min-height: 16px;
 }
 
 .team-assign-field {
