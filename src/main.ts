@@ -311,6 +311,8 @@ type PortfolioCol =
   | "teams"
   | "status"
   | "rice"
+  | "cashFlow"
+  | "roi"
   | "estimate"
   | "eta";
 
@@ -321,6 +323,8 @@ const HIDEABLE_PORTFOLIO_COLS: HideablePortfolioCol[] = [
   "teams",
   "status",
   "rice",
+  "cashFlow",
+  "roi",
   "estimate",
   "eta",
 ];
@@ -332,6 +336,8 @@ const ALL_PORTFOLIO_COLS: PortfolioCol[] = [
   "teams",
   "status",
   "rice",
+  "cashFlow",
+  "roi",
   "estimate",
   "eta",
 ];
@@ -343,6 +349,8 @@ const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
   teams: "Команды (оценка · старт)",
   status: "Статус",
   rice: "RICE",
+  cashFlow: "ЧП",
+  roi: "ROI",
   estimate: "Маечная оценка",
   eta: "Дата завершения",
 };
@@ -354,6 +362,8 @@ const PORTFOLIO_COL_DEFAULTS: Record<PortfolioCol, number> = {
   teams: 220,
   status: 130,
   rice: 72,
+  cashFlow: 110,
+  roi: 110,
   estimate: 120,
   eta: 168,
 };
@@ -618,6 +628,8 @@ function portfolioTheadCellsHtml(): string {
     ${resizableTh("Команды (оценка · старт)", "teams")}
     ${resizableTh("Статус", "status", "status-cell")}
     ${sortHeader("RICE", "rice", "rice-cell")}
+    ${resizableTh("ЧП", "cashFlow", "finance-cell")}
+    ${resizableTh("ROI", "roi", "finance-cell")}
     ${sortHeader("Маечная оценка", "estimate", "estimate-cell")}
     ${sortHeader("Дата завершения", "eta")}
   `;
@@ -761,6 +773,8 @@ function columnsHelpHtml(): string {
         <div><span class="cols-help-k">Команды</span> — кто делает, маечная оценка (S/M/L) и план старта</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
         <div><span class="cols-help-k">RICE</span> — (Охват × Влияние × Уверенность) / Трудозатраты (чел·нед по маечной оценке)</div>
+        <div><span class="cols-help-k">ЧП</span> — чистая прибыль за 12 мес., ₽ (карточка функциональности)</div>
+        <div><span class="cols-help-k">ROI</span> — ROI за 12 мес., ₽ (карточка функциональности)</div>
         <div><span class="cols-help-k">Маечная оценка</span> — S / M / L (недели в Настройках)</div>
         <div><span class="cols-help-k">Дата завершения</span> — когда закончила последняя команда (bottleneck)</div>
       </div>
@@ -828,6 +842,8 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           <td${tdAttrs("teams", "teams-cell")}>${teamsCellHtml(item)}</td>
           <td${tdAttrs("status", "status-cell")}><span class="badge badge-status-${item.status}">${statusLabel(item.status)}</span></td>
           <td${tdAttrs("rice", "rice-cell mono metric-num")}>${score}</td>
+          <td${tdAttrs("cashFlow", "finance-cell mono metric-num")}>${formatRub(item.cashFlow12m)}</td>
+          <td${tdAttrs("roi", "finance-cell mono metric-num")}>${formatRub(item.roi12m)}</td>
           <td${tdAttrs("estimate", "estimate-cell mono metric-num")}>
             <span class="size-badge">${sizesSummary(item)}</span>
             <div class="meta">~${total} чел·нед</div>
@@ -2504,6 +2520,8 @@ function editorHtml(item: WorkItem | null): string {
       confidence: 0.8,
       notes: "",
       manualRank: nextPriority(state.items),
+      cashFlow12m: null,
+      roi12m: null,
     } satisfies WorkItem);
 
   const score = rice(draft, szRanges());
@@ -2601,6 +2619,16 @@ function editorHtml(item: WorkItem | null): string {
               <div class="field">
                 <label>Исполнитель</label>
                 ${catalogSelectHtml("f_assignee", state.executors, draft.assignee)}
+              </div>
+            </div>
+            <div class="grid-2 finance-row">
+              <div class="field">
+                <label>ЧП (12 мес., ₽)</label>
+                <input id="f_cashFlow12m" type="number" step="1" inputmode="numeric" placeholder="не задано" value="${draft.cashFlow12m == null ? "" : draft.cashFlow12m}" />
+              </div>
+              <div class="field">
+                <label>ROI (12 мес., ₽)</label>
+                <input id="f_roi12m" type="number" step="1" inputmode="numeric" placeholder="не задано" value="${draft.roi12m == null ? "" : draft.roi12m}" />
               </div>
             </div>
           </div>
@@ -2724,6 +2752,12 @@ function escapeHtml(s: string): string {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+/** RUB amount with space thousands; null/empty → em dash */
+function formatRub(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return Math.round(n).toLocaleString("ru-RU");
 }
 
 function escapeAttr(s: string): string {
@@ -3429,6 +3463,8 @@ function refreshLiveEta() {
       impact: 1,
       confidence: 0.8,
       manualRank: null,
+      cashFlow12m: null,
+      roi12m: null,
     } satisfies WorkItem);
   const draft: WorkItem = {
     ...base,
@@ -3519,7 +3555,17 @@ function readForm(): Omit<WorkItem, "id"> | null {
     confidence: clamp(num("f_conf", 80), 0, 100) / 100,
     notes: val("f_notes").trim(),
     manualRank: priority,
+    cashFlow12m: optionalNum("f_cashFlow12m"),
+    roi12m: optionalNum("f_roi12m"),
   };
+}
+
+function optionalNum(id: string): number | null {
+  const el = document.querySelector<HTMLInputElement>(`#${id}`);
+  const raw = el?.value?.trim() ?? "";
+  if (!raw) return null;
+  const v = Number(raw);
+  return Number.isFinite(v) ? v : null;
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -3862,6 +3908,8 @@ function bind() {
         impact: 1 as RiceImpact,
         confidence: 0.8,
         manualRank: null,
+        cashFlow12m: null,
+        roi12m: null,
       } satisfies WorkItem);
     const confRaw = Number(
       document.querySelector<HTMLInputElement>("#f_conf")?.value

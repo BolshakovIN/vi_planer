@@ -69,6 +69,8 @@ const SEED_RAW: AppState = {
       impact: 2,
       confidence: 0.8,
       manualRank: null,
+      cashFlow12m: 12_400_000,
+      roi12m: 8_200_000,
     },
     {
       id: "j4",
@@ -83,6 +85,8 @@ const SEED_RAW: AppState = {
       impact: 1,
       confidence: 0.7,
       manualRank: null,
+      cashFlow12m: 3_600_000,
+      roi12m: 2_100_000,
     },
     {
       id: "p6",
@@ -97,6 +101,8 @@ const SEED_RAW: AppState = {
       impact: 1,
       confidence: 0.6,
       manualRank: null,
+      cashFlow12m: null,
+      roi12m: null,
     },
     {
       id: "j6",
@@ -112,6 +118,8 @@ const SEED_RAW: AppState = {
       confidence: 0.9,
       notes: "Нужен к ближайшему совету",
       manualRank: null,
+      cashFlow12m: null,
+      roi12m: 450_000,
     },
     {
       id: "p5",
@@ -126,6 +134,8 @@ const SEED_RAW: AppState = {
       impact: 0.5,
       confidence: 0.85,
       manualRank: null,
+      cashFlow12m: null,
+      roi12m: null,
     },
     {
       id: "p1",
@@ -144,6 +154,8 @@ const SEED_RAW: AppState = {
       confidence: 0.8,
       notes: "Data стартует после первых API Platform",
       manualRank: null,
+      cashFlow12m: 28_000_000,
+      roi12m: 19_500_000,
     },
     {
       id: "j1",
@@ -162,6 +174,8 @@ const SEED_RAW: AppState = {
       confidence: 0.85,
       notes: "CRM — онбординг после ядра EDI",
       manualRank: null,
+      cashFlow12m: 5_200_000,
+      roi12m: null,
     },
     {
       id: "j2",
@@ -180,6 +194,8 @@ const SEED_RAW: AppState = {
       confidence: 0.7,
       notes: "Обе команды стартуют одновременно",
       manualRank: null,
+      cashFlow12m: null,
+      roi12m: null,
     },
     {
       id: "j3",
@@ -198,6 +214,8 @@ const SEED_RAW: AppState = {
       confidence: 0.75,
       notes: "Platform — пайплайн выгрузки раньше Data",
       manualRank: null,
+      cashFlow12m: null,
+      roi12m: null,
     },
     {
       id: "p4",
@@ -217,6 +235,8 @@ const SEED_RAW: AppState = {
       confidence: 0.8,
       notes: "Mobile подключается после событий Platform",
       manualRank: null,
+      cashFlow12m: 15_800_000,
+      roi12m: 11_200_000,
     },
     {
       id: "j5",
@@ -236,6 +256,8 @@ const SEED_RAW: AppState = {
       confidence: 0.9,
       notes: "Ждём юристов; старты сдвинуты",
       manualRank: null,
+      cashFlow12m: null,
+      roi12m: null,
     },
     {
       id: "p3",
@@ -255,6 +277,8 @@ const SEED_RAW: AppState = {
       confidence: 0.5,
       notes: "Serving и UI после модели",
       manualRank: null,
+      cashFlow12m: 22_000_000,
+      roi12m: 9_750_000,
     },
   ],
 };

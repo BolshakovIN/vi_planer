@@ -179,6 +179,10 @@ export interface WorkItem {
    * Drives queue order and Gantt dependencies. null only before ensureUniquePriorities.
    */
   manualRank: number | null;
+  /** Чистая прибыль (ЧП) за 12 мес., ₽; null = не задано */
+  cashFlow12m: number | null;
+  /** ROI за 12 мес., ₽; null = не задано */
+  roi12m: number | null;
 }
 
 export interface AppState {
@@ -490,6 +494,13 @@ export function riceFieldsFromRaw(
     impact: impactFromBusinessValue(bv),
     confidence: Math.max(0.5, parseRiceConfidence((tc + rr) / 20, 0.8)),
   };
+}
+
+/** Optional RUB amount; missing / empty / invalid → null. */
+export function optionalRubFromRaw(raw: unknown): number | null {
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
 }
 
 export function totalEstimateWeeks(
@@ -1169,6 +1180,10 @@ export function normalizeState(raw: unknown): AppState | null {
         r.manualRank == null || r.manualRank === ""
           ? null
           : Number(r.manualRank),
+      cashFlow12m: optionalRubFromRaw(
+        r.cashFlow12m ?? r.chpRub ?? r.chp
+      ),
+      roi12m: optionalRubFromRaw(r.roi12m ?? r.roiRub ?? r.roi),
     };
   });
 
