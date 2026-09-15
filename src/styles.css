@@ -720,7 +720,7 @@ th.sortable.sorted {
 .teams-stack {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
   overflow: hidden;
 }
@@ -728,21 +728,27 @@ th.sortable.sorted {
 .team-chip {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  align-items: stretch;
+  justify-content: center;
+  gap: 3px;
   font-size: 11px;
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
 }
 
 .team-chip-name {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  line-height: 1.25;
 }
 
 .team-chip-text {
@@ -751,14 +757,16 @@ th.sortable.sorted {
   white-space: nowrap;
   min-width: 0;
   flex: 1 1 0;
+  font-weight: 600;
 }
 
 .team-chip-estimate {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex-shrink: 0;
-  padding-left: 12px;
+  padding-left: 14px;
+  line-height: 1.2;
 }
 
 .team-chip .team-dot,
@@ -780,9 +788,9 @@ th.sortable.sorted {
 .team-assign-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 10px 12px;
   background: var(--surface-2);
 }
@@ -801,7 +809,15 @@ th.sortable.sorted {
   font-size: 11px;
   font-weight: 600;
   line-height: 1.2;
-  padding: 0 0 2px;
+  padding: 0 4px 4px;
+}
+
+.team-assign-row {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  min-height: 44px;
 }
 
 .team-assign-check {
@@ -809,13 +825,19 @@ th.sortable.sorted {
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  min-height: 32px;
+  min-height: 34px;
+  margin: 0;
+}
+
+.team-assign-name {
+  line-height: 1.25;
 }
 
 .team-assign-field {
   display: flex;
   align-items: center;
   min-width: 0;
+  min-height: 34px;
 }
 
 .team-assign-field input {
@@ -825,6 +847,8 @@ th.sortable.sorted {
   padding: 6px 8px;
   font-size: 13px;
   background: #fff;
+  min-height: 34px;
+  box-sizing: border-box;
 }
 
 .team-assign-field input:disabled {
@@ -838,6 +862,8 @@ th.sortable.sorted {
   padding: 6px 8px;
   font-size: 13px;
   background: #fff;
+  min-height: 34px;
+  box-sizing: border-box;
 }
 
 .team-assign-field select:disabled {
@@ -1556,10 +1582,10 @@ body.prio-dragging {
 }
 
 .eta-teams {
-  margin-top: 4px;
+  margin-top: 6px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
   overflow: hidden;
 }
@@ -1572,6 +1598,10 @@ body.prio-dragging {
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
   word-break: break-word;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
 }
 
 .eta-cell {
@@ -1583,6 +1613,10 @@ body.prio-dragging {
 .status-cell {
   min-width: 0;
   overflow: hidden;
+}
+
+.teams-cell {
+  vertical-align: middle !important;
 }
 
 .status-cell {
