@@ -123,6 +123,10 @@ interface UiState {
   scheduleMode: ScheduleMode;
   hiddenCols: HideablePortfolioCol[];
   colPickerOpen: boolean;
+  /** Portfolio notes panel expanded */
+  notesOpen: boolean;
+  /** Draft text while notes panel is open (avoids losing edits on re-render) */
+  notesDraft: string | null;
 }
 
 const SCHEDULE_MODE_META: Record<
@@ -157,6 +161,8 @@ const ui: UiState = {
   scheduleMode: "maxUtilization",
   hiddenCols: [],
   colPickerOpen: false,
+  notesOpen: false,
+  notesDraft: null,
 };
 
 let state: AppState = structuredClone(SEED);
@@ -816,6 +822,37 @@ function columnsHelpHtml(): string {
   `;
 }
 
+function portfolioNotesHtml(): string {
+  const text =
+    ui.notesDraft != null ? ui.notesDraft : state.portfolioNotes ?? "";
+  const hasNotes = Boolean((state.portfolioNotes ?? "").trim());
+  const open = ui.notesOpen;
+  return `
+    <details class="portfolio-notes" id="portfolioNotes" ${open ? "open" : ""}>
+      <summary class="portfolio-notes-summary">
+        <span class="portfolio-notes-title">Заметки</span>
+        ${
+          hasNotes
+            ? `<span class="portfolio-notes-hint">есть текст</span>`
+            : `<span class="portfolio-notes-hint muted">комментарии к портфелю</span>`
+        }
+      </summary>
+      <div class="portfolio-notes-body">
+        <textarea
+          id="portfolioNotesText"
+          rows="4"
+          placeholder="Свободные заметки и комментарии по портфелю…"
+          aria-label="Заметки портфеля"
+        >${escapeHtml(text)}</textarea>
+        <div class="portfolio-notes-actions">
+          <span class="meta" id="portfolioNotesSaved" hidden>Сохранено</span>
+          <button type="button" class="btn btn-primary" id="portfolioNotesSave">Сохранить</button>
+        </div>
+      </div>
+    </details>
+  `;
+}
+
 function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): string {
   const byId = rollupById(rollups);
   const visible = filteredItems(rollups);
@@ -893,6 +930,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
 
   return `
     ${columnsHelpHtml()}
+    ${portfolioNotesHtml()}
     <div class="panel portfolio-panel">
       <div class="portfolio-sticky">
         <div class="panel-header">
@@ -3641,6 +3679,47 @@ function persist() {
   render();
 }
 
+function bindPortfolioNotes() {
+  const details = document.querySelector<HTMLDetailsElement>("#portfolioNotes");
+  const textarea = document.querySelector<HTMLTextAreaElement>(
+    "#portfolioNotesText"
+  );
+  const saveBtn = document.querySelector<HTMLButtonElement>(
+    "#portfolioNotesSave"
+  );
+  const savedHint = document.querySelector<HTMLElement>("#portfolioNotesSaved");
+
+  details?.addEventListener("toggle", () => {
+    ui.notesOpen = details.open;
+    if (details.open) {
+      if (ui.notesDraft == null) {
+        ui.notesDraft = state.portfolioNotes ?? "";
+      }
+    } else {
+      // Keep draft so reopening does not wipe unsaved edits in-session.
+    }
+  });
+
+  textarea?.addEventListener("input", () => {
+    ui.notesDraft = textarea.value;
+    if (savedHint) savedHint.hidden = true;
+  });
+
+  saveBtn?.addEventListener("click", () => {
+    const next = (textarea?.value ?? ui.notesDraft ?? "").trimEnd();
+    ui.notesDraft = next;
+    state.portfolioNotes = next;
+    ui.notesOpen = true;
+    saveState(state);
+    if (savedHint) {
+      savedHint.hidden = false;
+      window.setTimeout(() => {
+        if (savedHint.isConnected) savedHint.hidden = true;
+      }, 1800);
+    }
+  });
+}
+
 function bind() {
   // Critical actions first so a later bind helper throw cannot orphan these buttons.
   document.querySelector("#addItem")?.addEventListener("click", () => {
@@ -3685,6 +3764,8 @@ function bindUiRest() {
     ui.query = q.value;
   });
   q?.addEventListener("change", () => render());
+
+  bindPortfolioNotes();
 
   const typeFilter = document.querySelector<HTMLSelectElement>("#typeFilter");
   typeFilter?.addEventListener("change", () => {

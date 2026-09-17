@@ -200,6 +200,8 @@ export interface AppState {
   projects: string[];
   /** Продукты (Проекты tab → backlog when type=product) */
   products: string[];
+  /** Portfolio-level free-form notes (Портфель → Заметки) */
+  portfolioNotes: string;
   version: 3;
 }
 
@@ -1255,6 +1257,8 @@ export function normalizeState(raw: unknown): AppState | null {
     executors,
     projects,
     products,
+    portfolioNotes:
+      data.portfolioNotes != null ? String(data.portfolioNotes) : "",
     items: ensureUniquePriorities(items, parsedRanges),
   };
 }

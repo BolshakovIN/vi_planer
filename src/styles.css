@@ -479,6 +479,104 @@ textarea {
   font-weight: 700;
 }
 
+.portfolio-notes {
+  margin: 0 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.portfolio-notes-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 14px;
+  user-select: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+
+.portfolio-notes[open] > .portfolio-notes-summary {
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.portfolio-notes-summary::-webkit-details-marker {
+  display: none;
+}
+
+.portfolio-notes-summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 5px solid var(--muted);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.portfolio-notes[open] > .portfolio-notes-summary::before {
+  transform: rotate(90deg);
+}
+
+.portfolio-notes-title {
+  font-weight: 700;
+}
+
+.portfolio-notes-hint {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.portfolio-notes-hint.muted {
+  font-weight: 400;
+}
+
+.portfolio-notes-body {
+  padding: 12px 14px 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.portfolio-notes-body textarea {
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.45;
+}
+
+.portfolio-notes-body textarea:focus {
+  outline: 2px solid var(--accent-border);
+  border-color: var(--accent);
+}
+
+.portfolio-notes-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.portfolio-notes-actions #portfolioNotesSaved {
+  color: var(--good);
+  font-size: 12px;
+}
+
 .filters {
   display: flex;
   flex-wrap: wrap;

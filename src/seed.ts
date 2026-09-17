@@ -55,6 +55,7 @@ const SEED_RAW: AppState = {
   executors: [],
   projects: [],
   products: [],
+  portfolioNotes: "",
   items: [
     {
       id: "p2",
