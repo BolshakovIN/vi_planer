@@ -200,7 +200,10 @@ export interface AppState {
   projects: string[];
   /** Продукты (Проекты tab → backlog when type=product) */
   products: string[];
-  /** Portfolio-level free-form notes (Портфель → Заметки) */
+  /**
+   * Shared workspace notes (Заметки on Портфель, Gantt/Сроки, Очередь команд).
+   * One text for all three tabs; field name kept for storage compatibility.
+   */
   portfolioNotes: string;
   version: 3;
 }

@@ -2660,7 +2660,8 @@ button.cap-cell:last-child {
   padding: 10px 16px;
 }
 
-/* Portfolio: Agenda + Notes share one compact row when collapsed */
+/* Portfolio: Agenda + Notes share one compact row when collapsed.
+   Gantt / Очередь: same row wrapper with Notes only (shared portfolioNotes). */
 .portfolio-aux {
   display: flex;
   flex-wrap: wrap;

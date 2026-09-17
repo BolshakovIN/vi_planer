@@ -123,7 +123,7 @@ interface UiState {
   scheduleMode: ScheduleMode;
   hiddenCols: HideablePortfolioCol[];
   colPickerOpen: boolean;
-  /** Portfolio notes panel expanded */
+  /** Shared notes panel expanded (Портфель / Gantt / Очередь) */
   notesOpen: boolean;
   /** Draft text while notes panel is open (avoids losing edits on re-render) */
   notesDraft: string | null;
@@ -822,6 +822,7 @@ function columnsHelpHtml(): string {
   `;
 }
 
+/** Shared Заметки block (Портфель / Gantt / Очередь) — one `state.portfolioNotes`. */
 function portfolioNotesHtml(): string {
   const text =
     ui.notesDraft != null ? ui.notesDraft : state.portfolioNotes ?? "";
@@ -834,15 +835,15 @@ function portfolioNotesHtml(): string {
         ${
           hasNotes
             ? `<span class="portfolio-notes-hint">есть текст</span>`
-            : `<span class="portfolio-notes-hint muted">комментарии к портфелю</span>`
+            : `<span class="portfolio-notes-hint muted">общие комментарии</span>`
         }
       </summary>
       <div class="portfolio-notes-body">
         <textarea
           id="portfolioNotesText"
           rows="4"
-          placeholder="Свободные заметки и комментарии по портфелю…"
-          aria-label="Заметки портфеля"
+          placeholder="Свободные заметки и комментарии…"
+          aria-label="Заметки"
         >${escapeHtml(text)}</textarea>
         <div class="portfolio-notes-actions">
           <span class="meta" id="portfolioNotesSaved" hidden>Сохранено</span>
@@ -851,6 +852,11 @@ function portfolioNotesHtml(): string {
       </div>
     </details>
   `;
+}
+
+/** Notes alone (Gantt / Очередь); Portfolio wraps notes with Agenda in portfolio-aux. */
+function workspaceNotesRowHtml(): string {
+  return `<div class="portfolio-aux">${portfolioNotesHtml()}</div>`;
 }
 
 function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): string {
@@ -1113,6 +1119,7 @@ function queuesTestHtml(
     .join("");
 
   return `
+    ${workspaceNotesRowHtml()}
     <div class="callout">
       Цифра — приоритет из Портфеля (1 = выше).
       ${
@@ -1982,6 +1989,7 @@ function timelineHtml(
     .join("");
 
   return `
+    ${workspaceNotesRowHtml()}
     <div class="panel panel-sticky-host">
       <div class="panel-sticky">
         <div class="panel-header">
