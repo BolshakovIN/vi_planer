@@ -2580,10 +2580,10 @@ function editorHtml(item: WorkItem | null): string {
       const sz = sizeMap.get(t.id) ?? "M";
       const start = startMap.get(t.id) ?? state.startDate;
       return `
-        <div class="team-assign-row">
-          <label class="team-assign-check">
+        <div class="team-assign-row${on ? " is-on" : ""}">
+          <label class="team-assign-pick">
             <input type="checkbox" class="f_team_check" data-team="${t.id}" ${on ? "checked" : ""} />
-            <span class="team-dot" style="background:${t.color}"></span>
+            <span class="team-dot" style="background:${t.color}" aria-hidden="true"></span>
             <span class="team-assign-name">${escapeHtml(t.name)}</span>
           </label>
           <div class="team-assign-field">
@@ -2669,9 +2669,9 @@ function editorHtml(item: WorkItem | null): string {
               <label>Команды: маечная оценка и дата старта (отдельно по каждой)</label>
               <div class="team-assign-list" id="teamAssignList">
                 <div class="team-assign-head" aria-hidden="true">
-                  <span></span>
-                  <span>Маечная оценка</span>
-                  <span>Старт работы</span>
+                  <span class="team-assign-pick">Команда</span>
+                  <span class="team-assign-field">Маечная оценка</span>
+                  <span class="team-assign-field">Старт работы</span>
                 </div>
                 ${teamRows}
               </div>
@@ -3850,6 +3850,8 @@ function bindUiRest() {
   document.querySelectorAll<HTMLInputElement>(".f_team_check").forEach((check) => {
     check.addEventListener("change", () => {
       const teamId = check.dataset.team!;
+      const row = check.closest(".team-assign-row");
+      row?.classList.toggle("is-on", check.checked);
       const size = document.querySelector<HTMLSelectElement>(
         `.f_team_size[data-team="${teamId}"]`
       );
