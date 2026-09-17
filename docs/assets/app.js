@@ -335,7 +335,7 @@ ${w}`}class Kr extends Error{constructor({message:e,code:t,cause:n,name:A}){var 
         title="Изменить старт планирования"
       >
         <div class="label">Старт планирования</div>
-        <div class="value" style="font-size:18px">${_t(he.startDate)}</div>
+        <div class="value">${_t(he.startDate)}</div>
         <div class="hint">якорь шкалы Gantt (пн) · нажмите, чтобы изменить</div>
         <input
           type="date"
@@ -422,8 +422,10 @@ ${w}`}class Kr extends Error{constructor({message:e,code:t,cause:n,name:A}){var 
           </td>
         </tr>
       `}).join("");return`
+    <div class="portfolio-aux">
     ${uT()}
     ${hT()}
+    </div>
     <div class="panel portfolio-panel">
       <div class="portfolio-sticky">
         <div class="panel-header">

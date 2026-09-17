@@ -62,16 +62,16 @@ textarea {
 .app-shell {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 20px 20px 48px;
+  padding: 12px 20px 48px;
 }
 
 .topbar {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 8px 12px;
+  gap: 4px 12px;
   align-items: center;
-  margin-bottom: 20px;
-  padding-bottom: 14px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
   border-bottom: 3px solid var(--accent);
 }
 
@@ -86,12 +86,13 @@ textarea {
   border: 0;
   background: none;
   font: inherit;
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--ink);
   cursor: pointer;
   text-align: left;
+  line-height: 1.2;
 }
 
 .topbar .brand-home:hover {
@@ -102,10 +103,10 @@ textarea {
   grid-column: 1 / -1;
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   max-width: none;
   width: 100%;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .top-actions {
@@ -154,7 +155,7 @@ textarea {
 
   .topbar h1,
   .topbar .brand-home {
-    font-size: 20px;
+    font-size: 18px;
   }
 
   .topbar .subtitle {
@@ -304,8 +305,8 @@ textarea {
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 @media (max-width: 900px) {
@@ -318,7 +319,7 @@ textarea {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 10px 12px;
+  padding: 6px 10px;
   box-shadow: var(--shadow);
 }
 
@@ -347,22 +348,25 @@ textarea {
 }
 
 .metric .label {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
-  margin-bottom: 4px;
+  margin-bottom: 1px;
+  line-height: 1.25;
 }
 
 .metric .value {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
+  line-height: 1.25;
 }
 
 .metric .hint {
-  margin-top: 3px;
-  font-size: 11px;
+  margin-top: 1px;
+  font-size: 10px;
   color: var(--muted);
+  line-height: 1.25;
 }
 
 .tabs {
@@ -370,11 +374,11 @@ textarea {
   top: 0;
   z-index: 45;
   display: flex;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: wrap;
   align-items: center;
-  margin-bottom: 14px;
-  padding: 8px 10px;
+  margin-bottom: 8px;
+  padding: 4px 8px;
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -386,8 +390,8 @@ textarea {
   background: transparent;
   color: var(--muted);
   border-radius: 999px;
-  padding: 8px 14px;
-  font-size: 13px;
+  padding: 5px 10px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -421,7 +425,7 @@ textarea {
 .panel-sticky,
 .portfolio-sticky {
   position: sticky;
-  top: var(--tabs-sticky-h, 54px);
+  top: var(--tabs-sticky-h, 42px);
   z-index: 40;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
@@ -480,27 +484,29 @@ textarea {
 }
 
 .portfolio-notes {
-  margin: 0 0 10px;
+  margin: 0;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+  min-width: 0;
 }
 
 .portfolio-notes-summary {
   cursor: pointer;
   list-style: none;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 8px 12px;
-  padding: 10px 14px;
+  gap: 6px 8px;
+  padding: 5px 10px;
   user-select: none;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--ink);
   background: var(--surface-2);
   border-radius: var(--radius);
+  line-height: 1.25;
 }
 
 .portfolio-notes[open] > .portfolio-notes-summary {
@@ -532,9 +538,12 @@ textarea {
 }
 
 .portfolio-notes-hint {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .portfolio-notes-hint.muted {
@@ -2651,16 +2660,46 @@ button.cap-cell:last-child {
   padding: 10px 16px;
 }
 
+/* Portfolio: Agenda + Notes share one compact row when collapsed */
+.portfolio-aux {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.portfolio-aux > .agenda,
+.portfolio-aux > .portfolio-notes {
+  flex: 1 1 220px;
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.portfolio-aux > .agenda[open],
+.portfolio-aux > .portfolio-notes[open] {
+  flex: 1 1 100%;
+}
+
+.portfolio-aux > .agenda.callout {
+  padding: 5px 10px;
+  margin-bottom: 0;
+}
+
+.portfolio-aux > .agenda.callout[open] {
+  padding: 8px 12px;
+}
+
 .agenda-summary {
   cursor: pointer;
   list-style: none;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--neutral-ink);
   user-select: none;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  line-height: 1.25;
 }
 
 .agenda-summary::-webkit-details-marker {

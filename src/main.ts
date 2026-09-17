@@ -772,7 +772,7 @@ function metricsHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string 
         title="Изменить старт планирования"
       >
         <div class="label">Старт планирования</div>
-        <div class="value" style="font-size:18px">${formatDate(state.startDate)}</div>
+        <div class="value">${formatDate(state.startDate)}</div>
         <div class="hint">якорь шкалы Gantt (пн) · нажмите, чтобы изменить</div>
         <input
           type="date"
@@ -929,8 +929,10 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
     .join("");
 
   return `
+    <div class="portfolio-aux">
     ${columnsHelpHtml()}
     ${portfolioNotesHtml()}
+    </div>
     <div class="panel portfolio-panel">
       <div class="portfolio-sticky">
         <div class="panel-header">
