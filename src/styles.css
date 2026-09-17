@@ -2660,25 +2660,20 @@ button.cap-cell:last-child {
   padding: 10px 16px;
 }
 
-/* Portfolio: Agenda + Notes share one compact row when collapsed.
-   Gantt / Очередь: same row wrapper with Notes only (shared portfolioNotes). */
+/* Portfolio: Agenda above Notes (full-width stack).
+   Gantt / Очередь: same wrapper with Notes only (shared portfolioNotes). */
 .portfolio-aux {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
   margin-bottom: 8px;
 }
 
 .portfolio-aux > .agenda,
 .portfolio-aux > .portfolio-notes {
-  flex: 1 1 220px;
+  width: 100%;
   margin-bottom: 0;
   min-width: 0;
-}
-
-.portfolio-aux > .agenda[open],
-.portfolio-aux > .portfolio-notes[open] {
-  flex: 1 1 100%;
 }
 
 .portfolio-aux > .agenda.callout {
