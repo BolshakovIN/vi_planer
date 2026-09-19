@@ -25,6 +25,8 @@ const SEED_RAW: AppState = {
     M: { ...DEFAULT_SIZE_RANGES.M },
     L: { ...DEFAULT_SIZE_RANGES.L },
   },
+  portfolioNotes: "",
+  changeLog: [],
   teams: [
     {
       id: "platform",
@@ -55,7 +57,6 @@ const SEED_RAW: AppState = {
   executors: [],
   projects: [],
   products: [],
-  portfolioNotes: "",
   items: [
     {
       id: "p2",

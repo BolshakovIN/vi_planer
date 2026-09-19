@@ -3322,3 +3322,54 @@ body.pdf-capturing .table-scroll-top {
     grid-template-columns: 1fr;
   }
 }
+
+/* Журнал изменений */
+.change-log-panel .panel-header {
+  align-items: flex-start;
+}
+
+.change-log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.change-log-item {
+  display: grid;
+  grid-template-columns: 9.5rem 7.5rem 1fr;
+  gap: 8px 14px;
+  align-items: baseline;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.change-log-item:last-child {
+  border-bottom: none;
+}
+
+.change-log-at {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.change-log-kind {
+  font-size: 12px;
+}
+
+.change-log-msg {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.change-log-empty {
+  padding: 20px 16px;
+  list-style: none;
+}
+
+@media (max-width: 720px) {
+  .change-log-item {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

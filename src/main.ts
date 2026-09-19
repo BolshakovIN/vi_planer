@@ -47,6 +47,9 @@ import {
   calendarWeeksForSize,
   uniqCatalogNames,
   containerNameFromBacklog,
+  ChangeLogKind,
+  CHANGE_LOG_MAX,
+  prependChangeLog,
 } from "./model";
 import { SEED } from "./seed";
 import {
@@ -63,7 +66,7 @@ import {
 } from "./pdfExport";
 
 /** Release / deploy stamp in the header (DD.MM.YYYY) */
-const RELEASE_UPDATED = "15.09.2026";
+const RELEASE_UPDATED = "19.09.2026";
 
 type Tab =
   | "portfolio"
@@ -72,6 +75,7 @@ type Tab =
   | "capacity"
   | "roles"
   | "projects"
+  | "changelog"
   | "settings";
 type SortKey = "priority" | "rice" | "estimate" | "eta";
 type SortDir = "asc" | "desc";
@@ -84,6 +88,7 @@ const TAB_LABELS: Record<Tab, string> = {
   capacity: "Команды",
   roles: "Роли",
   projects: "Проекты",
+  changelog: "Журнал",
   settings: "Настройки",
 };
 
@@ -97,6 +102,7 @@ function normalizeTab(tab: string | undefined | null): Tab {
     tab === "capacity" ||
     tab === "roles" ||
     tab === "projects" ||
+    tab === "changelog" ||
     tab === "settings"
   ) {
     return tab;
@@ -171,6 +177,91 @@ let lastScheduledLoad: Record<string, TeamLoadWeek[]> = {};
 let lastOverflowByTeam: Record<string, Set<number>> = {};
 let overloadHoverTimer: number | null = null;
 let overloadPinned = false;
+
+/** Append a Russian activity-log entry (newest first, capped). */
+function logChange(message: string, kind?: ChangeLogKind) {
+  state.changeLog = prependChangeLog(state.changeLog, message, kind);
+}
+
+function formatLogAt(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return iso;
+  return new Date(t).toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function changeLogKindLabel(kind?: ChangeLogKind): string {
+  switch (kind) {
+    case "item":
+      return "Функциональность";
+    case "priority":
+      return "Приоритет";
+    case "team":
+      return "Команда";
+    case "catalog":
+      return "Справочник";
+    case "notes":
+      return "Заметки";
+    case "settings":
+      return "Настройки";
+    case "schedule":
+      return "Расписание";
+    case "system":
+      return "Система";
+    default:
+      return "Изменение";
+  }
+}
+
+function catalogKindRu(
+  kind: "customers" | "executors" | "projects" | "products"
+): string {
+  switch (kind) {
+    case "customers":
+      return "заказчик";
+    case "executors":
+      return "исполнитель";
+    case "projects":
+      return "проект";
+    case "products":
+      return "продукт";
+  }
+}
+
+function summarizeItemUpdate(prev: WorkItem, next: WorkItem): string {
+  const bits: string[] = [];
+  if (prev.title !== next.title) bits.push(`название «${prev.title}»→«${next.title}»`);
+  if (prev.status !== next.status)
+    bits.push(`статус ${statusLabel(prev.status)}→${statusLabel(next.status)}`);
+  if (prev.manualRank !== next.manualRank)
+    bits.push(`приоритет #${prev.manualRank ?? "—"}→#${next.manualRank ?? "—"}`);
+  const prevTeams = prev.assignments
+    .map((a) => teamById(a.teamId)?.name ?? a.teamId)
+    .sort()
+    .join(", ");
+  const nextTeams = next.assignments
+    .map((a) => teamById(a.teamId)?.name ?? a.teamId)
+    .sort()
+    .join(", ");
+  if (prevTeams !== nextTeams) bits.push(`команды: ${nextTeams || "—"}`);
+  const sizeChanged = (() => {
+    const map = new Map(prev.assignments.map((a) => [a.teamId, a]));
+    for (const a of next.assignments) {
+      const p = map.get(a.teamId);
+      if (!p || p.size !== a.size || p.workStartDate !== a.workStartDate)
+        return true;
+    }
+    return prev.assignments.length !== next.assignments.length;
+  })();
+  if (sizeChanged && prevTeams === nextTeams) bits.push("оценки/старты команд");
+  if (bits.length === 0) return `Обновлена «${next.title}»`;
+  return `Обновлена «${next.title}»: ${bits.slice(0, 3).join("; ")}`;
+}
 
 function szRanges(): SizeRanges {
   return state.sizeRanges;
@@ -523,8 +614,18 @@ function syncLegacyAutoCapacityKey() {
 }
 
 function setScheduleMode(mode: ScheduleMode) {
-  ui.scheduleMode = normalizeScheduleMode(mode);
+  const next = normalizeScheduleMode(mode);
+  const prev = activeScheduleMode();
+  ui.scheduleMode = next;
   saveScheduleMode(ui.scheduleMode);
+  if (prev !== next) {
+    logChange(
+      `Режим расписания: «${SCHEDULE_MODE_META[prev].label}» → «${SCHEDULE_MODE_META[next].label}»`,
+      "schedule"
+    );
+    // Mode lives in UI localStorage; still persist so the journal syncs.
+    saveState(state);
+  }
 }
 
 /** Effective mode for scheduling (Gantt / Очередь / ETA). */
@@ -1330,7 +1431,12 @@ function bindPlanStartDate() {
           anchor,
           `Сменить старт планирования на <span class="accent">${formatDate(next)}</span> (пн)?<br/><span class="meta">Шкала недель сдвинется; абсолютные даты работ сохранятся.</span>`,
           () => {
+            const prev = state.startDate;
             state.startDate = next;
+            logChange(
+              `Старт планирования: ${formatDate(prev)} → ${formatDate(next)}`,
+              "settings"
+            );
             persist();
           },
           () => {
@@ -1715,6 +1821,13 @@ ${sizeLine}${autoNote}`;
             if (isCapacityScheduleMode(activeScheduleMode())) {
               setScheduleMode("manual");
             }
+            const sizePart = sizeChanged
+              ? `, оценка ${oldSize}→${newSize}`
+              : "";
+            logChange(
+              `Gantt «${item.title}» / ${team.name}: ${formatDate(oldStart)}–${formatDate(oldEnd)} → ${formatDate(newStart)}–${formatDate(newEnd)}${sizePart}`,
+              "schedule"
+            );
             persist();
           },
           () => {
@@ -2414,6 +2527,44 @@ function refillBacklogSelect(type: ItemType, keep: string) {
   tmp.innerHTML = catalogSelectHtml("f_backlog", names, ok ? keepVal : "");
   const next = tmp.querySelector("select");
   if (next) sel.innerHTML = next.innerHTML;
+}
+
+function changeLogHtml(): string {
+  const entries = state.changeLog ?? [];
+  const rows =
+    entries.length === 0
+      ? `<li class="change-log-empty meta">Пока нет записей — изменения портфеля появятся здесь.</li>`
+      : entries
+          .map(
+            (e) => `
+        <li class="change-log-item">
+          <time class="change-log-at mono" datetime="${escapeAttr(e.at)}">${escapeHtml(formatLogAt(e.at))}</time>
+          <span class="change-log-kind meta">${escapeHtml(changeLogKindLabel(e.kind))}</span>
+          <span class="change-log-msg">${escapeHtml(e.message)}</span>
+        </li>`
+          )
+          .join("");
+
+  return `
+    <div class="panel panel-sticky-host change-log-panel">
+      <div class="panel-sticky">
+        <div class="panel-header">
+          <div>
+            <h2>Журнал изменений</h2>
+            <p class="meta" style="margin:4px 0 0">
+              Последние действия с портфелем (до ${CHANGE_LOG_MAX} записей). Синхронизируется вместе с данными.
+            </p>
+          </div>
+          <div class="toolbar">
+            <button type="button" class="btn" id="clearChangeLogBtn" ${
+              entries.length ? "" : "disabled"
+            }>Очистить</button>
+          </div>
+        </div>
+      </div>
+      <ol class="change-log-list">${rows}</ol>
+    </div>
+  `;
 }
 
 function settingsHtml(rollups: ItemSchedule[]): string {
@@ -3214,6 +3365,8 @@ function countTeamUsage(teamId: string): number {
 }
 
 function removeTeam(teamId: string) {
+  const team = teamById(teamId);
+  const name = team?.name ?? teamId;
   state.teams = state.teams.filter((t) => t.id !== teamId);
   state.items = state.items
     .map((item) => ({
@@ -3222,6 +3375,7 @@ function removeTeam(teamId: string) {
     }))
     .filter((item) => item.assignments.length > 0);
   if (ui.teamFilter === teamId) ui.teamFilter = "all";
+  logChange(`Удалена команда «${name}»`, "team");
   persist();
 }
 
@@ -3372,6 +3526,10 @@ function bindPortfolioDrag() {
         pendingRestore = null;
         state.items = nextItems;
         ui.sortKey = "priority";
+        logChange(
+          `Приоритет «${moved.title}»: #${oldRank} → #${newRank}`,
+          "priority"
+        );
         persist();
       },
       () => {
@@ -3483,6 +3641,7 @@ function render() {
         <button class="tab tab-end ${ui.tab === "capacity" ? "active" : ""}" data-tab="capacity">Команды</button>
         <button class="tab ${ui.tab === "roles" ? "active" : ""}" data-tab="roles">Роли</button>
         <button class="tab ${ui.tab === "projects" ? "active" : ""}" data-tab="projects">Проекты</button>
+        <button class="tab ${ui.tab === "changelog" ? "active" : ""}" data-tab="changelog">Журнал</button>
         <button class="tab ${ui.tab === "settings" ? "active" : ""}" data-tab="settings">Настройки</button>
       </div>
       <div class="tab-print-root" id="tabPrintRoot">
@@ -3499,7 +3658,9 @@ function render() {
                   ? rolesHtml()
                   : ui.tab === "projects"
                     ? projectsTabHtml()
-                    : settingsHtml(rollups)
+                    : ui.tab === "changelog"
+                      ? changeLogHtml()
+                      : settingsHtml(rollups)
       }
       </div>
       </div>
@@ -3718,8 +3879,17 @@ function bindPortfolioNotes() {
   saveBtn?.addEventListener("click", () => {
     const next = (textarea?.value ?? ui.notesDraft ?? "").trimEnd();
     ui.notesDraft = next;
+    const prev = state.portfolioNotes ?? "";
     state.portfolioNotes = next;
     ui.notesOpen = true;
+    if (prev !== next) {
+      logChange(
+        next.trim()
+          ? "Сохранены заметки портфеля"
+          : "Очищены заметки портфеля",
+        "notes"
+      );
+    }
     saveState(state);
     if (savedHint) {
       savedHint.hidden = false;
@@ -3766,6 +3936,10 @@ function bindUiRest() {
   });
   document.querySelector("#resetSizeRanges")?.addEventListener("click", () => {
     state.sizeRanges = normalizeSizeRanges(undefined);
+    logChange(
+      `Маечная оценка сброшена: ${sizeRangesSummary(state.sizeRanges)}`,
+      "settings"
+    );
     persist();
   });
 
@@ -3887,6 +4061,10 @@ function bindUiRest() {
         text,
         () => {
           state.items = moveItemToPriority(state.items, itemId, priority, szRanges());
+          logChange(
+            `Приоритет «${item.title}»: #${item.manualRank ?? "—"} → #${priority}`,
+            "priority"
+          );
           persist();
         },
         revert
@@ -3990,6 +4168,10 @@ function bindUiRest() {
         state.items.push({ ...data, id: uid("item"), manualRank: priority });
         state.items = ensureUniquePriorities(state.items, szRanges());
       }
+      logChange(
+        `Создана функциональность «${data.title}» (#${priority})`,
+        "item"
+      );
       ui.creating = false;
       ui.editingId = null;
       persist();
@@ -4000,12 +4182,21 @@ function bindUiRest() {
       const idx = state.items.findIndex((i) => i.id === ui.editingId);
       if (idx < 0) return;
       const prev = state.items[idx];
+      let next: WorkItem;
       if (priority !== prev.manualRank) {
         state.items[idx] = { ...prev, ...data, manualRank: prev.manualRank };
         state.items = moveItemToPriority(state.items, ui.editingId, priority, szRanges());
+        next =
+          state.items.find((i) => i.id === ui.editingId) ?? {
+            ...prev,
+            ...data,
+            manualRank: priority,
+          };
       } else {
-        state.items[idx] = { ...prev, ...data };
+        next = { ...prev, ...data };
+        state.items[idx] = next;
       }
+      logChange(summarizeItemUpdate(prev, next), "item");
       ui.creating = false;
       ui.editingId = null;
       persist();
@@ -4050,7 +4241,14 @@ function bindUiRest() {
 
   document.querySelector("#deleteItem")?.addEventListener("click", () => {
     if (!ui.editingId) return;
+    const prev = state.items.find((i) => i.id === ui.editingId);
     state.items = state.items.filter((i) => i.id !== ui.editingId);
+    if (prev) {
+      logChange(
+        `Удалена функциональность «${prev.title}» (#${prev.manualRank ?? "—"})`,
+        "item"
+      );
+    }
     ui.editingId = null;
     persist();
   });
@@ -4133,7 +4331,9 @@ function bindUiRest() {
       const name = input.value.trim() || team.name;
       input.value = name;
       if (name === team.name) return;
+      const prev = team.name;
       team.name = name;
+      logChange(`Команда переименована: «${prev}» → «${name}»`, "team");
       persist();
     };
     input.addEventListener("change", commitName);
@@ -4155,7 +4355,18 @@ function bindUiRest() {
       const label = document.querySelector(`[data-cap-label="${id}"]`);
       if (label) label.textContent = String(team.capacityPw);
     });
-    input.addEventListener("change", () => render());
+    input.addEventListener("change", () => {
+      const id = input.dataset.cap!;
+      const team = state.teams.find((t) => t.id === id);
+      if (team) {
+        logChange(
+          `Ёмкость «${team.name}»: ${team.capacityPw} чел·нед/нед`,
+          "team"
+        );
+        saveState(state);
+      }
+      render();
+    });
   });
 
   document.querySelectorAll<HTMLAnchorElement | HTMLButtonElement>("[data-tab-jump]").forEach((btn) => {
@@ -4219,6 +4430,10 @@ function bindUiRest() {
             : it
         );
       }
+      logChange(
+        `${catalogKindRu(kind)}: «${prev}» → «${next}»`,
+        "catalog"
+      );
       persist();
     };
     input.addEventListener("change", commit);
@@ -4259,6 +4474,7 @@ function bindUiRest() {
             : it
         );
       }
+      logChange(`Удалён ${catalogKindRu(kind)} «${removed}»`, "catalog");
       persist();
     });
   });
@@ -4275,6 +4491,7 @@ function bindUiRest() {
       }
       state[kind] = uniqCatalogNames([...state[kind], name]);
       if (input) input.value = "";
+      logChange(`Добавлен ${catalogKindRu(kind)} «${name}»`, "catalog");
       persist();
     });
   });
@@ -4310,6 +4527,7 @@ function bindUiRest() {
         openTeamColorPicker(btn, team.color, (color) => {
           if (team.color === color) return;
           team.color = color;
+          logChange(`Цвет команды «${team.name}» изменён`, "team");
           persist();
         });
       });
@@ -4347,6 +4565,7 @@ function bindUiRest() {
     });
     draftNewTeamColor = null;
     if (nameInput) nameInput.value = "";
+    logChange(`Добавлена команда «${name}»`, "team");
     persist();
   };
 
@@ -4387,6 +4606,19 @@ function bindUiRest() {
   document.querySelector("#resetBtn")?.addEventListener("click", (e) => {
     e.stopPropagation();
     askResetConfirm(e.currentTarget as HTMLElement);
+  });
+
+  document.querySelector("#clearChangeLogBtn")?.addEventListener("click", (e) => {
+    const btn = e.currentTarget as HTMLElement;
+    askAppConfirm(
+      btn,
+      "Очистить журнал изменений?",
+      () => {
+        state.changeLog = [];
+        persist();
+      },
+      () => undefined
+    );
   });
 }
 

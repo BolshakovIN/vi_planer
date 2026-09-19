@@ -185,6 +185,29 @@ export interface WorkItem {
   roi12m: number | null;
 }
 
+/** Kind of activity-log entry (optional filter / icon hint). */
+export type ChangeLogKind =
+  | "item"
+  | "priority"
+  | "team"
+  | "catalog"
+  | "notes"
+  | "settings"
+  | "schedule"
+  | "system";
+
+export interface ChangeLogEntry {
+  id: string;
+  /** ISO timestamp */
+  at: string;
+  /** Human-readable Russian message */
+  message: string;
+  kind?: ChangeLogKind;
+}
+
+/** Cap persisted activity log to avoid localStorage/cloud bloat. */
+export const CHANGE_LOG_MAX = 150;
+
 export interface AppState {
   teams: Team[];
   items: WorkItem[];
@@ -205,7 +228,60 @@ export interface AppState {
    * One text for all three tabs; field name kept for storage compatibility.
    */
   portfolioNotes: string;
+  /** In-app журнал изменений (newest first). */
+  changeLog: ChangeLogEntry[];
   version: 3;
+}
+
+/** Prepend a log entry and trim to CHANGE_LOG_MAX. Mutates nothing — returns new array. */
+export function prependChangeLog(
+  log: ChangeLogEntry[] | undefined,
+  message: string,
+  kind?: ChangeLogKind
+): ChangeLogEntry[] {
+  const entry: ChangeLogEntry = {
+    id: uid("log"),
+    at: new Date().toISOString(),
+    message: String(message ?? "").trim() || "Изменение",
+    ...(kind ? { kind } : {}),
+  };
+  return [entry, ...(Array.isArray(log) ? log : [])].slice(0, CHANGE_LOG_MAX);
+}
+
+function parseChangeLog(raw: unknown): ChangeLogEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ChangeLogEntry[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const message = String(r.message ?? "").trim();
+    if (!message) continue;
+    const atRaw = String(r.at ?? "");
+    const at = Number.isFinite(Date.parse(atRaw))
+      ? new Date(atRaw).toISOString()
+      : new Date().toISOString();
+    const kind = r.kind != null ? String(r.kind) : undefined;
+    const known: ChangeLogKind[] = [
+      "item",
+      "priority",
+      "team",
+      "catalog",
+      "notes",
+      "settings",
+      "schedule",
+      "system",
+    ];
+    out.push({
+      id: String(r.id ?? uid("log")),
+      at,
+      message,
+      ...(kind && (known as string[]).includes(kind)
+        ? { kind: kind as ChangeLogKind }
+        : {}),
+    });
+    if (out.length >= CHANGE_LOG_MAX) break;
+  }
+  return out;
 }
 
 /** Unique non-empty catalog names; drops «—»; stable ru sort. */
@@ -1262,6 +1338,7 @@ export function normalizeState(raw: unknown): AppState | null {
     products,
     portfolioNotes:
       data.portfolioNotes != null ? String(data.portfolioNotes) : "",
+    changeLog: parseChangeLog(data.changeLog),
     items: ensureUniquePriorities(items, parsedRanges),
   };
 }
