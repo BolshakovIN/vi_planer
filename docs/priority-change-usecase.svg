@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 920" width="720" height="920" role="img" aria-labelledby="title desc">
+  <title id="title">7<5=5=85 ?@8>@8B5B0 DC=:F8>=0;L=>AB8  VI Planer</title>
+  <desc id="desc">Use-case flowchart: @5H5=85 ">2, 25B:8 >4=0 :><0=40 8 :@>AA-:><0=4=0O DC=:F8>=0;L=>ABL</desc>
+  <style>
+    .box { fill: #fff; stroke: #222; stroke-width: 1.5; }
+    .dec { fill: #fff; stroke: #222; stroke-width: 1.5; }
+    .lbl { font-family: system-ui, -apple-system, sans-serif; font-size: 12px; fill: #111; text-anchor: middle; }
+    .edge { stroke: #222; stroke-width: 1.4; fill: none; marker-end: url(#arrow); }
+    .tag { font-family: system-ui, -apple-system, sans-serif; font-size: 11px; fill: #333; font-weight: 600; }
+  </style>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#222"/>
+    </marker>
+  </defs>
+
+  <!-- START -->
+  <rect class="box" x="270" y="16" width="180" height="36" rx="14"/>
+  <text class="lbl" x="360" y="38">@5H5=85 ">2</text>
+  <path class="edge" d="M360 52 L360 72"/>
+
+  <rect class="box" x="230" y="72" width="260" height="48" rx="12"/>
+  <text class="lbl" x="360" y="92">87<5=Q= ?@8>@8B5B</text>
+  <text class="lbl" x="360" y="108">DC=:F8>=0;L=>AB8 (‘ 8;8 “)</text>
+  <path class="edge" d="M360 120 L360 148"/>
+
+  <!-- Decision -->
+  <ellipse class="dec" cx="360" cy="188" rx="130" ry="40"/>
+  <text class="lbl" x="360" y="184">DC=:F8>=0;L=>ABL</text>
+  <text class="lbl" x="360" y="200">2 >4=>9 :><0=45?</text>
+
+  <text class="tag" x="200" y="188"></text>
+  <text class="tag" x="520" y="188">"</text>
+  <path class="edge" d="M230 188 L160 188 L160 230"/>
+  <path class="edge" d="M490 188 L560 188 L560 230"/>
+
+  <!-- YES column -->
+  <rect class="box" x="70" y="230" width="180" height="44" rx="10"/>
+  <text class="lbl" x="160" y="248"><5=O5B ?@8>@8B5B</text>
+  <text class="lbl" x="160" y="264">2 ?>@BD5;5 1&n</text>
+  <path class="edge" d="M160 274 L160 290"/>
+
+  <rect class="box" x="70" y="290" width="180" height="44" rx="10"/>
+  <text class="lbl" x="160" y="308">?5@5AG8B0=K 40BK</text>
+  <text class="lbl" x="160" y="324">MB>9 DC=:F8>=0;L=>AB8</text>
+  <path class="edge" d="M160 334 L160 350"/>
+
+  <rect class="box" x="70" y="350" width="180" height="44" rx="10"/>
+  <text class="lbl" x="160" y="368">?5@5AG8B0=K 40BK</text>
+  <text class="lbl" x="160" y="384">4@C38E 2 >G5@548</text>
+  <path class="edge" d="M160 394 L160 410"/>
+
+  <rect class="box" x="70" y="410" width="180" height="44" rx="10"/>
+  <text class="lbl" x="160" y="428">Q<:>ABL / :>;;8788</text>
+  <text class="lbl" x="160" y="444">:><0=4K</text>
+  <path class="edge" d="M160 454 L160 470"/>
+
+  <rect class="box" x="70" y="470" width="180" height="52" rx="10"/>
+  <text class="lbl" x="160" y="490">>?>25I5=K AB59:E>;45@K /</text>
+  <text class="lbl" x="160" y="506">70:07G8: / :><0=40</text>
+
+  <!-- NO column -->
+  <rect class="box" x="470" y="230" width="200" height="44" rx="10"/>
+  <text class="lbl" x="570" y="248">548=K9 ?@8>@8B5B</text>
+  <text class="lbl" x="570" y="264">=0 2AN DC=:F8>=0;L=>ABL</text>
+  <path class="edge" d="M570 274 L570 290"/>
+
+  <rect class="box" x="470" y="290" width="200" height="44" rx="10"/>
+  <text class="lbl" x="570" y="308">?5@5AGQB >G5@5459 /</text>
+  <text class="lbl" x="570" y="324">Q<:>AB8 ?> :><0=40<</text>
+  <path class="edge" d="M570 334 L570 350"/>
+
+  <rect class="box" x="470" y="350" width="200" height="52" rx="10"/>
+  <text class="lbl" x="570" y="370">AB0@BK 8 ETA ?> B@5:0<;</text>
+  <text class="lbl" x="570" y="386">>1I0O 40B0 = max</text>
+  <path class="edge" d="M570 402 L570 422"/>
+
+  <ellipse class="dec" cx="570" cy="460" rx="110" ry="38"/>
+  <text class="lbl" x="570" y="456">:>=D;8:B A@>:>2</text>
+  <text class="lbl" x="570" y="472">8;8 ?5@53@C7?</text>
+
+  <path class="edge" d="M570 498 L570 518"/>
+  <text class="tag" x="500" y="512">40</text>
+  <rect class="box" x="470" y="518" width="200" height="44" rx="10"/>
+  <text class="lbl" x="570" y="536">bottleneck / @0AA8=E@>=;</text>
+  <text class="lbl" x="570" y="552">A4283 7028AOI8E</text>
+  <path class="edge" d="M570 562 L570 578"/>
+
+  <!-- skip conflict: side path -->
+  <path class="edge" d="M680 460 L700 460 L700 600 L570 600"/>
+  <text class="tag" x="708" y="456">=5B</text>
+
+  <rect class="box" x="470" y="578" width="200" height="52" rx="10"/>
+  <text class="lbl" x="570" y="598">?5@5AG8B0=K 40BK 4@C38E</text>
+  <text class="lbl" x="570" y="614">2> 2A5E 70B@>=CBKE >G5@54OE</text>
+  <path class="edge" d="M570 630 L570 646"/>
+
+  <rect class="box" x="470" y="646" width="200" height="52" rx="10"/>
+  <text class="lbl" x="570" y="666">>?>25I5=K 2A5 :><0=4K /</text>
+  <text class="lbl" x="570" y="682">70:07G8: / AB59:E>;45@K</text>
+
+  <text class="lbl" x="360" y="760" style="font-size:11px;fill:#555">VI Planer · docs/priority-change-usecase.md</text>
+  <text class="lbl" x="360" y="778" style="font-size:10px;fill:#777">?>25I5=85 = ?@>F5AA / UX-intent</text>
+</svg>
