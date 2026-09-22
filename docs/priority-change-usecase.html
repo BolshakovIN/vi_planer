@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VI Planer — смена приоритета (use-case)</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <style>
+    :root {
+      --ink: #1a1a1a;
+      --muted: #555;
+      --line: #c8c8c8;
+      --bg: #f7f6f3;
+      --paper: #fff;
+      --accent: #0b5fff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse at 10% 0%, #e8eefc 0%, transparent 45%),
+        radial-gradient(ellipse at 90% 10%, #ffe8e8 0%, transparent 40%),
+        var(--bg);
+      line-height: 1.45;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 28px 20px 64px; }
+    header h1 {
+      margin: 0 0 6px;
+      font-size: 1.55rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    header p { margin: 0 0 18px; color: var(--muted); max-width: 62ch; }
+    .nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 16px;
+      margin-bottom: 20px;
+      font-size: 0.92rem;
+    }
+    .nav a { color: var(--accent); }
+    .panel {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px 12px 8px;
+      overflow-x: auto;
+    }
+    .mermaid { display: flex; justify-content: center; min-height: 380px; }
+    .fallback { display: none; text-align: center; padding: 8px; }
+    .fallback.show { display: block; }
+    .fallback img { max-width: 100%; height: auto; }
+    .hint { margin: 10px 4px 0; font-size: 0.85rem; color: var(--muted); }
+    h2 { margin: 28px 0 10px; font-size: 1.15rem; }
+    .cases {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+    }
+    .case {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .case h3 { margin: 0 0 8px; font-size: 1rem; }
+    .case ul { margin: 0; padding-left: 1.15em; font-size: 0.92rem; }
+    .case li { margin-bottom: 4px; }
+    footer { margin-top: 28px; font-size: 0.85rem; color: var(--muted); }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.88em;
+      background: #eee;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Изменение приоритета функциональности</h1>
+      <p>
+        Use-case VI Planer: решение ТОПов → смена сквозного приоритета (<code>manualRank</code>) →
+        пересчёт расписания → оповещение. Одна команда vs кросс-командная функциональность.
+      </p>
+    </header>
+
+    <nav class="nav">
+      <a href="team-queue-usecase.html">Схема: очереди команд</a>
+      <a href="priority-change-usecase.md">Markdown</a>
+      <a href="priority-change-usecase.svg">SVG</a>
+      <a href="VI-Planer-requirements.md">Требования</a>
+    </nav>
+
+    <section class="panel" aria-label="Схема use-case">
+      <pre class="mermaid" id="diagram">
+flowchart TD
+  START(["решение ТОПов"])
+  TRIG["изменён приоритет функциональности (↑ или ↓)"]
+  DEC{"функциональность в одной команде?"}
+
+  Y1["меняет приоритет в портфеле 1…n"]
+  Y2["пересчитаны даты этой функциональности"]
+  Y3["пересчитаны даты других в очереди команды"]
+  Y4["проверена ёмкость / коллизии"]
+  Y5["оповещены стейкхолдеры / заказчик / команда"]
+
+  N1["единый приоритет на всю функциональность"]
+  N2["для каждой команды: пересчитана очередь"]
+  N3["старты и ETA по трекам; дата = max по командам"]
+  N4{"конфликт сроков или перегруз?"}
+  N5["bottleneck / рассинхрон; сдвиг зависящих"]
+  N6["пересчитаны даты в затронутых очередях"]
+  N7["оповещены все команды / заказчик"]
+
+  START --> TRIG --> DEC
+  DEC -->|ДА| Y1 --> Y2 --> Y3 --> Y4 --> Y5
+  DEC -->|НЕТ| N1 --> N2 --> N3 --> N4
+  N4 -->|да| N5 --> N6
+  N4 -->|нет| N6
+  N6 --> N7
+      </pre>
+      <div class="fallback" id="fallback">
+        <p class="hint">Mermaid не загрузился. Ниже статичная схема:</p>
+        <img src="priority-change-usecase.svg" alt="Схема смены приоритета" width="720" height="920" />
+      </div>
+    </section>
+    <p class="hint">
+      Оповещение — процесс / UX-intent. В приложении есть журнал изменений; авто-рассылка пока не обязательна.
+    </p>
+
+    <h2>Ветки</h2>
+    <div class="cases">
+      <article class="case">
+        <h3>Одна команда</h3>
+        <ul>
+          <li>Приоритет в общей нумерации 1…n</li>
+          <li>Пересчёт старта / завершения этой работы</li>
+          <li>Сдвиг следующих в очереди команды</li>
+        </ul>
+      </article>
+      <article class="case">
+        <h3>Несколько команд</h3>
+        <ul>
+          <li>Один сквозной <code>manualRank</code></li>
+          <li>Пересчёт очередей всех назначенных команд</li>
+          <li>Дата завершения = max по трекам (bottleneck)</li>
+        </ul>
+      </article>
+    </div>
+
+    <footer>
+      VI Planer · UC-05 ·
+      <code>moveItemToPriority</code> / <code>schedulePortfolio</code> ·
+      <code>open docs/priority-change-usecase.html</code>
+    </footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>
+    (function () {
+      var diagram = document.getElementById("diagram");
+      var fallback = document.getElementById("fallback");
+      function showFallback() {
+        if (diagram) diagram.style.display = "none";
+        if (fallback) fallback.classList.add("show");
+      }
+      var timer = setTimeout(showFallback, 4000);
+      try {
+        if (!window.mermaid) {
+          showFallback();
+          return;
+        }
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: "neutral",
+          flowchart: { curve: "basis", htmlLabels: true, padding: 12 },
+          securityLevel: "loose",
+        });
+        mermaid.run({ nodes: [diagram] }).then(function () {
+          clearTimeout(timer);
+        }).catch(function () {
+          clearTimeout(timer);
+          showFallback();
+        });
+      } catch (e) {
+        clearTimeout(timer);
+        showFallback();
+      }
+    })();
+  </script>
+</body>
+</html>

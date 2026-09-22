@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VI Planer — очереди команд (use-case)</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <style>
+    :root {
+      --ink: #1a1a1a;
+      --muted: #555;
+      --line: #c8c8c8;
+      --bg: #f7f6f3;
+      --paper: #fff;
+      --accent: #0b5fff;
+      --case1: #1a7f4b;
+      --case2: #b45309;
+      --case3: #6d28d9;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse at 10% 0%, #e8eefc 0%, transparent 45%),
+        radial-gradient(ellipse at 90% 10%, #f3e8ff 0%, transparent 40%),
+        var(--bg);
+      line-height: 1.45;
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 20px 64px;
+    }
+    header h1 {
+      margin: 0 0 6px;
+      font-size: 1.55rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    header p {
+      margin: 0 0 18px;
+      color: var(--muted);
+      max-width: 62ch;
+    }
+    .nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 16px;
+      margin-bottom: 20px;
+      font-size: 0.92rem;
+    }
+    .nav a { color: var(--accent); }
+    .panel {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px 12px 8px;
+      overflow-x: auto;
+    }
+    .mermaid {
+      display: flex;
+      justify-content: center;
+      min-height: 420px;
+    }
+    .fallback {
+      display: none;
+      text-align: center;
+      padding: 8px;
+    }
+    .fallback.show { display: block; }
+    .fallback img { max-width: 100%; height: auto; }
+    .hint {
+      margin: 10px 4px 0;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    h2 {
+      margin: 28px 0 10px;
+      font-size: 1.15rem;
+    }
+    .cases {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    .case {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 16px;
+      border-top: 3px solid var(--case1);
+    }
+    .case.c2 { border-top-color: var(--case2); }
+    .case.c3 { border-top-color: var(--case3); }
+    .case h3 { margin: 0 0 8px; font-size: 1rem; }
+    .case ul {
+      margin: 0;
+      padding-left: 1.15em;
+      font-size: 0.92rem;
+    }
+    .case li { margin-bottom: 4px; }
+    .opt-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 0.9rem;
+    }
+    .opt-table th, .opt-table td {
+      border: 1px solid var(--line);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+      background: var(--paper);
+    }
+    .opt-table th { background: #f0f0ec; }
+    footer {
+      margin-top: 28px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.88em;
+      background: #eee;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Очереди команд: новый проект / функциональность</h1>
+      <p>
+        Use-case VI Planer: вставка в портфель → сдвигать ли очереди → полный или частичный сдвиг →
+        при частичном — выбор оптимизации ёмкости → пересчёт дат → оповещение.
+      </p>
+    </header>
+
+    <nav class="nav">
+      <a href="priority-change-usecase.html">Схема: смена приоритета</a>
+      <a href="team-queue-usecase.md">Markdown</a>
+      <a href="team-queue-usecase.svg">SVG</a>
+      <a href="VI-Planer-requirements.md">Требования</a>
+    </nav>
+
+    <section class="panel" aria-label="Схема use-case">
+      <pre class="mermaid" id="diagram">
+flowchart TD
+  START(["новый проект / функциональность"])
+  SETUP["назначены команды, приоритет, майки, старт"]
+  DEC1{"сдвигать очередь других работ?"}
+
+  C1A["вставка в слот / хвост без пересчёта очередей"]
+  C1B["даты остальных функциональностей не меняются"]
+  C1C["режим «Как задано» (manual)"]
+  C1D["оповещены стейкхолдеры / команды"]
+
+  DEC2{"затронуты все команды функциональности?"}
+
+  C2A["полный пересчёт всех затронутых очередей"]
+  C2B["ниже по приоритету сдвинуты в каждой команде"]
+  C2C["старты и ETA; дата завершения = max по командам"]
+  C2D["оповещены все команды / заказчик"]
+
+  C3A["сдвиг только в части команд"]
+  C3B{"выбор оптимизации ёмкости"}
+  OPT_A["A: Последовательная утилизация ресурса"]
+  OPT_B["B: Максимальная утилизация ресурса"]
+  C3C["пересчитаны даты в затронутых очередях"]
+  C3D["оповещены затронутые команды / заказчик"]
+
+  START --> SETUP --> DEC1
+  DEC1 -->|НЕТ · случай 1| C1A --> C1B --> C1C --> C1D
+  DEC1 -->|ДА| DEC2
+  DEC2 -->|ДА · случай 2| C2A --> C2B --> C2C --> C2D
+  DEC2 -->|НЕТ · случай 3| C3A --> C3B
+  C3B -->|тип A| OPT_A --> C3C
+  C3B -->|тип B| OPT_B --> C3C
+  C3C --> C3D
+      </pre>
+      <div class="fallback" id="fallback">
+        <p class="hint">Mermaid не загрузился (офлайн / CDN). Ниже статичная схема:</p>
+        <img src="team-queue-usecase.svg" alt="Схема очередей команд" width="1040" height="860" />
+      </div>
+    </section>
+    <p class="hint">
+      Оповещение — процесс / UX-intent (есть журнал изменений; авто-рассылка не обязательна).
+      Выбор A/B в случае 3 — intent; в SPA режим задаётся глобально кнопками на Gantt / «Очередь команд».
+    </p>
+
+    <h2>Три случая</h2>
+    <div class="cases">
+      <article class="case c1">
+        <h3>1. Без сдвига</h3>
+        <ul>
+          <li>Вставка в слот / хвост без пересчёта чужих дат</li>
+          <li>Режим <strong>«Как задано»</strong> (<code>manual</code>)</li>
+          <li>Старты из карточек; перегрузки видны</li>
+        </ul>
+      </article>
+      <article class="case c2">
+        <h3>2. Полный сдвиг</h3>
+        <ul>
+          <li>Затронуты все команды функциональности</li>
+          <li>Полный пересчёт затронутых очередей</li>
+          <li>Ниже по приоритету сдвигаются; ETA = max по трекам</li>
+        </ul>
+      </article>
+      <article class="case c3">
+        <h3>3. Частичный сдвиг</h3>
+        <ul>
+          <li>Сдвиг только в части команд</li>
+          <li>Нужно выбрать тип оптимизации ёмкости (A или B)</li>
+          <li>Пересчёт только затронутых очередей</li>
+        </ul>
+      </article>
+    </div>
+
+    <h2>Два типа оптимизации (случай 3)</h2>
+    <table class="opt-table">
+      <thead>
+        <tr>
+          <th>Тип</th>
+          <th>Подпись в UI</th>
+          <th>Режим</th>
+          <th>Суть</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>A</strong></td>
+          <td>Последовательная утилизация ресурса</td>
+          <td><code>teamQueue</code></td>
+          <td>FS-очередь по приоритету внутри команды; следующая работа ждёт конца предыдущей</td>
+        </tr>
+        <tr>
+          <td><strong>B</strong></td>
+          <td>Максимальная утилизация ресурса</td>
+          <td><code>maxUtilization</code></td>
+          <td>Все команды одной функциональности стартуют вместе; дата завершения = max по трекам</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <footer>
+      VI Planer · UC-03 / UC-07 / FR-11 ·
+      <code>schedulePortfolio</code> · открыть локально:
+      <code>open docs/team-queue-usecase.html</code>
+    </footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>
+    (function () {
+      var diagram = document.getElementById("diagram");
+      var fallback = document.getElementById("fallback");
+      function showFallback() {
+        if (diagram) diagram.style.display = "none";
+        if (fallback) fallback.classList.add("show");
+      }
+      var timer = setTimeout(showFallback, 4000);
+      try {
+        if (!window.mermaid) {
+          showFallback();
+          return;
+        }
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: "neutral",
+          flowchart: { curve: "basis", htmlLabels: true, padding: 12 },
+          securityLevel: "loose",
+        });
+        mermaid.run({ nodes: [diagram] }).then(function () {
+          clearTimeout(timer);
+        }).catch(function () {
+          clearTimeout(timer);
+          showFallback();
+        });
+      } catch (e) {
+        clearTimeout(timer);
+        showFallback();
+      }
+    })();
+  </script>
+</body>
+</html>

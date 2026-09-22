@@ -38,6 +38,7 @@ flowchart TD
 ```
 
 > Оповещение — шаг процесса / UX-intent: в приложении уже есть журнал изменений; автоматическая рассылка пока не обязательна.  
+> **Локальная HTML-страница:** [priority-change-usecase.html](./priority-change-usecase.html) (`open docs/priority-change-usecase.html`).  
 > Статичная копия схемы: [priority-change-usecase.svg](./priority-change-usecase.svg).
 
 ## Ветки кратко
