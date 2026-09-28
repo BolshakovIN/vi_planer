@@ -224,8 +224,8 @@ export interface AppState {
   /** Продукты (Проекты tab → backlog when type=product) */
   products: string[];
   /**
-   * Shared workspace notes (Заметки on Портфель, Gantt/Сроки, Очередь команд).
-   * One text for all three tabs; field name kept for storage compatibility.
+   * Legacy shared workspace notes (UI removed). Kept for cloud/local load
+   * compatibility; value is persisted but unused in the app.
    */
   portfolioNotes: string;
   /** In-app журнал изменений (newest first). */
