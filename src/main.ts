@@ -71,7 +71,7 @@ import {
 } from "./pdfExport";
 
 /** Release / deploy stamp in the header (DD.MM.YYYY) */
-const RELEASE_UPDATED = "30.09.2026";
+const RELEASE_UPDATED = "01.10.2026";
 
 type Tab =
   | "portfolio"
@@ -92,7 +92,7 @@ const TAB_LABELS: Record<Tab, string> = {
   portfolio: "Портфель",
   timeline: "Gantt/Сроки",
   queuesTest: "Очередь команд",
-  demoA: "Вариант А",
+  demoA: "Мониторинг",
   demoB: "Мониторинг",
   capacity: "Команды",
   roles: "Роли",
@@ -122,9 +122,9 @@ function normalizeTab(tab: string | undefined | null): Tab {
 }
 
 function isDemoVariantVisible(which: "A" | "B"): boolean {
-  return which === "A"
-    ? state.demoVariantA !== false
-    : state.demoVariantB !== false;
+  // Variant B retired — one monitoring tab (layout A) only.
+  if (which === "B") return false;
+  return state.demoVariantA !== false;
 }
 
 function ensureVisibleTab() {
@@ -154,8 +154,8 @@ function setDemoVariantVisible(which: "A" | "B", visible: boolean) {
   persist();
 }
 
-function demoVariantChangeLabel(which: "A" | "B"): string {
-  return which === "A" ? "демо-вариант А" : "Мониторинг (демо режим)";
+function demoVariantChangeLabel(_which: "A" | "B"): string {
+  return "Мониторинг";
 }
 
 function demoTabButtonHtml(
@@ -2850,8 +2850,7 @@ function demoBarRowHtml(
 }
 
 function demoDismissBarHtml(which: "A" | "B", blurb: string): string {
-  const dismissLabel =
-    which === "B" ? "Отказаться от мониторинга" : "Отказаться от варианта";
+  const dismissLabel = "Отказаться от мониторинга";
   return `
     <div class="demo-page-head">
       <p class="meta">${blurb}</p>
@@ -2890,18 +2889,9 @@ function demoVariantAHtml(
     <div class="demo-page">
       ${demoDismissBarHtml(
         "A",
-        "Демо-макет мониторинга (как в похожих продуктах): комплектация слева, загрузка справа. Цифры из текущего портфеля и расписания; комплектация — доля функц. с командой, заказчиком и исполнителем."
+        "Демо-макет мониторинга (как в похожих продуктах): загрузка слева, комплектация справа. Цифры из текущего портфеля и расписания; комплектация — доля функц. с командой, заказчиком и исполнителем."
       )}
       <div class="demo-a-grid">
-        <div class="panel demo-card">
-          <div class="panel-header">
-            <div>
-              <h2>Комплектация проектов / функциональностей</h2>
-              <p class="demo-card-hint">Портфель: ${data.overallPct}% · без исполнителя: ${data.withoutAssignee} · без заказчика: ${data.withoutOwner}</p>
-            </div>
-          </div>
-          <div class="demo-card-body">${completeRows}</div>
-        </div>
         <div class="panel demo-card">
           <div class="panel-header">
             <div>
@@ -2910,6 +2900,15 @@ function demoVariantAHtml(
             </div>
           </div>
           <div class="demo-card-body">${loadRows}</div>
+        </div>
+        <div class="panel demo-card">
+          <div class="panel-header">
+            <div>
+              <h2>Комплектация проектов / функциональностей</h2>
+              <p class="demo-card-hint">Портфель: ${data.overallPct}% · без исполнителя: ${data.withoutAssignee} · без заказчика: ${data.withoutOwner}</p>
+            </div>
+          </div>
+          <div class="demo-card-body">${completeRows}</div>
         </div>
       </div>
     </div>`;
@@ -3155,24 +3154,18 @@ function settingsHtml(rollups: ItemSchedule[]): string {
       </div>
       <div class="panel">
         <div class="panel-header">
-          <h2>Демо-вкладки мониторинга</h2>
+          <h2>Демо-вкладка мониторинга</h2>
         </div>
         <div class="settings-demo-body">
           <p class="meta">
-            Вариант А и Мониторинг — черновые макеты статистики (комплектация и загрузка).
-            Можно скрыть один или оба; вкладки пропадут из меню. Вернуть — этими флажками.
+            Мониторинг — черновой макет статистики (загрузка команд и комплектация).
+            Можно скрыть вкладку; вернуть — этим флажком.
           </p>
           <label class="settings-check">
             <input type="checkbox" id="showDemoA" ${
               isDemoVariantVisible("A") ? "checked" : ""
             } />
-            Показывать вариант А
-          </label>
-          <label class="settings-check">
-            <input type="checkbox" id="showDemoB" ${
-              isDemoVariantVisible("B") ? "checked" : ""
-            } />
-            Показывать Мониторинг (демо режим)
+            Показывать Мониторинг
           </label>
         </div>
       </div>
@@ -4209,8 +4202,7 @@ function render() {
         <button class="tab ${ui.tab === "portfolio" ? "active" : ""}" data-tab="portfolio">Портфель</button>
         <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Gantt/Сроки</button>
         <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очередь команд</button>
-        ${isDemoVariantVisible("A") ? demoTabButtonHtml("demoA", "Вариант А") : ""}
-        ${isDemoVariantVisible("B") ? demoTabButtonHtml("demoB", "Мониторинг", "*демо режим") : ""}
+        ${isDemoVariantVisible("A") ? demoTabButtonHtml("demoA", "Мониторинг") : ""}
         <button class="tab tab-end ${ui.tab === "capacity" ? "active" : ""}" data-tab="capacity">Команды</button>
         <button class="tab ${ui.tab === "roles" ? "active" : ""}" data-tab="roles">Роли</button>
         <button class="tab ${ui.tab === "projects" ? "active" : ""}" data-tab="projects">Проекты</button>
@@ -4449,13 +4441,6 @@ function bindUiRest() {
     (ev) => {
       const on = (ev.currentTarget as HTMLInputElement).checked;
       setDemoVariantVisible("A", on);
-    }
-  );
-  document.querySelector<HTMLInputElement>("#showDemoB")?.addEventListener(
-    "change",
-    (ev) => {
-      const on = (ev.currentTarget as HTMLInputElement).checked;
-      setDemoVariantVisible("B", on);
     }
   );
 

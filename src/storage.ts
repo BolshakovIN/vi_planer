@@ -189,7 +189,7 @@ export function applyCurrentPortfolioPack(
   }
   const next = structuredClone(SEED);
   next.demoVariantA = current.demoVariantA;
-  next.demoVariantB = current.demoVariantB;
+  next.demoVariantB = false;
   next.changeLog = prependChangeLog(
     current.changeLog,
     "Загружен портфель из таблицы приоритезации (старт 01.10.2026)",

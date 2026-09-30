@@ -3378,7 +3378,7 @@ body.pdf-capturing .table-scroll-top {
   }
 }
 
-/* Demo monitoring tabs (Вариант А / Мониторинг) */
+/* Demo monitoring tab (Мониторинг / layout A) */
 .tab-demo {
   display: inline-flex;
   flex-direction: row;

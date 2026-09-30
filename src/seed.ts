@@ -32,7 +32,7 @@ const SEED_RAW: AppState = {
   portfolioNotes: "",
   changeLog: [],
   demoVariantA: true,
-  demoVariantB: true,
+  demoVariantB: false,
   portfolioPack: PORTFOLIO_PACK_ID,
   teams: [
     {

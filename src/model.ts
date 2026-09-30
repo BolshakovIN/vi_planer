@@ -278,9 +278,9 @@ export interface AppState {
   portfolioNotes: string;
   /** In-app журнал изменений (newest first). */
   changeLog: ChangeLogEntry[];
-  /** Demo monitoring tab «Вариант А»; default shown. */
+  /** Demo monitoring tab (layout A, labelled «Мониторинг»); default shown. */
   demoVariantA: boolean;
-  /** Demo monitoring tab «Мониторинг»; default shown. */
+  /** Retired second demo tab; always hidden. Kept for load compatibility. */
   demoVariantB: boolean;
   /**
    * Which portfolio data pack is loaded.
@@ -290,12 +290,13 @@ export interface AppState {
   version: 3;
 }
 
-/** Persist flags for the two demo monitoring tabs (default: both visible). */
+/** Persist flags for demo monitoring (A shown by default; B retired / hidden). */
 export function parseDemoVariantShown(
   data: Record<string, unknown>,
   which: "A" | "B"
 ): boolean {
-  const key = which === "A" ? "demoVariantA" : "demoVariantB";
+  if (which === "B") return false;
+  const key = "demoVariantA";
   const raw = data[key];
   if (raw === false || raw === 0 || raw === "false") return false;
   if (raw === true || raw === 1 || raw === "true") return true;
@@ -1421,7 +1422,7 @@ export function normalizeState(raw: unknown): AppState | null {
       data.portfolioNotes != null ? String(data.portfolioNotes) : "",
     changeLog: parseChangeLog(data.changeLog),
     demoVariantA: parseDemoVariantShown(data, "A"),
-    demoVariantB: parseDemoVariantShown(data, "B"),
+    demoVariantB: false,
     portfolioPack:
       data.portfolioPack != null && String(data.portfolioPack).trim()
         ? String(data.portfolioPack).trim()
