@@ -27,6 +27,8 @@ const SEED_RAW: AppState = {
   },
   portfolioNotes: "",
   changeLog: [],
+  demoVariantA: true,
+  demoVariantB: true,
   teams: [
     {
       id: "platform",

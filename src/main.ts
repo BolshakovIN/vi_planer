@@ -66,12 +66,14 @@ import {
 } from "./pdfExport";
 
 /** Release / deploy stamp in the header (DD.MM.YYYY) */
-const RELEASE_UPDATED = "19.09.2026";
+const RELEASE_UPDATED = "30.09.2026";
 
 type Tab =
   | "portfolio"
   | "timeline"
   | "queuesTest"
+  | "demoA"
+  | "demoB"
   | "capacity"
   | "roles"
   | "projects"
@@ -85,6 +87,8 @@ const TAB_LABELS: Record<Tab, string> = {
   portfolio: "Портфель",
   timeline: "Gantt/Сроки",
   queuesTest: "Очередь команд",
+  demoA: "Вариант А",
+  demoB: "Вариант Б",
   capacity: "Команды",
   roles: "Роли",
   projects: "Проекты",
@@ -99,6 +103,8 @@ function normalizeTab(tab: string | undefined | null): Tab {
     tab === "portfolio" ||
     tab === "timeline" ||
     tab === "queuesTest" ||
+    tab === "demoA" ||
+    tab === "demoB" ||
     tab === "capacity" ||
     tab === "roles" ||
     tab === "projects" ||
@@ -108,6 +114,48 @@ function normalizeTab(tab: string | undefined | null): Tab {
     return tab;
   }
   return "portfolio";
+}
+
+function isDemoVariantVisible(which: "A" | "B"): boolean {
+  return which === "A"
+    ? state.demoVariantA !== false
+    : state.demoVariantB !== false;
+}
+
+function ensureVisibleTab() {
+  if (ui.tab === "demoA" && !isDemoVariantVisible("A")) ui.tab = "portfolio";
+  if (ui.tab === "demoB" && !isDemoVariantVisible("B")) ui.tab = "portfolio";
+}
+
+function setDemoVariantVisible(which: "A" | "B", visible: boolean) {
+  const prev = isDemoVariantVisible(which);
+  if (prev === visible) return;
+  if (which === "A") state.demoVariantA = visible;
+  else state.demoVariantB = visible;
+  if (!visible) {
+    const tab: Tab = which === "A" ? "demoA" : "demoB";
+    if (ui.tab === tab) {
+      const other: "A" | "B" = which === "A" ? "B" : "A";
+      ui.tab = isDemoVariantVisible(other)
+        ? other === "A"
+          ? "demoA"
+          : "demoB"
+        : "portfolio";
+    }
+    logChange(`Скрыт демо-вариант ${which}`, "settings");
+  } else {
+    logChange(`Показан демо-вариант ${which}`, "settings");
+  }
+  persist();
+}
+
+function demoTabButtonHtml(id: "demoA" | "demoB", name: string): string {
+  return `<button type="button" class="tab tab-demo ${
+    ui.tab === id ? "active" : ""
+  }" data-tab="${id}" aria-label="${escapeAttr(name)}, демо">
+    <span class="tab-demo-name">${escapeHtml(name)}</span>
+    <span class="tab-demo-mark">*демо</span>
+  </button>`;
 }
 
 interface UiState {
@@ -2521,6 +2569,442 @@ function changeLogHtml(): string {
   `;
 }
 
+type DemoTone = "good" | "warn" | "bad";
+
+function demoCompletenessTone(pct: number): DemoTone {
+  if (pct >= 80) return "good";
+  if (pct >= 50) return "warn";
+  return "bad";
+}
+
+function demoLoadTone(pct: number): DemoTone {
+  if (pct > 100) return "bad";
+  if (pct >= 85) return "warn";
+  return "good";
+}
+
+function demoHasOwner(item: WorkItem): boolean {
+  const o = item.owner.trim();
+  return Boolean(o && o !== "—");
+}
+
+function demoHasAssignee(item: WorkItem): boolean {
+  return Boolean(item.assignee.trim());
+}
+
+function demoMedian(nums: number[]): number {
+  if (!nums.length) return 1;
+  const sorted = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2
+    ? sorted[mid]!
+    : (sorted[mid - 1]! + sorted[mid]!) / 2;
+}
+
+function demoHorizonWeeks(): number {
+  return Math.max(4, Math.min(52, Math.round(ui.ganttWeeks) || 16));
+}
+
+interface DemoCompletenessRow {
+  key: string;
+  name: string;
+  type: ItemType;
+  items: number;
+  withTeam: number;
+  withAssignee: number;
+  withOwner: number;
+  uniqueTeams: number;
+  typicalTeams: number;
+  pct: number;
+}
+
+interface DemoTeamLoadRow {
+  team: Team;
+  avgPct: number;
+  peakPct: number;
+  overloadWeeks: number;
+  demandPw: number;
+  weeks: TeamLoadWeek[];
+}
+
+function demoMonitoringData(
+  load: Record<string, TeamLoadWeek[]>,
+  overflowByTeam: Record<string, Set<number>>
+): {
+  horizon: number;
+  active: WorkItem[];
+  completeness: DemoCompletenessRow[];
+  overallPct: number;
+  withoutAssignee: number;
+  withoutOwner: number;
+  teams: DemoTeamLoadRow[];
+  avgLoadPct: number;
+  overloadTeams: number;
+} {
+  const ganttH = demoHorizonWeeks();
+  let lastBusy = 0;
+  for (const weeks of Object.values(load)) {
+    for (const lw of weeks) {
+      if (lw.usedPw > 0.001) lastBusy = Math.max(lastBusy, lw.week);
+    }
+  }
+  const horizon = Math.max(4, Math.min(ganttH, (lastBusy || ganttH - 1) + 1));
+  const active = state.items.filter((i) => i.status !== "done");
+  const groups = new Map<string, WorkItem[]>();
+  for (const item of active) {
+    const name = productProjectName(item.backlog) || "Без названия";
+    const key = `${item.type}:${name.toLowerCase()}`;
+    const list = groups.get(key) ?? [];
+    list.push(item);
+    groups.set(key, list);
+  }
+
+  const completeness: DemoCompletenessRow[] = [...groups.entries()]
+    .map(([key, items]) => {
+      const first = items[0]!;
+      const name = productProjectName(first.backlog) || "Без названия";
+      const withTeam = items.filter((i) => i.assignments.length > 0).length;
+      const withAssignee = items.filter(demoHasAssignee).length;
+      const withOwner = items.filter(demoHasOwner).length;
+      const teamIds = new Set<string>();
+      for (const i of items) {
+        for (const a of i.assignments) teamIds.add(a.teamId);
+      }
+      const typicalTeams = Math.max(
+        1,
+        Math.round(demoMedian(items.map((i) => i.assignments.length)))
+      );
+      const filled = withTeam + withAssignee + withOwner;
+      const pct = items.length
+        ? Math.round((filled / (items.length * 3)) * 100)
+        : 100;
+      return {
+        key,
+        name,
+        type: first.type,
+        items: items.length,
+        withTeam,
+        withAssignee,
+        withOwner,
+        uniqueTeams: teamIds.size,
+        typicalTeams,
+        pct,
+      };
+    })
+    .sort((a, b) => a.pct - b.pct || a.name.localeCompare(b.name, "ru"));
+
+  const factorTotal = active.length * 3;
+  const factorFilled = active.reduce(
+    (sum, i) =>
+      sum +
+      (i.assignments.length > 0 ? 1 : 0) +
+      (demoHasOwner(i) ? 1 : 0) +
+      (demoHasAssignee(i) ? 1 : 0),
+    0
+  );
+  const overallPct = factorTotal
+    ? Math.round((factorFilled / factorTotal) * 100)
+    : 100;
+  const withoutAssignee = active.filter((i) => !demoHasAssignee(i)).length;
+  const withoutOwner = active.filter((i) => !demoHasOwner(i)).length;
+
+  const teams: DemoTeamLoadRow[] = state.teams.map((team) => {
+    const weeks = (load[team.id] ?? []).slice(0, horizon);
+    const overflow = overflowByTeam[team.id] ?? new Set<number>();
+    let peak = 0;
+    let sum = 0;
+    let overloadWeeks = 0;
+    let demandPw = 0;
+    for (const lw of weeks) {
+      const pct = utilizationPct(lw.usedPw, lw.capacityPw);
+      peak = Math.max(peak, pct);
+      sum += pct;
+      demandPw += lw.usedPw;
+      if (overflow.has(lw.week) || isTeamWeekOverloaded(lw)) overloadWeeks += 1;
+    }
+    const avgPct = weeks.length ? Math.round(sum / weeks.length) : 0;
+    return {
+      team,
+      avgPct,
+      peakPct: peak,
+      overloadWeeks,
+      demandPw: Math.round(demandPw * 10) / 10,
+      weeks,
+    };
+  });
+  teams.sort((a, b) => b.avgPct - a.avgPct);
+
+  const avgLoadPct = teams.length
+    ? Math.round(teams.reduce((s, t) => s + t.avgPct, 0) / teams.length)
+    : 0;
+  const overloadTeams = teams.filter(
+    (t) => t.overloadWeeks > 0 || t.peakPct > 100
+  ).length;
+
+  return {
+    horizon,
+    active,
+    completeness,
+    overallPct,
+    withoutAssignee,
+    withoutOwner,
+    teams,
+    avgLoadPct,
+    overloadTeams,
+  };
+}
+
+function demoBarRowHtml(
+  name: string,
+  sub: string,
+  pct: number,
+  tone: DemoTone
+): string {
+  const width = Math.max(0, Math.min(100, pct));
+  return `
+    <div class="demo-row demo-tone-${tone}">
+      <div class="demo-row-name" title="${escapeAttr(name)}">
+        ${escapeHtml(name)}
+        <span class="demo-row-sub">${escapeHtml(sub)}</span>
+      </div>
+      <div class="demo-row-pct mono">${pct}%</div>
+      <div class="demo-fill" aria-hidden="true"><span style="width:${width}%"></span></div>
+    </div>`;
+}
+
+function demoDismissBarHtml(which: "A" | "B", blurb: string): string {
+  return `
+    <div class="demo-page-head">
+      <p class="meta">${blurb}</p>
+      <button type="button" class="btn btn-ghost demo-dismiss-btn" data-dismiss-demo="${which}">Отказаться от варианта</button>
+    </div>`;
+}
+
+function demoVariantAHtml(
+  load: Record<string, TeamLoadWeek[]>,
+  overflowByTeam: Record<string, Set<number>>
+): string {
+  const data = demoMonitoringData(load, overflowByTeam);
+  const completeRows =
+    data.completeness
+      .map((row) => {
+        const typeRu = row.type === "project" ? "проект" : "продукт";
+        const sub = `${typeRu} · ${row.items} функц. · команд ${row.uniqueTeams} (типично ~${row.typicalTeams}) · исп. ${row.withAssignee}/${row.items}`;
+        return demoBarRowHtml(row.name, sub, row.pct, demoCompletenessTone(row.pct));
+      })
+      .join("") || `<div class="empty">Нет активных функциональностей</div>`;
+
+  const loadRows =
+    data.teams
+      .map((row) => {
+        const sub = `пик ${row.peakPct}% · перегруз ${row.overloadWeeks} нед. · ${row.demandPw} чел·нед за ${data.horizon} нед.`;
+        return demoBarRowHtml(
+          row.team.name,
+          sub,
+          row.avgPct,
+          demoLoadTone(row.avgPct)
+        );
+      })
+      .join("") || `<div class="empty">Нет команд</div>`;
+
+  return `
+    <div class="demo-page">
+      ${demoDismissBarHtml(
+        "A",
+        "Демо-макет мониторинга (как в похожих продуктах): комплектация слева, загрузка справа. Цифры из текущего портфеля и расписания; комплектация — доля функц. с командой, заказчиком и исполнителем."
+      )}
+      <div class="demo-a-grid">
+        <div class="panel demo-card">
+          <div class="panel-header">
+            <div>
+              <h2>Комплектация проектов / функциональностей</h2>
+              <p class="demo-card-hint">Портфель: ${data.overallPct}% · без исполнителя: ${data.withoutAssignee} · без заказчика: ${data.withoutOwner}</p>
+            </div>
+          </div>
+          <div class="demo-card-body">${completeRows}</div>
+        </div>
+        <div class="panel demo-card">
+          <div class="panel-header">
+            <div>
+              <h2>Загрузка команд</h2>
+              <p class="demo-card-hint">Средняя утилизация за ${data.horizon} нед. (горизонт Gantt). Зелёный &lt; 85%, жёлтый 85–100%, красный — перегруз.</p>
+            </div>
+          </div>
+          <div class="demo-card-body">${loadRows}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function demoHeatColor(pct: number): string {
+  if (pct <= 0) return "var(--surface-2)";
+  if (pct <= 70) return "var(--good-soft)";
+  if (pct <= 100) return "var(--warn-soft)";
+  return "var(--bad-soft)";
+}
+
+function demoHeatBorder(pct: number): string {
+  if (pct > 100) return "var(--bad)";
+  if (pct >= 85) return "var(--warn)";
+  if (pct > 0) return "var(--good)";
+  return "var(--line)";
+}
+
+function demoVariantBHtml(
+  load: Record<string, TeamLoadWeek[]>,
+  overflowByTeam: Record<string, Set<number>>
+): string {
+  const data = demoMonitoringData(load, overflowByTeam);
+  const heatRows = data.teams
+    .map((row) => {
+      const cells = row.weeks
+        .map((lw, idx) => {
+          const pct = utilizationPct(lw.usedPw, lw.capacityPw);
+          const title = `Н${idx + 1}: ${lw.usedPw.toFixed(1)}/${lw.capacityPw} чел·нед (${pct}%)`;
+          return `<span class="demo-heat-cell" title="${escapeAttr(title)}" style="background:${demoHeatColor(pct)};border-color:${demoHeatBorder(pct)}"></span>`;
+        })
+        .join("");
+      const tone = demoLoadTone(row.avgPct);
+      return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(row.team.name)}</strong>
+            <div class="meta">${row.team.capacityPw} чел·нед/нед</div>
+          </td>
+          <td>
+            <div class="demo-heat-cells" style="--demo-weeks:${data.horizon}">${cells}</div>
+          </td>
+          <td class="num demo-tone-${tone}"><strong>${row.avgPct}%</strong></td>
+          <td class="num">${row.peakPct}%</td>
+          <td class="num">${row.overloadWeeks}</td>
+        </tr>`;
+    })
+    .join("");
+
+  const comboRows = data.completeness
+    .map((row) => {
+      const typeRu = row.type === "project" ? "Проект" : "Продукт";
+      const gap =
+        row.withAssignee < row.items
+          ? `без исп. ${row.items - row.withAssignee}`
+          : "исполнители есть";
+      return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(row.name)}</strong>
+            <div class="type-tag">${typeRu} · ${row.items} функц.</div>
+          </td>
+          <td class="num demo-tone-${demoCompletenessTone(row.pct)}"><strong>${row.pct}%</strong></td>
+          <td class="num">${row.uniqueTeams} / ~${row.typicalTeams}</td>
+          <td>${escapeHtml(gap)}</td>
+          <td class="num">${row.withOwner}/${row.items}</td>
+        </tr>`;
+    })
+    .join("");
+
+  return `
+    <div class="demo-page">
+      ${demoDismissBarHtml(
+        "B",
+        "Другой макет тех же метрик: KPI-полоса, тепловая карта загрузки по неделям и сводная таблица комплектации. Демо: комплектация ≈ команда + заказчик + исполнитель."
+      )}
+      <div class="demo-kpis">
+        <div class="demo-kpi demo-tone-${demoCompletenessTone(data.overallPct)}">
+          <div class="label">Комплектация портфеля</div>
+          <div class="value">${data.overallPct}%</div>
+          <div class="hint">${data.active.length} активных функц. · демо-оценка</div>
+        </div>
+        <div class="demo-kpi demo-tone-${demoLoadTone(data.avgLoadPct)}">
+          <div class="label">Средняя загрузка</div>
+          <div class="value">${data.avgLoadPct}%</div>
+          <div class="hint">по командам за ${data.horizon} нед.</div>
+        </div>
+        <div class="demo-kpi demo-tone-${data.overloadTeams ? "bad" : "good"}">
+          <div class="label">Команд с перегрузом</div>
+          <div class="value">${data.overloadTeams}</div>
+          <div class="hint">пик &gt; 100% или недели сверх ёмкости</div>
+        </div>
+        <div class="demo-kpi demo-tone-${data.withoutAssignee ? "warn" : "good"}">
+          <div class="label">Без исполнителя</div>
+          <div class="value">${data.withoutAssignee}</div>
+          <div class="hint">без заказчика: ${data.withoutOwner}</div>
+        </div>
+      </div>
+      <div class="panel demo-card">
+        <div class="panel-header">
+          <div>
+            <h2>Тепловая карта загрузки</h2>
+            <p class="demo-card-hint">Недели 1–${data.horizon} слева направо. Цвет ячейки: свободно / в норме / плотно / перегруз.</p>
+          </div>
+        </div>
+        <div class="demo-heat-wrap">
+          <table class="demo-heat-table">
+            <thead>
+              <tr>
+                <th>Команда</th>
+                <th>Горизонт</th>
+                <th class="num">Ср.</th>
+                <th class="num">Пик</th>
+                <th class="num">Перегруз, нед.</th>
+              </tr>
+            </thead>
+            <tbody>${heatRows || `<tr><td colspan="5" class="empty">Нет команд</td></tr>`}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel demo-card">
+        <div class="panel-header">
+          <div>
+            <h2>Сводка комплектации</h2>
+            <p class="demo-card-hint">Команд: факт / типично (медиана назначений на функц. в этом контейнере).</p>
+          </div>
+        </div>
+        <table class="demo-combo-table">
+          <thead>
+            <tr>
+              <th>Проект / продукт</th>
+              <th class="num">Компл.</th>
+              <th class="num">Команд</th>
+              <th>Исполнители</th>
+              <th class="num">Заказчик</th>
+            </tr>
+          </thead>
+          <tbody>${comboRows || `<tr><td colspan="5" class="empty">Нет активных функциональностей</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function tabContentHtml(
+  rollups: ItemSchedule[],
+  slices: ScheduledSlice[],
+  load: Record<string, TeamLoadWeek[]>,
+  overflowByTeam: Record<string, Set<number>>
+): string {
+  switch (ui.tab) {
+    case "portfolio":
+      return portfolioHtml(rollups, slices);
+    case "queuesTest":
+      return queuesTestHtml(slices, load, overflowByTeam);
+    case "timeline":
+      return timelineHtml(rollups, slices, load, overflowByTeam);
+    case "demoA":
+      return demoVariantAHtml(load, overflowByTeam);
+    case "demoB":
+      return demoVariantBHtml(load, overflowByTeam);
+    case "capacity":
+      return capacityHtml();
+    case "roles":
+      return rolesHtml();
+    case "projects":
+      return projectsTabHtml();
+    case "changelog":
+      return changeLogHtml();
+    case "settings":
+      return settingsHtml(rollups);
+  }
+}
+
 function settingsHtml(rollups: ItemSchedule[]): string {
   const r = state.sizeRanges;
   const active = state.items.filter((i) => i.status !== "done");
@@ -2585,6 +3069,29 @@ function settingsHtml(rollups: ItemSchedule[]): string {
             Якорь шкалы недель Gantt. При смене шкала сдвигается; абсолютные даты работ сохраняются.
             Дата округляется к понедельнику.
           </p>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Демо-вкладки мониторинга</h2>
+        </div>
+        <div class="settings-demo-body">
+          <p class="meta">
+            Вариант А и Б — черновые макеты статистики (комплектация и загрузка).
+            Можно скрыть один или оба; вкладки пропадут из меню. Вернуть — этими флажками.
+          </p>
+          <label class="settings-check">
+            <input type="checkbox" id="showDemoA" ${
+              isDemoVariantVisible("A") ? "checked" : ""
+            } />
+            Показывать вариант А
+          </label>
+          <label class="settings-check">
+            <input type="checkbox" id="showDemoB" ${
+              isDemoVariantVisible("B") ? "checked" : ""
+            } />
+            Показывать вариант Б
+          </label>
         </div>
       </div>
       <div class="callout">
@@ -3554,6 +4061,7 @@ function render() {
   closeResetPop();
   closeColPickerOutside();
   closeOverloadPop();
+  ensureVisibleTab();
   const { slices, rollups, load } = scheduleState();
   const overflowByTeam = scheduledOverloadWeeks(load);
   lastScheduledLoad = load;
@@ -3592,6 +4100,8 @@ function render() {
         <button class="tab ${ui.tab === "portfolio" ? "active" : ""}" data-tab="portfolio">Портфель</button>
         <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Gantt/Сроки</button>
         <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очередь команд</button>
+        ${isDemoVariantVisible("A") ? demoTabButtonHtml("demoA", "Вариант А") : ""}
+        ${isDemoVariantVisible("B") ? demoTabButtonHtml("demoB", "Вариант Б") : ""}
         <button class="tab tab-end ${ui.tab === "capacity" ? "active" : ""}" data-tab="capacity">Команды</button>
         <button class="tab ${ui.tab === "roles" ? "active" : ""}" data-tab="roles">Роли</button>
         <button class="tab ${ui.tab === "projects" ? "active" : ""}" data-tab="projects">Проекты</button>
@@ -3599,23 +4109,7 @@ function render() {
         <button class="tab ${ui.tab === "settings" ? "active" : ""}" data-tab="settings">Настройки</button>
       </div>
       <div class="tab-print-root" id="tabPrintRoot">
-      ${
-        ui.tab === "portfolio"
-          ? portfolioHtml(rollups, slices)
-          : ui.tab === "queuesTest"
-            ? queuesTestHtml(slices, load, overflowByTeam)
-            : ui.tab === "timeline"
-              ? timelineHtml(rollups, slices, load, overflowByTeam)
-              : ui.tab === "capacity"
-                ? capacityHtml()
-                : ui.tab === "roles"
-                  ? rolesHtml()
-                  : ui.tab === "projects"
-                    ? projectsTabHtml()
-                    : ui.tab === "changelog"
-                      ? changeLogHtml()
-                      : settingsHtml(rollups)
-      }
+      ${tabContentHtml(rollups, slices, load, overflowByTeam)}
       </div>
       </div>
     </div>
@@ -3834,6 +4328,27 @@ function bindUiRest() {
       render();
     });
   });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-dismiss-demo]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const which = btn.dataset.dismissDemo === "B" ? "B" : "A";
+      setDemoVariantVisible(which, false);
+    });
+  });
+  document.querySelector<HTMLInputElement>("#showDemoA")?.addEventListener(
+    "change",
+    (ev) => {
+      const on = (ev.currentTarget as HTMLInputElement).checked;
+      setDemoVariantVisible("A", on);
+    }
+  );
+  document.querySelector<HTMLInputElement>("#showDemoB")?.addEventListener(
+    "change",
+    (ev) => {
+      const on = (ev.currentTarget as HTMLInputElement).checked;
+      setDemoVariantVisible("B", on);
+    }
+  );
 
   document.querySelectorAll<HTMLInputElement>(".set-range").forEach((input) => {
     input.addEventListener("input", () => applySizeRangesFromInputs());
