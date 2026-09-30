@@ -3269,7 +3269,7 @@ body.pdf-capturing .table-scroll-top {
   }
 }
 
-/* Demo monitoring tabs (Вариант А / Б) */
+/* Demo monitoring tabs (Вариант А / Мониторинг) */
 .tab-demo {
   display: inline-flex;
   flex-direction: row;
@@ -3290,6 +3290,7 @@ body.pdf-capturing .table-scroll-top {
   font-weight: 400;
   color: var(--muted);
   line-height: 1.1;
+  white-space: nowrap;
 }
 
 .tab-demo.active .tab-demo-mark {

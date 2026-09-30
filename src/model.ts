@@ -232,7 +232,7 @@ export interface AppState {
   changeLog: ChangeLogEntry[];
   /** Demo monitoring tab «Вариант А»; default shown. */
   demoVariantA: boolean;
-  /** Demo monitoring tab «Вариант Б»; default shown. */
+  /** Demo monitoring tab «Мониторинг»; default shown. */
   demoVariantB: boolean;
   version: 3;
 }

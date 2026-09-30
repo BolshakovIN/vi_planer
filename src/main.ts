@@ -88,7 +88,7 @@ const TAB_LABELS: Record<Tab, string> = {
   timeline: "Gantt/Сроки",
   queuesTest: "Очередь команд",
   demoA: "Вариант А",
-  demoB: "Вариант Б",
+  demoB: "Мониторинг",
   capacity: "Команды",
   roles: "Роли",
   projects: "Проекты",
@@ -142,19 +142,28 @@ function setDemoVariantVisible(which: "A" | "B", visible: boolean) {
           : "demoB"
         : "portfolio";
     }
-    logChange(`Скрыт демо-вариант ${which}`, "settings");
+    logChange(`Скрыт ${demoVariantChangeLabel(which)}`, "settings");
   } else {
-    logChange(`Показан демо-вариант ${which}`, "settings");
+    logChange(`Показан ${demoVariantChangeLabel(which)}`, "settings");
   }
   persist();
 }
 
-function demoTabButtonHtml(id: "demoA" | "demoB", name: string): string {
+function demoVariantChangeLabel(which: "A" | "B"): string {
+  return which === "A" ? "демо-вариант А" : "Мониторинг (демо режим)";
+}
+
+function demoTabButtonHtml(
+  id: "demoA" | "demoB",
+  name: string,
+  mark = "*демо"
+): string {
+  const ariaMark = mark.replace(/^\*/, "").trim();
   return `<button type="button" class="tab tab-demo ${
     ui.tab === id ? "active" : ""
-  }" data-tab="${id}" aria-label="${escapeAttr(name)}, демо">
+  }" data-tab="${id}" aria-label="${escapeAttr(name)}, ${escapeAttr(ariaMark)}">
     <span class="tab-demo-name">${escapeHtml(name)}</span>
-    <span class="tab-demo-mark">*демо</span>
+    <span class="tab-demo-mark">${escapeHtml(mark)}</span>
   </button>`;
 }
 
@@ -2773,10 +2782,12 @@ function demoBarRowHtml(
 }
 
 function demoDismissBarHtml(which: "A" | "B", blurb: string): string {
+  const dismissLabel =
+    which === "B" ? "Отказаться от мониторинга" : "Отказаться от варианта";
   return `
     <div class="demo-page-head">
       <p class="meta">${blurb}</p>
-      <button type="button" class="btn btn-ghost demo-dismiss-btn" data-dismiss-demo="${which}">Отказаться от варианта</button>
+      <button type="button" class="btn btn-ghost demo-dismiss-btn" data-dismiss-demo="${which}">${dismissLabel}</button>
     </div>`;
 }
 
@@ -3077,7 +3088,7 @@ function settingsHtml(rollups: ItemSchedule[]): string {
         </div>
         <div class="settings-demo-body">
           <p class="meta">
-            Вариант А и Б — черновые макеты статистики (комплектация и загрузка).
+            Вариант А и Мониторинг — черновые макеты статистики (комплектация и загрузка).
             Можно скрыть один или оба; вкладки пропадут из меню. Вернуть — этими флажками.
           </p>
           <label class="settings-check">
@@ -3090,7 +3101,7 @@ function settingsHtml(rollups: ItemSchedule[]): string {
             <input type="checkbox" id="showDemoB" ${
               isDemoVariantVisible("B") ? "checked" : ""
             } />
-            Показывать вариант Б
+            Показывать Мониторинг (демо режим)
           </label>
         </div>
       </div>
@@ -4101,7 +4112,7 @@ function render() {
         <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Gantt/Сроки</button>
         <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очередь команд</button>
         ${isDemoVariantVisible("A") ? demoTabButtonHtml("demoA", "Вариант А") : ""}
-        ${isDemoVariantVisible("B") ? demoTabButtonHtml("demoB", "Вариант Б") : ""}
+        ${isDemoVariantVisible("B") ? demoTabButtonHtml("demoB", "Мониторинг", "*демо режим") : ""}
         <button class="tab tab-end ${ui.tab === "capacity" ? "active" : ""}" data-tab="capacity">Команды</button>
         <button class="tab ${ui.tab === "roles" ? "active" : ""}" data-tab="roles">Роли</button>
         <button class="tab ${ui.tab === "projects" ? "active" : ""}" data-tab="projects">Проекты</button>
