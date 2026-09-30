@@ -185,8 +185,9 @@ interface UiState {
   /** Gantt horizon in weeks */
   ganttWeeks: number;
   /**
-   * Gantt / Очередь schedule mode — see SCHEDULE_MODE_META.
+   * Gantt / Очередь / Мониторинг schedule mode — see SCHEDULE_MODE_META.
    * Controlled by the two toggle buttons (none active → `manual`).
+   * Shared via localStorage `vi-planer-schedule-mode`.
    */
   scheduleMode: ScheduleMode;
   hiddenCols: HideablePortfolioCol[];
@@ -2849,12 +2850,10 @@ function demoBarRowHtml(
     </div>`;
 }
 
-function demoDismissBarHtml(which: "A" | "B", blurb: string): string {
-  const dismissLabel = "Отказаться от мониторинга";
+function demoPageHeadHtml(blurb: string): string {
   return `
     <div class="demo-page-head">
       <p class="meta">${blurb}</p>
-      <button type="button" class="btn btn-ghost demo-dismiss-btn" data-dismiss-demo="${which}">${dismissLabel}</button>
     </div>`;
 }
 
@@ -2887,10 +2886,12 @@ function demoVariantAHtml(
 
   return `
     <div class="demo-page">
-      ${demoDismissBarHtml(
-        "A",
+      ${demoPageHeadHtml(
         "Демо-макет мониторинга (как в похожих продуктах): загрузка слева, комплектация справа. Цифры из текущего портфеля и расписания; комплектация — доля функц. с командой, заказчиком и исполнителем."
       )}
+      <div class="schedule-toolbar demo-schedule-toolbar">
+        ${scheduleTogglesHtml()}
+      </div>
       <div class="demo-a-grid">
         <div class="panel demo-card">
           <div class="panel-header">
@@ -2982,8 +2983,7 @@ function demoVariantBHtml(
 
   return `
     <div class="demo-page">
-      ${demoDismissBarHtml(
-        "B",
+      ${demoPageHeadHtml(
         "Другой макет тех же метрик: KPI-полоса, тепловая карта загрузки по неделям и сводная таблица комплектации. Демо: комплектация ≈ команда + заказчик + исполнитель."
       )}
       <div class="demo-kpis">
@@ -4430,12 +4430,6 @@ function bindUiRest() {
     });
   });
 
-  document.querySelectorAll<HTMLButtonElement>("[data-dismiss-demo]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const which = btn.dataset.dismissDemo === "B" ? "B" : "A";
-      setDemoVariantVisible(which, false);
-    });
-  });
   document.querySelector<HTMLInputElement>("#showDemoA")?.addEventListener(
     "change",
     (ev) => {

@@ -3427,11 +3427,19 @@ body.pdf-capturing .table-scroll-top {
   line-height: 1.35;
 }
 
-.demo-dismiss-btn {
-  padding: 4px 10px;
-  font-size: 12px;
-  border-radius: 8px;
-  white-space: nowrap;
+.demo-schedule-toolbar {
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.demo-schedule-toolbar .schedule-toggles {
+  flex: 1 1 auto;
+}
+
+.demo-schedule-toolbar .schedule-mode-btn {
+  padding: 6px 10px;
 }
 
 .demo-a-grid {
