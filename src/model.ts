@@ -1,11 +1,23 @@
 export type ItemType = "project" | "product";
 export type ItemStatus = "idea" | "ready" | "in_progress" | "blocked" | "done";
-export type TShirtSize = "S" | "M" | "L";
+export type TShirtSize = "XS" | "S" | "M" | "L" | "XL" | "XXL";
 
+export const TSHIRT_SIZES: TShirtSize[] = ["XS", "S", "M", "L", "XL", "XXL"];
+
+/** Working days in a planning week — effort days ÷ this = person-weeks. */
+export const WORKING_DAYS_PER_WEEK = 5;
+
+/**
+ * T-shirt ranges in calendar days (editable in Settings).
+ * XXL is “80+”; 160 is a sane planning cap (double XL).
+ */
 export const DEFAULT_SIZE_RANGES: Record<TShirtSize, { min: number; max: number }> = {
-  S: { min: 1, max: 2 },
-  M: { min: 2, max: 4 },
-  L: { min: 4, max: 8 },
+  XS: { min: 1, max: 5 },
+  S: { min: 5, max: 10 },
+  M: { min: 10, max: 20 },
+  L: { min: 20, max: 40 },
+  XL: { min: 40, max: 80 },
+  XXL: { min: 80, max: 160 },
 };
 
 /** @deprecated use DEFAULT_SIZE_RANGES */
@@ -13,80 +25,116 @@ export const SIZE_RANGES = DEFAULT_SIZE_RANGES;
 
 export type SizeRanges = Record<TShirtSize, { min: number; max: number }>;
 
-export function normalizeSizeRanges(raw: unknown): SizeRanges {
-  const out: SizeRanges = {
-    S: { ...DEFAULT_SIZE_RANGES.S },
-    M: { ...DEFAULT_SIZE_RANGES.M },
-    L: { ...DEFAULT_SIZE_RANGES.L },
-  };
-  if (!raw || typeof raw !== "object") return out;
-  for (const sz of TSHIRT_SIZES) {
-    const row = (raw as Record<string, unknown>)[sz];
+function cloneSizeRanges(src: SizeRanges): SizeRanges {
+  return Object.fromEntries(
+    TSHIRT_SIZES.map((sz) => [sz, { ...src[sz] }])
+  ) as SizeRanges;
+}
+
+/**
+ * Old packs stored S/M/L only, in weeks, with max ≤ 8.
+ * New ranges are days (XL/XXL max well above 8) — do not divide by 7.
+ */
+function isLegacyWeekSizeRanges(raw: object): boolean {
+  const rec = raw as Record<string, unknown>;
+  if (rec.XS != null || rec.XL != null || rec.XXL != null) return false;
+  const sml: TShirtSize[] = ["S", "M", "L"];
+  let saw = false;
+  for (const sz of sml) {
+    const row = rec[sz];
     if (!row || typeof row !== "object") continue;
-    const rec = row as { min?: unknown; max?: unknown };
-    let min = Math.round(Number(rec.min));
-    let max = Math.round(Number(rec.max));
+    saw = true;
+    const max = Number((row as { max?: unknown }).max);
+    if (!Number.isFinite(max) || max > 8) return false;
+  }
+  return saw;
+}
+
+export function normalizeSizeRanges(raw: unknown): SizeRanges {
+  const out = cloneSizeRanges(DEFAULT_SIZE_RANGES);
+  if (!raw || typeof raw !== "object") return out;
+  const rec = raw as Record<string, unknown>;
+  for (const sz of TSHIRT_SIZES) {
+    const row = rec[sz];
+    if (!row || typeof row !== "object") continue;
+    const bounds = row as { min?: unknown; max?: unknown };
+    let min = Math.round(Number(bounds.min));
+    let max = Math.round(Number(bounds.max));
     if (!Number.isFinite(min)) min = out[sz].min;
     if (!Number.isFinite(max)) max = out[sz].max;
     min = Math.max(1, min);
     max = Math.max(min, max);
     out[sz] = { min, max };
   }
-  // Legacy: ranges stored as calendar days (max > 12) → convert to weeks
-  if (out.S.max > 12 || out.M.max > 12 || out.L.max > 12) {
-    for (const sz of TSHIRT_SIZES) {
-      out[sz] = {
-        min: Math.max(1, Math.round(out[sz].min / 7)),
-        max: Math.max(1, Math.round(out[sz].max / 7)),
-      };
-      if (out[sz].max < out[sz].min) out[sz].max = out[sz].min;
+  if (isLegacyWeekSizeRanges(rec)) {
+    for (const sz of ["S", "M", "L"] as TShirtSize[]) {
+      if (rec[sz] == null) continue;
+      const min = Math.max(1, out[sz].min * WORKING_DAYS_PER_WEEK);
+      const max = Math.max(min, out[sz].max * WORKING_DAYS_PER_WEEK);
+      out[sz] = { min, max };
     }
   }
   return out;
 }
 
-/** Planning effort — midpoint of the size range, in person-weeks */
-export function sizePlanWeeks(
-  size: TShirtSize,
-  ranges: SizeRanges = DEFAULT_SIZE_RANGES
-): number {
-  const r = ranges[size];
-  return Math.round(((r.min + r.max) / 2) * 10) / 10;
-}
-
-/** @deprecated use sizePlanWeeks */
+/** Midpoint of the size range, in calendar days. */
 export function sizePlanDays(
   size: TShirtSize,
   ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): number {
-  return sizePlanWeeks(size, ranges) * 7;
+  const r = ranges[size] ?? DEFAULT_SIZE_RANGES.M;
+  return Math.round(((r.min + r.max) / 2) * 10) / 10;
+}
+
+/** Planning effort — midpoint days / 5 working days, at least 1 week. */
+export function sizePlanWeeks(
+  size: TShirtSize,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): number {
+  const weeks = sizePlanDays(size, ranges) / WORKING_DAYS_PER_WEEK;
+  return Math.max(1, Math.round(weeks * 10) / 10);
+}
+
+/** Screenshot-style caption: «до 5 дней», «5–10 дней», «80+ дней». */
+export function sizePillCaption(
+  size: TShirtSize,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): string {
+  const r = ranges[size] ?? DEFAULT_SIZE_RANGES.M;
+  if (size === "XS") return `до ${r.max} дней`;
+  if (size === "XXL") return `${r.min}+ дней`;
+  return `${r.min}–${r.max} дней`;
 }
 
 export function sizeLabel(
   size: TShirtSize,
   ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): string {
-  const r = ranges[size];
-  return `${size} (${r.min}–${r.max} нед.)`;
+  const r = ranges[size] ?? DEFAULT_SIZE_RANGES.M;
+  if (size === "XS") return `XS (до ${r.max} дн.)`;
+  if (size === "XXL") return `XXL (${r.min}+ дн.)`;
+  return `${size} (${r.min}–${r.max} дн.)`;
 }
 
 export function sizeRangesSummary(ranges: SizeRanges): string {
   return TSHIRT_SIZES.map((sz) => sizeLabel(sz, ranges)).join(", ");
 }
-export const TSHIRT_SIZES: TShirtSize[] = ["S", "M", "L"];
 
 export function parseSize(raw: unknown): TShirtSize {
-  const s = String(raw ?? "").toUpperCase();
-  if (s === "S" || s === "M" || s === "L") return s;
+  const s = String(raw ?? "").toUpperCase().trim();
+  if ((TSHIRT_SIZES as readonly string[]).includes(s)) return s as TShirtSize;
+  if (s === "XXS") return "XS";
+  if (s === "XXXL") return "XXL";
   return "M";
 }
 
-/** Legacy person-week estimate → t-shirt size */
-export function pwToSize(estimatePw: number, capacityPw = 3): TShirtSize {
-  const weeks = estimatePw / Math.max(capacityPw, 0.5);
-  if (weeks <= 2) return "S";
-  if (weeks <= 4) return "M";
-  return "L";
+/** Legacy person-week estimate → nearest t-shirt by planning midpoint. */
+export function pwToSize(
+  estimatePw: number,
+  _capacityPw = 3,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): TShirtSize {
+  return nearestSizeForEstimatePw(estimatePw, ranges);
 }
 
 /** Nearest t-shirt by planning midpoint (person-weeks) */
@@ -213,7 +261,7 @@ export interface AppState {
   items: WorkItem[];
   /** Planning start date ISO (Monday) */
   startDate: string;
-  /** T-shirt size ranges in weeks (editable in Settings) */
+  /** T-shirt size ranges in calendar days (editable in Settings) */
   sizeRanges: SizeRanges;
   /** Заказчики (Roles → picker Заказчик) */
   customers: string[];
@@ -236,7 +284,7 @@ export interface AppState {
   demoVariantB: boolean;
   /**
    * Which portfolio data pack is loaded.
-   * `xlsx-prio-2026-10-v3` — таблица приоритезации; `…-rolled-back` — откат.
+   * `xlsx-prio-2026-10-v4` — таблица приоритезации; `…-rolled-back` — откат.
    */
   portfolioPack?: string;
   version: 3;
@@ -639,12 +687,15 @@ export function totalEstimateWeeks(
   );
 }
 
-/** @deprecated use totalEstimateWeeks */
+/** Sum of assignment midpoints in calendar days. */
 export function totalEstimateDays(
   item: WorkItem,
   ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): number {
-  return totalEstimateWeeks(item, ranges) * 7;
+  return item.assignments.reduce(
+    (sum, a) => sum + sizePlanDays(a.size, ranges),
+    0
+  );
 }
 
 export function itemTeamIds(item: WorkItem): string[] {
@@ -1234,9 +1285,14 @@ export function normalizeState(raw: unknown): AppState | null {
     const fromPw = Number.isFinite(legacyCap) && legacyCap > 0 ? legacyCap : null;
     const fromShirt =
       t.capacity != null
-        ? ({ S: 2, M: 3.5, L: 5 } as Record<TShirtSize, number>)[
-            parseSize(t.capacity)
-          ]
+        ? ({
+            XS: 1.5,
+            S: 2,
+            M: 3.5,
+            L: 5,
+            XL: 7,
+            XXL: 10,
+          } as Record<TShirtSize, number>)[parseSize(t.capacity)]
         : null;
     return {
       id: String(t.id ?? uid("team")),

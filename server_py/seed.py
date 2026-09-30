@@ -5,7 +5,12 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
-from .normalize import DEFAULT_SIZE_RANGES, ensure_unique_priorities, monday_of
+from .normalize import (
+    DEFAULT_SIZE_RANGES,
+    TSHIRT_SIZES,
+    ensure_unique_priorities,
+    monday_of,
+)
 
 
 def _add_weeks(iso: str, weeks: int) -> str:
@@ -25,11 +30,7 @@ def build_seed() -> dict[str, Any]:
     raw: dict[str, Any] = {
         "version": 3,
         "startDate": s0,
-        "sizeRanges": {
-            "S": dict(DEFAULT_SIZE_RANGES["S"]),
-            "M": dict(DEFAULT_SIZE_RANGES["M"]),
-            "L": dict(DEFAULT_SIZE_RANGES["L"]),
-        },
+        "sizeRanges": {sz: dict(DEFAULT_SIZE_RANGES[sz]) for sz in TSHIRT_SIZES},
         "teams": [
             {"id": "platform", "name": "Platform", "capacityPw": 4, "color": "#d60000"},
             {"id": "mobile", "name": "Mobile", "capacityPw": 3, "color": "#455a64"},

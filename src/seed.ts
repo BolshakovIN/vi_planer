@@ -9,9 +9,10 @@ import {
 export const PORTFOLIO_START = "2026-10-01";
 
 /** Applied once to live/cloud state; rollback keeps this from re-applying. */
-export const PORTFOLIO_PACK_ID = "xlsx-prio-2026-10-v3";
+export const PORTFOLIO_PACK_ID = "xlsx-prio-2026-10-v4";
 /** Previous packs — load path fully replaces seed (not a status-only patch). */
-export const PORTFOLIO_PACK_PREV = "xlsx-prio-2026-10-v2";
+export const PORTFOLIO_PACK_PREV = "xlsx-prio-2026-10-v3";
+export const PORTFOLIO_PACK_V2 = "xlsx-prio-2026-10-v2";
 export const PORTFOLIO_PACK_V1 = "xlsx-prio-2026-10";
 export const PORTFOLIO_PACK_ROLLED_BACK = "xlsx-prio-2026-10-rolled-back";
 
@@ -21,9 +22,12 @@ const SEED_RAW: AppState = {
   version: 3,
   startDate: START,
   sizeRanges: {
-    S: { min: 1, max: 2 },
-    M: { min: 2, max: 4 },
-    L: { min: 4, max: 8 },
+    XS: { min: 1, max: 5 },
+    S: { min: 5, max: 10 },
+    M: { min: 10, max: 20 },
+    L: { min: 20, max: 40 },
+    XL: { min: 40, max: 80 },
+    XXL: { min: 80, max: 160 },
   },
   portfolioNotes: "",
   changeLog: [],
@@ -375,7 +379,7 @@ const SEED_RAW: AppState = {
       type: "project",
       backlog: "Единая операционная модель",
       assignments: [
-        { teamId: "crm", size: "S", workStartDate: START },
+        { teamId: "crm", size: "XS", workStartDate: START },
         { teamId: "sayt-lk", size: "L", workStartDate: START }
       ],
       status: "ready",
@@ -456,7 +460,7 @@ const SEED_RAW: AppState = {
       backlog: "Подарочные сертификаты",
       assignments: [
         { teamId: "oms-arm-analitika", size: "L", workStartDate: START },
-        { teamId: "oms-arm-razrabotka", size: "L", workStartDate: START },
+        { teamId: "oms-arm-razrabotka", size: "XL", workStartDate: START },
         { teamId: "oms-arm", size: "M", workStartDate: START }
       ],
       status: "ready",
@@ -476,8 +480,8 @@ const SEED_RAW: AppState = {
       type: "project",
       backlog: "Подарочные сертификаты",
       assignments: [
-        { teamId: "sayt-vybor-analitika", size: "L", workStartDate: START },
-        { teamId: "sayt-vybor-razrabotka", size: "L", workStartDate: START },
+        { teamId: "sayt-vybor-analitika", size: "XL", workStartDate: START },
+        { teamId: "sayt-vybor-razrabotka", size: "XXL", workStartDate: START },
         { teamId: "sayt-vybor", size: "M", workStartDate: START }
       ],
       status: "ready",
@@ -540,7 +544,7 @@ const SEED_RAW: AppState = {
       backlog: "Подарочные сертификаты",
       assignments: [
         { teamId: "oms-arm-analitika", size: "L", workStartDate: START },
-        { teamId: "oms-arm-razrabotka", size: "L", workStartDate: START },
+        { teamId: "oms-arm-razrabotka", size: "XL", workStartDate: START },
         { teamId: "oms-arm", size: "M", workStartDate: START }
       ],
       status: "ready",
@@ -561,7 +565,7 @@ const SEED_RAW: AppState = {
       backlog: "Подарочные сертификаты",
       assignments: [
         { teamId: "sayt-vybor-analitika", size: "L", workStartDate: START },
-        { teamId: "sayt-vybor-razrabotka", size: "L", workStartDate: START },
+        { teamId: "sayt-vybor-razrabotka", size: "XXL", workStartDate: START },
         { teamId: "sayt-vybor", size: "M", workStartDate: START }
       ],
       status: "ready",
@@ -750,7 +754,7 @@ const SEED_RAW: AppState = {
       backlog: "Кредитование Б2Б",
       assignments: [
         { teamId: "sayt-oformlenie-analitika", size: "M", workStartDate: START },
-        { teamId: "sayt-oformlenie-razrabotka", size: "S", workStartDate: START },
+        { teamId: "sayt-oformlenie-razrabotka", size: "XS", workStartDate: START },
         { teamId: "sayt-oformlenie", size: "M", workStartDate: START }
       ],
       status: "ready",
@@ -791,8 +795,8 @@ const SEED_RAW: AppState = {
       type: "project",
       backlog: "Кредитование Б2Б",
       assignments: [
-        { teamId: "sayt-oformlenie-analitika", size: "S", workStartDate: START },
-        { teamId: "sayt-oformlenie-razrabotka", size: "S", workStartDate: START },
+        { teamId: "sayt-oformlenie-analitika", size: "XS", workStartDate: START },
+        { teamId: "sayt-oformlenie-razrabotka", size: "XS", workStartDate: START },
         { teamId: "sayt-oformlenie", size: "M", workStartDate: START }
       ],
       status: "ready",
@@ -813,7 +817,7 @@ const SEED_RAW: AppState = {
       backlog: "Кредитование Б2Б",
       assignments: [
         { teamId: "sayt-oformlenie-analitika", size: "M", workStartDate: START },
-        { teamId: "sayt-oformlenie-razrabotka", size: "S", workStartDate: START },
+        { teamId: "sayt-oformlenie-razrabotka", size: "XS", workStartDate: START },
         { teamId: "sayt-oformlenie", size: "M", workStartDate: START }
       ],
       status: "ready",
@@ -834,7 +838,7 @@ const SEED_RAW: AppState = {
       backlog: "Кредитование Б2Б",
       assignments: [
         { teamId: "sayt-oformlenie-analitika", size: "M", workStartDate: START },
-        { teamId: "sayt-oformlenie-razrabotka", size: "S", workStartDate: START },
+        { teamId: "sayt-oformlenie-razrabotka", size: "XS", workStartDate: START },
         { teamId: "sayt-oformlenie", size: "M", workStartDate: START }
       ],
       status: "ready",
@@ -949,7 +953,7 @@ const SEED_RAW: AppState = {
       backlog: "B2b онлайн платформа",
       assignments: [
         { teamId: "oms-arm", size: "M", workStartDate: START },
-        { teamId: "sayt-lk-b2b", size: "S", workStartDate: START }
+        { teamId: "sayt-lk-b2b", size: "XS", workStartDate: START }
       ],
       status: "ready",
       owner: "—",
@@ -968,8 +972,8 @@ const SEED_RAW: AppState = {
       type: "project",
       backlog: "B2b онлайн платформа",
       assignments: [
-        { teamId: "sayt-lk-b2b", size: "S", workStartDate: START },
-        { teamId: "sayt-lk-b2b-frontend", size: "S", workStartDate: START }
+        { teamId: "sayt-lk-b2b", size: "XS", workStartDate: START },
+        { teamId: "sayt-lk-b2b-frontend", size: "XS", workStartDate: START }
       ],
       status: "ready",
       owner: "—",
@@ -990,7 +994,7 @@ const SEED_RAW: AppState = {
       assignments: [
         { teamId: "sayt-lk-b2b", size: "S", workStartDate: START },
         { teamId: "sayt-lk-b2b-sistemnyy-analitik", size: "S", workStartDate: START },
-        { teamId: "sayt-lk-b2b-frontend", size: "S", workStartDate: START },
+        { teamId: "sayt-lk-b2b-frontend", size: "XS", workStartDate: START },
         { teamId: "sayt-lk-b2b-backend", size: "S", workStartDate: START }
       ],
       status: "ready",
@@ -1012,7 +1016,7 @@ const SEED_RAW: AppState = {
       assignments: [
         { teamId: "sayt-lk-b2b", size: "S", workStartDate: START },
         { teamId: "sayt-lk-b2b-backend", size: "S", workStartDate: START },
-        { teamId: "sayt-lk-b2b-frontend", size: "S", workStartDate: START }
+        { teamId: "sayt-lk-b2b-frontend", size: "XS", workStartDate: START }
       ],
       status: "ready",
       owner: "—",
@@ -1112,7 +1116,7 @@ const SEED_RAW: AppState = {
       assignments: [
         { teamId: "sayt-lk-b2b", size: "M", workStartDate: START },
         { teamId: "sayt-lk-b2b-backend", size: "M", workStartDate: START },
-        { teamId: "sayt-lk-b2b-frontend", size: "S", workStartDate: START }
+        { teamId: "sayt-lk-b2b-frontend", size: "XS", workStartDate: START }
       ],
       status: "ready",
       owner: "—",
@@ -1131,7 +1135,7 @@ const SEED_RAW: AppState = {
       type: "project",
       backlog: "Активные продажи",
       assignments: [
-        { teamId: "analitika", size: "S", workStartDate: START },
+        { teamId: "analitika", size: "XS", workStartDate: START },
         { teamId: "crm", size: "S", workStartDate: START },
         { teamId: "kb", size: "S", workStartDate: START }
       ],
@@ -1235,7 +1239,7 @@ const SEED_RAW: AppState = {
       type: "project",
       backlog: "Активные продажи",
       assignments: [
-        { teamId: "analitika", size: "S", workStartDate: START },
+        { teamId: "analitika", size: "XS", workStartDate: START },
         { teamId: "crm", size: "L", workStartDate: START }
       ],
       status: "ready",
@@ -1295,7 +1299,7 @@ const SEED_RAW: AppState = {
       type: "project",
       backlog: "Активные продажи",
       assignments: [
-        { teamId: "analitika", size: "S", workStartDate: START },
+        { teamId: "analitika", size: "XS", workStartDate: START },
         { teamId: "crm", size: "S", workStartDate: START }
       ],
       status: "ready",
@@ -1354,7 +1358,7 @@ const SEED_RAW: AppState = {
       type: "project",
       backlog: "Активные продажи",
       assignments: [
-        { teamId: "analitika", size: "S", workStartDate: START },
+        { teamId: "analitika", size: "XS", workStartDate: START },
         { teamId: "oms", size: "S", workStartDate: START }
       ],
       status: "ready",
@@ -1412,7 +1416,7 @@ const SEED_RAW: AppState = {
       type: "project",
       backlog: "ДКБ",
       assignments: [
-        { teamId: "sayt-lk-analitika", size: "S", workStartDate: START },
+        { teamId: "sayt-lk-analitika", size: "XS", workStartDate: START },
         { teamId: "sayt-lk-razrabotka", size: "M", workStartDate: START },
         { teamId: "sayt-lk", size: "M", workStartDate: START }
       ],

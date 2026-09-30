@@ -9,13 +9,24 @@ from datetime import date, timedelta
 from typing import Any
 
 DEFAULT_SIZE_RANGES = {
-    "S": {"min": 1, "max": 2},
-    "M": {"min": 2, "max": 4},
-    "L": {"min": 4, "max": 8},
+    "XS": {"min": 1, "max": 5},
+    "S": {"min": 5, "max": 10},
+    "M": {"min": 10, "max": 20},
+    "L": {"min": 20, "max": 40},
+    "XL": {"min": 40, "max": 80},
+    "XXL": {"min": 80, "max": 160},
 }
-TSHIRT_SIZES = ("S", "M", "L")
+TSHIRT_SIZES = ("XS", "S", "M", "L", "XL", "XXL")
+WORKING_DAYS_PER_WEEK = 5
 ITEM_STATUSES = {"idea", "ready", "in_progress", "blocked", "done"}
-CAPACITY_FROM_SHIRT = {"S": 2, "M": 3.5, "L": 5}
+CAPACITY_FROM_SHIRT = {
+    "XS": 1.5,
+    "S": 2,
+    "M": 3.5,
+    "L": 5,
+    "XL": 7,
+    "XXL": 10,
+}
 
 
 def uid(prefix: str) -> str:
@@ -40,27 +51,44 @@ def snap_to_monday(iso: str) -> str:
 
 
 def parse_size(raw: Any) -> str:
-    s = str(raw or "").upper()
+    s = str(raw or "").upper().strip()
     if s in TSHIRT_SIZES:
         return s
+    if s == "XXS":
+        return "XS"
+    if s == "XXXL":
+        return "XXL"
     return "M"
 
 
 def pw_to_size(estimate_pw: float, capacity_pw: float = 3) -> str:
-    weeks = estimate_pw / max(capacity_pw, 0.5)
-    if weeks <= 2:
-        return "S"
-    if weeks <= 4:
-        return "M"
-    return "L"
+    return nearest_size_for_estimate_pw(estimate_pw)
+
+
+def _clone_size_ranges(src: dict[str, dict[str, int]]) -> dict[str, dict[str, int]]:
+    return {sz: dict(src[sz]) for sz in TSHIRT_SIZES}
+
+
+def _is_legacy_week_size_ranges(raw: dict[str, Any]) -> bool:
+    if raw.get("XS") is not None or raw.get("XL") is not None or raw.get("XXL") is not None:
+        return False
+    saw = False
+    for sz in ("S", "M", "L"):
+        row = raw.get(sz)
+        if not isinstance(row, dict):
+            continue
+        saw = True
+        try:
+            mx = float(row.get("max"))
+        except (TypeError, ValueError):
+            return False
+        if not math.isfinite(mx) or mx > 8:
+            return False
+    return saw
 
 
 def normalize_size_ranges(raw: Any) -> dict[str, dict[str, int]]:
-    out = {
-        "S": dict(DEFAULT_SIZE_RANGES["S"]),
-        "M": dict(DEFAULT_SIZE_RANGES["M"]),
-        "L": dict(DEFAULT_SIZE_RANGES["L"]),
-    }
+    out = _clone_size_ranges(DEFAULT_SIZE_RANGES)
     if not isinstance(raw, dict):
         return out
     for sz in TSHIRT_SIZES:
@@ -82,21 +110,40 @@ def normalize_size_ranges(raw: Any) -> dict[str, dict[str, int]]:
         mn = max(1, mn)
         mx = max(mn, mx)
         out[sz] = {"min": mn, "max": mx}
-    if out["S"]["max"] > 12 or out["M"]["max"] > 12 or out["L"]["max"] > 12:
-        for sz in TSHIRT_SIZES:
-            out[sz] = {
-                "min": max(1, round(out[sz]["min"] / 7)),
-                "max": max(1, round(out[sz]["max"] / 7)),
-            }
-            if out[sz]["max"] < out[sz]["min"]:
-                out[sz]["max"] = out[sz]["min"]
+    if _is_legacy_week_size_ranges(raw):
+        for sz in ("S", "M", "L"):
+            if raw.get(sz) is None:
+                continue
+            mn = max(1, out[sz]["min"] * WORKING_DAYS_PER_WEEK)
+            mx = max(mn, out[sz]["max"] * WORKING_DAYS_PER_WEEK)
+            out[sz] = {"min": mn, "max": mx}
     return out
 
 
-def size_plan_weeks(size: str, ranges: dict[str, dict[str, int]] | None = None) -> float:
+def size_plan_days(size: str, ranges: dict[str, dict[str, int]] | None = None) -> float:
     ranges = ranges or DEFAULT_SIZE_RANGES
     r = ranges.get(size) or DEFAULT_SIZE_RANGES["M"]
     return round(((r["min"] + r["max"]) / 2) * 10) / 10
+
+
+def size_plan_weeks(size: str, ranges: dict[str, dict[str, int]] | None = None) -> float:
+    weeks = size_plan_days(size, ranges) / WORKING_DAYS_PER_WEEK
+    return max(1.0, round(weeks * 10) / 10)
+
+
+def nearest_size_for_estimate_pw(
+    estimate_pw: float, ranges: dict[str, dict[str, int]] | None = None
+) -> str:
+    ranges = ranges or DEFAULT_SIZE_RANGES
+    target = max(0.1, estimate_pw)
+    best = "M"
+    best_dist = math.inf
+    for sz in TSHIRT_SIZES:
+        dist = abs(size_plan_weeks(sz, ranges) - target)
+        if dist < best_dist:
+            best_dist = dist
+            best = sz
+    return best
 
 
 RICE_IMPACT_OPTIONS = (0.25, 0.5, 1, 2, 3)

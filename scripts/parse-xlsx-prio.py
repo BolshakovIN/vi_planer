@@ -14,17 +14,17 @@ OUT = Path("/Users/ivanbolsakov/vi_planer/scripts/xlsx-prio.json")
 NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
 SIZE_MAP = {
-    "XXS": "S",
-    "XS": "S",
+    "XXS": "XS",
+    "XS": "XS",
     "S": "S",
     "M": "M",
     "L": "L",
-    "XL": "L",
-    "XXL": "L",
-    "XXXL": "L",
+    "XL": "XL",
+    "XXL": "XXL",
+    "XXXL": "XXL",
 }
 SIZE_RE = r"(XXXL|XXL|XL|XS|XXS|S|M|L)"
-RANK = {"S": 0, "M": 1, "L": 2}
+RANK = {"XS": 0, "S": 1, "M": 2, "L": 3, "XL": 4, "XXL": 5}
 
 ROLE_ALIASES = [
     ("прод. проработка", "прод. проработка"),
@@ -277,6 +277,134 @@ def slug(name: str) -> str:
     return s[:48] or "team"
 
 
+SEED_TS = Path("/Users/ivanbolsakov/vi_planer/src/seed.ts")
+
+SIZE_RANGES_TS = """    XS: { min: 1, max: 5 },
+    S: { min: 5, max: 10 },
+    M: { min: 10, max: 20 },
+    L: { min: 20, max: 40 },
+    XL: { min: 40, max: 80 },
+    XXL: { min: 80, max: 160 },"""
+
+
+def ts_str(value: str) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def write_seed_ts(team_rows: list[dict], items: list[dict]) -> None:
+    name_to_id = {t["name"]: t["id"] for t in team_rows}
+    team_blocks = []
+    for t in team_rows:
+        team_blocks.append(
+            "    {\n"
+            f"      id: {ts_str(t['id'])},\n"
+            f"      name: {ts_str(t['name'])},\n"
+            f"      capacityPw: {t['capacityPw']},\n"
+            f"      color: {ts_str(t['color'])},\n"
+            "    }"
+        )
+
+    item_blocks = []
+    for it in items:
+        rank = int(it["rank"])
+        assigns_lines = []
+        for a in it["assigns"]:
+            tid = name_to_id.get(a["team"]) or slug(a["team"])
+            assigns_lines.append(
+                f'        {{ teamId: {ts_str(tid)}, size: {ts_str(a["size"])}, workStartDate: START }}'
+            )
+        assigns_joined = ",\n".join(assigns_lines)
+        notes = it.get("notes") or []
+        note = notes[0] if notes else ""
+        notes_line = f"      notes: {ts_str(note)},\n" if note else ""
+        item_blocks.append(
+            "    {\n"
+            f'      id: {ts_str(f"x{rank:03d}")},\n'
+            f"      title: {ts_str(it['title'])},\n"
+            '      type: "project",\n'
+            f"      backlog: {ts_str(it['project'])},\n"
+            "      assignments: [\n"
+            f"{assigns_joined}\n"
+            "      ],\n"
+            f'      status: {ts_str(it.get("status") or "ready")},\n'
+            '      owner: "—",\n'
+            '      assignee: "",\n'
+            "      reach: 0,\n"
+            "      impact: 1,\n"
+            "      confidence: 0.7,\n"
+            f"{notes_line}"
+            f"      manualRank: {rank},\n"
+            "      cashFlow12m: null,\n"
+            "      roi12m: null,\n"
+            "    }"
+        )
+
+    teams_joined = ",\n".join(team_blocks)
+    items_joined = ",\n".join(item_blocks)
+    body = f"""import {{
+  AppState,
+  ensureUniquePriorities,
+  uniqCatalogNames,
+  containerNameFromBacklog,
+}} from "./model";
+
+/** ISO start for the Oct 2026 prioritization pack (all assignments). */
+export const PORTFOLIO_START = "2026-10-01";
+
+/** Applied once to live/cloud state; rollback keeps this from re-applying. */
+export const PORTFOLIO_PACK_ID = "xlsx-prio-2026-10-v4";
+/** Previous packs — load path fully replaces seed (not a status-only patch). */
+export const PORTFOLIO_PACK_PREV = "xlsx-prio-2026-10-v3";
+export const PORTFOLIO_PACK_V2 = "xlsx-prio-2026-10-v2";
+export const PORTFOLIO_PACK_V1 = "xlsx-prio-2026-10";
+export const PORTFOLIO_PACK_ROLLED_BACK = "xlsx-prio-2026-10-rolled-back";
+
+const START = PORTFOLIO_START;
+
+const SEED_RAW: AppState = {{
+  version: 3,
+  startDate: START,
+  sizeRanges: {{
+{SIZE_RANGES_TS}
+  }},
+  portfolioNotes: "",
+  changeLog: [],
+  demoVariantA: true,
+  demoVariantB: true,
+  portfolioPack: PORTFOLIO_PACK_ID,
+  teams: [
+{teams_joined},
+  ],
+  customers: [],
+  executors: [],
+  projects: [],
+  products: [],
+  items: [
+{items_joined},
+  ],
+}};
+
+export const SEED: AppState = {{
+  ...SEED_RAW,
+  customers: uniqCatalogNames(SEED_RAW.items.map((i) => i.owner)),
+  executors: uniqCatalogNames(SEED_RAW.items.map((i) => i.assignee)),
+  projects: uniqCatalogNames(
+    SEED_RAW.items
+      .filter((i) => i.type === "project")
+      .map((i) => containerNameFromBacklog(i.backlog))
+  ),
+  products: uniqCatalogNames(
+    SEED_RAW.items
+      .filter((i) => i.type === "product")
+      .map((i) => containerNameFromBacklog(i.backlog))
+  ),
+  items: ensureUniquePriorities(SEED_RAW.items),
+}};
+"""
+    SEED_TS.write_text(body, encoding="utf-8")
+    print("seed", len(team_rows), "teams", len(items), "items ->", SEED_TS)
+
+
 def main() -> None:
     rows = load_sheet(XLSX)
 
@@ -379,6 +507,7 @@ def main() -> None:
         encoding="utf-8",
     )
     print("teams", len(team_rows), "items", len(items), "->", OUT)
+    write_seed_ts(team_rows, items)
 
 
 if __name__ == "__main__":

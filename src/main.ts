@@ -15,7 +15,9 @@ import {
   sortByPriority,
   totalEstimateWeeks,
   sizePlanWeeks,
+  sizePlanDays,
   sizeLabel,
+  sizePillCaption,
   sizeRangesSummary,
   parseSize,
   TSHIRT_SIZES,
@@ -1029,12 +1031,12 @@ function columnsHelpHtml(): string {
         <div><span class="cols-help-k">Приоритет</span> — сквозной ранг (1 = выше); тяните строку за ⋮⋮, чтобы переставить. Сортировка других колонок приоритет не меняет</div>
         <div><span class="cols-help-k">Тип</span> — продукт или проект и название (колонка «Название проекта / продукта»)</div>
         <div><span class="cols-help-k">Функциональность</span> — набор задач → бизнес-результат с эффектом; в ячейке — название, заказчик и исполнитель</div>
-        <div><span class="cols-help-k">Команды</span> — кто делает, маечная оценка (S/M/L) и план старта</div>
+        <div><span class="cols-help-k">Команды</span> — кто делает, маечная оценка (XS–XXL) и план старта</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
         <div><span class="cols-help-k">RICE</span> — (Охват × Влияние × Уверенность) / Трудозатраты (чел·нед по маечной оценке)</div>
         <div><span class="cols-help-k">ЧП, млрд ₽</span> — чистая прибыль за 12 мес. (карточка функциональности)</div>
         <div><span class="cols-help-k">ROI, %</span> — ROI за 12 мес. (карточка функциональности)</div>
-        <div><span class="cols-help-k">Маечная оценка</span> — S / M / L (недели в Настройках)</div>
+        <div><span class="cols-help-k">Маечная оценка</span> — XS / S / M / L / XL / XXL (дни в Настройках)</div>
         <div><span class="cols-help-k">Дата завершения</span> — когда закончила последняя команда (bottleneck)</div>
       </div>
     </details>
@@ -2454,7 +2456,7 @@ function teamsManageHtml(): string {
   return `
     <div class="callout">
       <strong>Ёмкость</strong> — сколько человеко-недель команда может отдать за календарную неделю.
-      Оценки функциональностей задаются маечной оценкой (недели — в блоке ниже).
+      Оценки функциональностей задаются маечной оценкой (дни — в Настройках, для плана ÷5 в недели).
     </div>
     <div class="panel panel-sticky-host">
       <div class="panel-sticky">
@@ -3091,9 +3093,12 @@ function settingsHtml(rollups: ItemSchedule[]): string {
   const rows = TSHIRT_SIZES.map(
     (sz) => `
     <div class="size-range-row">
-      <div class="size-range-label"><span class="size-badge size-badge-lg">${sz}</span></div>
+      <div class="size-range-label">
+        <span class="size-badge size-badge-lg">${sz}</span>
+        <span class="size-range-caption">${sizePillCaption(sz, r)}</span>
+      </div>
       <label class="size-range-field">
-        <span class="meta">от, нед.</span>
+        <span class="meta">от, дн.</span>
         <input
           type="number"
           id="set_${sz}_min"
@@ -3106,7 +3111,7 @@ function settingsHtml(rollups: ItemSchedule[]): string {
         />
       </label>
       <label class="size-range-field">
-        <span class="meta">до, нед.</span>
+        <span class="meta">до, дн.</span>
         <input
           type="number"
           id="set_${sz}_max"
@@ -3120,7 +3125,7 @@ function settingsHtml(rollups: ItemSchedule[]): string {
       </label>
       <div class="size-range-plan">
         <span class="meta">для плана</span>
-        <strong class="mono" data-plan="${sz}">${sizePlanWeeks(sz, r)} нед.</strong>
+        <strong class="mono" data-plan="${sz}">${sizePlanDays(sz, r)} дн. → ${sizePlanWeeks(sz, r)} нед.</strong>
       </div>
     </div>
   `
@@ -3172,13 +3177,13 @@ function settingsHtml(rollups: ItemSchedule[]): string {
         </div>
       </div>
       <div class="callout">
-        Диапазоны маечной оценки — <strong>сколько недель</strong> заложено в оценке проекта (S / M / L). Для плана берётся середина диапазона.
+        Диапазоны маечной оценки — <strong>сколько дней</strong> заложено в оценке (XS–XXL). Для плана берётся середина диапазона и делится на 5 рабочих дней (не меньше 1 нед.).
         Изменения сразу перестраивают дату реализации и Gantt.
       </div>
       <div class="panel panel-sticky-host">
         <div class="panel-sticky">
           <div class="panel-header">
-            <h2>Маечная оценка (S / M / L)</h2>
+            <h2>Маечная оценка (XS–XXL)</h2>
             <button type="button" class="btn" id="resetSizeRanges">Сбросить по умолчанию</button>
           </div>
         </div>
@@ -3206,7 +3211,7 @@ function settingsHtml(rollups: ItemSchedule[]): string {
         <div class="settings-danger-body">
           <p class="settings-danger-warn">
             Текущий набор: приоритезация доп. проектов, старт у всех
-            <strong>01.10.2026</strong>, оценка — из таблицы (XS/XL сведены к S/M/L).
+            <strong>01.10.2026</strong>, оценка — из таблицы (XS–XXL как в исходнике).
             ${
               state.portfolioPack === PORTFOLIO_PACK_ID
                 ? "Пакет загружен."
@@ -3258,7 +3263,11 @@ function patchSettingsPreview(rollups: ItemSchedule[]) {
   for (const sz of TSHIRT_SIZES) {
     document
       .querySelector(`[data-plan="${sz}"]`)
-      ?.replaceChildren(document.createTextNode(`${sizePlanWeeks(sz, r)} нед.`));
+      ?.replaceChildren(
+        document.createTextNode(
+          `${sizePlanDays(sz, r)} дн. → ${sizePlanWeeks(sz, r)} нед.`
+        )
+      );
   }
   const ends = rollups.map((s) => s.endWeek);
   const horizon = ends.length ? Math.max(...ends) + 1 : 0;
