@@ -302,6 +302,12 @@ textarea {
   max-width: 42rem;
 }
 
+.settings-pack-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -438,8 +444,33 @@ textarea {
   border-bottom: none;
 }
 
+.portfolio-sticky .panel-header {
+  gap: 6px 10px;
+  padding: 6px 12px 4px;
+  align-items: center;
+}
+
+.portfolio-sticky .panel-header h2 {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.portfolio-sticky .filters {
+  gap: 5px;
+}
+
+.portfolio-sticky .filters select,
+.portfolio-sticky .filters input,
+.portfolio-sticky .filters .col-picker-toggle,
+.portfolio-sticky .filters .btn {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
 .portfolio-sticky .table-scroll-top {
-  margin: 0 16px 6px;
+  margin: 0 12px 2px;
   background: var(--surface);
 }
 
@@ -464,6 +495,7 @@ textarea {
 .portfolio-thead-table thead th {
   background: var(--surface-2);
   box-shadow: none;
+  padding: 4px 8px;
 }
 
 .panel-header {
@@ -518,6 +550,46 @@ table {
 .portfolio-table td {
   overflow: hidden;
   min-width: 0;
+  padding: 5px 8px;
+  vertical-align: middle;
+}
+
+.portfolio-table .prio-input,
+.portfolio-table .prio-num {
+  height: 28px;
+  width: 44px;
+  min-width: 36px;
+  font-size: 15px;
+  border-radius: 8px;
+  padding: 0 4px;
+}
+
+.portfolio-table .drag-handle {
+  height: 26px;
+  width: 18px;
+}
+
+.portfolio-table .title-cell .name {
+  margin-bottom: 0;
+  line-height: 1.25;
+}
+
+.portfolio-table .type-container-name,
+.portfolio-table .type-team-count {
+  margin-top: 1px;
+}
+
+.portfolio-table .teams-stack {
+  gap: 2px;
+}
+
+.portfolio-table .eta-teams {
+  margin-top: 1px;
+  gap: 0;
+}
+
+.portfolio-table .estimate-cell .meta {
+  margin-top: 0;
 }
 
 .portfolio-table .col-hidden {
@@ -1247,8 +1319,10 @@ tr.clickable:hover td {
 }
 
 .title-cell .name {
-  font-weight: 600;
-  margin-bottom: 2px;
+  font-weight: 500;
+  font-size: 12px;
+  margin-bottom: 0;
+  line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
@@ -1675,6 +1749,28 @@ body.prio-dragging {
 
 .status-cell {
   vertical-align: middle !important;
+}
+
+.status-select {
+  display: inline-block;
+  max-width: 100%;
+  height: 24px;
+  margin: 0;
+  padding: 0 4px 0 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 22px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.status-select:hover,
+.status-select:focus {
+  outline: none;
+  border-color: color-mix(in srgb, currentColor 35%, var(--line));
 }
 
 .rice-cell,

@@ -51,13 +51,16 @@ import {
   CHANGE_LOG_MAX,
   prependChangeLog,
 } from "./model";
-import { SEED } from "./seed";
+import { SEED, PORTFOLIO_PACK_ID } from "./seed";
 import {
   loadState,
   saveState,
   getSyncStatus,
   onSyncStatusChange,
   syncStatusLabel,
+  hasPortfolioPackBackup,
+  applyCurrentPortfolioPack,
+  rollbackPortfolioPack,
 } from "./storage";
 import {
   downloadMarkdownAsPdf,
@@ -229,6 +232,54 @@ let lastOverflowByTeam: Record<string, Set<number>> = {};
 let overloadHoverTimer: number | null = null;
 let overloadPinned = false;
 
+/** Ignore [data-edit] row clicks after inline status change (native <select> fires click after change). */
+let suppressPortfolioRowEditUntil = 0;
+let suppressPortfolioRowEditCleanup: (() => void) | null = null;
+
+function isPortfolioStatusChrome(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return Boolean(
+    target.closest(".status-select, .status-cell, [data-status-id]")
+  );
+}
+
+function armSuppressPortfolioRowEdit() {
+  ui.editingId = null;
+  ui.creating = false;
+  suppressPortfolioRowEditUntil = performance.now() + 800;
+  suppressPortfolioRowEditCleanup?.();
+  const swallow = (e: Event) => {
+    if (performance.now() >= suppressPortfolioRowEditUntil) {
+      suppressPortfolioRowEditCleanup?.();
+      return;
+    }
+    const t = e.target;
+    if (!(t instanceof Element)) return;
+    if (
+      t.closest("[data-edit], .portfolio-table, .status-select, .status-cell")
+    ) {
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    }
+  };
+  document.addEventListener("click", swallow, true);
+  document.addEventListener("pointerup", swallow, true);
+  const tid = window.setTimeout(() => {
+    document.removeEventListener("click", swallow, true);
+    document.removeEventListener("pointerup", swallow, true);
+    if (suppressPortfolioRowEditCleanup === cleanup) {
+      suppressPortfolioRowEditCleanup = null;
+    }
+  }, 800);
+  const cleanup = () => {
+    window.clearTimeout(tid);
+    document.removeEventListener("click", swallow, true);
+    document.removeEventListener("pointerup", swallow, true);
+    suppressPortfolioRowEditCleanup = null;
+  };
+  suppressPortfolioRowEditCleanup = cleanup;
+}
+
 /** Append a Russian activity-log entry (newest first, capped). */
 function logChange(message: string, kind?: ChangeLogKind) {
   state.changeLog = prependChangeLog(state.changeLog, message, kind);
@@ -351,6 +402,14 @@ function teamCapacityStripHtml(
   return `<div class="cap-strip" style="--team-color:${team.color}">${cells}</div>`;
 }
 
+const ITEM_STATUSES: ItemStatus[] = [
+  "idea",
+  "ready",
+  "in_progress",
+  "blocked",
+  "done",
+];
+
 function statusLabel(s: ItemStatus): string {
   const map: Record<ItemStatus, string> = {
     idea: "Идея",
@@ -360,6 +419,14 @@ function statusLabel(s: ItemStatus): string {
     done: "Готово",
   };
   return map[s];
+}
+
+function statusSelectHtml(item: WorkItem): string {
+  const opts = ITEM_STATUSES.map(
+    (s) =>
+      `<option value="${s}" ${item.status === s ? "selected" : ""}>${statusLabel(s)}</option>`
+  ).join("");
+  return `<select class="status-select badge-status-${item.status}" data-status-id="${item.id}" data-stop-edit aria-label="Статус">${opts}</select>`;
 }
 
 function rollupById(rollups: ItemSchedule[]): Map<string, ItemSchedule> {
@@ -1032,7 +1099,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
             ${ownerSub ? `<div class="meta">${ownerSub}</div>` : ""}
           </td>
           <td${tdAttrs("teams", "teams-cell")}>${teamsCellHtml(item)}</td>
-          <td${tdAttrs("status", "status-cell")}><span class="badge badge-status-${item.status}">${statusLabel(item.status)}</span></td>
+          <td${tdAttrs("status", "status-cell")} data-stop-edit>${statusSelectHtml(item)}</td>
           <td${tdAttrs("rice", "rice-cell mono metric-num")}>${score}</td>
           <td${tdAttrs("cashFlow", "finance-cell mono metric-num")}>${formatMlrd(item.cashFlow12m)}</td>
           <td${tdAttrs("roi", "finance-cell mono metric-num")}>${formatPercent(item.roi12m)}</td>
@@ -1075,8 +1142,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
             </select>
             <select id="statusFilter">
               <option value="all">Все статусы</option>
-              ${(["idea", "ready", "in_progress", "blocked", "done"] as ItemStatus[])
-                .map(
+              ${ITEM_STATUSES.map(
                   (s) =>
                     `<option value="${s}" ${ui.statusFilter === s ? "selected" : ""}>${statusLabel(s)}</option>`
                 )
@@ -3133,6 +3199,30 @@ function settingsHtml(rollups: ItemSchedule[]): string {
           </div>
         </div>
       </div>
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Портфель из таблицы</h2>
+        </div>
+        <div class="settings-danger-body">
+          <p class="settings-danger-warn">
+            Текущий набор: приоритезация доп. проектов, старт у всех
+            <strong>01.10.2026</strong>, оценка — из таблицы (XS/XL сведены к S/M/L).
+            ${
+              state.portfolioPack === PORTFOLIO_PACK_ID
+                ? "Пакет загружен."
+                : state.portfolioPack?.endsWith("rolled-back")
+                  ? "Сейчас показаны данные до загрузки (откат)."
+                  : "Пакет ещё не применялся к этим данным."
+            }
+          </p>
+          <div class="settings-pack-actions">
+            <button type="button" class="btn" id="rollbackPrioBtn" ${
+              hasPortfolioPackBackup() ? "" : "disabled"
+            }>Откатить загрузку</button>
+            <button type="button" class="btn" id="reapplyPrioBtn">Загрузить таблицу снова</button>
+          </div>
+        </div>
+      </div>
       <div class="panel settings-danger-zone">
         <div class="panel-header">
           <h2>Данные</h2>
@@ -3217,7 +3307,7 @@ function editorHtml(item: WorkItem | null): string {
           workStartDate: state.startDate,
         },
       ],
-      status: "idea",
+      status: "ready",
       owner: "",
       assignee: "",
       reach: 100,
@@ -3307,8 +3397,7 @@ function editorHtml(item: WorkItem | null): string {
               <div class="field">
                 <label>Статус</label>
                 <select id="f_status">
-                  ${(["idea", "ready", "in_progress", "blocked", "done"] as ItemStatus[])
-                    .map(
+                  ${ITEM_STATUSES.map(
                       (s) =>
                         `<option value="${s}" ${draft.status === s ? "selected" : ""}>${statusLabel(s)}</option>`
                     )
@@ -4444,20 +4533,25 @@ function bindUiRest() {
     });
   });
 
-  document.querySelectorAll<HTMLTableRowElement>("[data-edit]").forEach((row) => {
-    row.addEventListener("click", (e) => {
+  const portfolioBody = document.querySelector("#portfolioBody");
+  if (portfolioBody) {
+    portfolioBody.addEventListener("click", (e) => {
+      if (performance.now() < suppressPortfolioRowEditUntil) return;
       const t = e.target as HTMLElement;
+      if (isPortfolioStatusChrome(t)) return;
       if (
         t.closest(
-          "[data-stop-edit], .prio-input, .prio-edit, #appConfirmPop, .drag-handle"
+          "[data-stop-edit], .prio-input, .prio-edit, .status-select, .status-cell, #appConfirmPop, .drag-handle"
         )
       )
         return;
+      const row = t.closest<HTMLTableRowElement>("[data-edit]");
+      if (!row) return;
       ui.editingId = row.dataset.edit ?? null;
       ui.creating = false;
       render();
     });
-  });
+  }
 
   bindPortfolioDrag();
 
@@ -4512,6 +4606,38 @@ function bindUiRest() {
       }
     });
     input.addEventListener("change", commit);
+  });
+
+  document.querySelectorAll<HTMLSelectElement>(".status-select").forEach((sel) => {
+    const stop = (e: Event) => {
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    };
+    sel.addEventListener("click", stop, true);
+    sel.addEventListener("mousedown", stop, true);
+    sel.addEventListener("pointerdown", stop, true);
+    sel.addEventListener("pointerup", stop, true);
+    sel.addEventListener("change", () => {
+      const itemId = sel.dataset.statusId;
+      const item = state.items.find((i) => i.id === itemId);
+      if (!item) return;
+      const next = sel.value as ItemStatus;
+      if (!ITEM_STATUSES.includes(next) || next === item.status) return;
+      const prev = item.status;
+      item.status = next;
+      sel.className = `status-select badge-status-${next}`;
+      logChange(
+        `Статус «${item.title}»: ${statusLabel(prev)} → ${statusLabel(next)}`,
+        "item"
+      );
+      armSuppressPortfolioRowEdit();
+      saveState(state);
+      window.setTimeout(() => {
+        ui.editingId = null;
+        ui.creating = false;
+        render();
+      }, 0);
+    });
   });
 
   document.querySelectorAll<HTMLTableCellElement>("[data-sort]").forEach((th) => {
@@ -4696,7 +4822,7 @@ function bindUiRest() {
         type: "product" as ItemType,
         backlog: "",
         assignments,
-        status: "idea" as ItemStatus,
+        status: "ready" as ItemStatus,
         owner: "",
         assignee: "",
         reach: 100,
@@ -5030,6 +5156,35 @@ function bindUiRest() {
     ).href;
     presBtn.setAttribute("download", "VI-Planer-presentation.pdf");
   }
+
+  document.querySelector("#rollbackPrioBtn")?.addEventListener("click", (e) => {
+    const btn = e.currentTarget as HTMLElement;
+    askAppConfirm(
+      btn,
+      "Вернуть портфель, который был до загрузки таблицы?",
+      () => {
+        const restored = rollbackPortfolioPack();
+        if (!restored) return;
+        state = restored;
+        persist();
+      },
+      () => undefined
+    );
+  });
+
+  document.querySelector("#reapplyPrioBtn")?.addEventListener("click", (e) => {
+    const btn = e.currentTarget as HTMLElement;
+    askAppConfirm(
+      btn,
+      "Заменить текущий портфель таблицей приоритезации (01.10.2026)?",
+      () => {
+        const { state: next } = applyCurrentPortfolioPack(state, { force: true });
+        state = next;
+        persist();
+      },
+      () => undefined
+    );
+  });
 
   document.querySelector("#resetBtn")?.addEventListener("click", (e) => {
     e.stopPropagation();

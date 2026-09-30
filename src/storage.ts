@@ -3,11 +3,17 @@ import {
   AppState,
   ensureUniquePriorities,
   normalizeState,
+  prependChangeLog,
 } from "./model";
-import { SEED } from "./seed";
+import {
+  SEED,
+  PORTFOLIO_PACK_ID,
+  PORTFOLIO_PACK_ROLLED_BACK,
+} from "./seed";
 
 const STORAGE_KEY = "vi-planer-v3";
 const SUPABASE_ROW_ID = "main";
+const PORTFOLIO_BACKUP_KEY = "vi-planer-v3-pre-xlsx-prio";
 
 export type SyncStatus = "idle" | "loading" | "saved" | "error" | "offline";
 
@@ -145,6 +151,75 @@ async function saveToSupabase(state: AppState): Promise<boolean> {
   }
 }
 
+export function hasPortfolioPackBackup(): boolean {
+  try {
+    return Boolean(localStorage.getItem(PORTFOLIO_BACKUP_KEY));
+  } catch {
+    return false;
+  }
+}
+
+function writePortfolioBackup(state: AppState) {
+  try {
+    if (localStorage.getItem(PORTFOLIO_BACKUP_KEY)) return;
+    localStorage.setItem(PORTFOLIO_BACKUP_KEY, JSON.stringify(state));
+  } catch {
+    /* quota */
+  }
+}
+
+/** Replace live portfolio with the Oct-2026 xlsx pack (once, unless re-applied). */
+export function applyCurrentPortfolioPack(
+  current: AppState,
+  opts: { force?: boolean } = {}
+): { state: AppState; applied: boolean } {
+  const pack = current.portfolioPack;
+  if (!opts.force && pack === PORTFOLIO_PACK_ID) {
+    return { state: current, applied: false };
+  }
+  if (!opts.force && pack === PORTFOLIO_PACK_ROLLED_BACK) {
+    return { state: current, applied: false };
+  }
+  // Older packs (v1, PREV/v2, …) fully replace with current seed so team assignments stay correct.
+  writePortfolioBackup(current);
+  try {
+    localStorage.setItem("vi-planer-schedule-mode", "manual");
+  } catch {
+    /* ignore */
+  }
+  const next = structuredClone(SEED);
+  next.demoVariantA = current.demoVariantA;
+  next.demoVariantB = current.demoVariantB;
+  next.changeLog = prependChangeLog(
+    current.changeLog,
+    "Загружен портфель из таблицы приоритезации (старт 01.10.2026)",
+    "system"
+  );
+  next.portfolioPack = PORTFOLIO_PACK_ID;
+  return { state: next, applied: true };
+}
+
+export function rollbackPortfolioPack(): AppState | null {
+  try {
+    const raw = localStorage.getItem(PORTFOLIO_BACKUP_KEY);
+    if (!raw) return null;
+    const normalized = normalizeState(JSON.parse(raw));
+    if (!normalized) return null;
+    normalized.portfolioPack = PORTFOLIO_PACK_ROLLED_BACK;
+    normalized.changeLog = prependChangeLog(
+      normalized.changeLog,
+      "Откат загрузки приоритезации — восстановлены данные до таблицы",
+      "system"
+    );
+    return {
+      ...normalized,
+      items: ensureUniquePriorities(normalized.items, normalized.sizeRanges),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function loadState(): Promise<AppState> {
   setSyncStatus("loading");
 
@@ -154,9 +229,14 @@ export async function loadState(): Promise<AppState> {
     loadLocal() ??
     structuredClone(SEED);
 
-  saveLocal(remote);
-  setSyncStatus(getSupabase() || usesRemoteApi() ? "saved" : "idle");
-  return remote;
+  const { state, applied } = applyCurrentPortfolioPack(remote);
+  if (applied) {
+    saveState(state);
+  } else {
+    saveLocal(state);
+    setSyncStatus(getSupabase() || usesRemoteApi() ? "saved" : "idle");
+  }
+  return state;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;

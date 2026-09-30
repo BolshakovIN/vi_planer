@@ -234,6 +234,11 @@ export interface AppState {
   demoVariantA: boolean;
   /** Demo monitoring tab «Мониторинг»; default shown. */
   demoVariantB: boolean;
+  /**
+   * Which portfolio data pack is loaded.
+   * `xlsx-prio-2026-10-v3` — таблица приоритезации; `…-rolled-back` — откат.
+   */
+  portfolioPack?: string;
   version: 3;
 }
 
@@ -1361,6 +1366,10 @@ export function normalizeState(raw: unknown): AppState | null {
     changeLog: parseChangeLog(data.changeLog),
     demoVariantA: parseDemoVariantShown(data, "A"),
     demoVariantB: parseDemoVariantShown(data, "B"),
+    portfolioPack:
+      data.portfolioPack != null && String(data.portfolioPack).trim()
+        ? String(data.portfolioPack).trim()
+        : undefined,
     items: ensureUniquePriorities(items, parsedRanges),
   };
 }
