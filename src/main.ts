@@ -60,6 +60,8 @@ import {
   ASSIGNMENT_DEMAND_STATUSES,
   ASSIGNMENT_DEMAND_LABELS,
   resolveAssignmentDemandStatus,
+  makeDefaultAssignmentRoles,
+  AssignmentRole,
 } from "./model";
 import { SEED, PORTFOLIO_PACK_ID } from "./seed";
 import {
@@ -3123,6 +3125,7 @@ function newDemandAssignment(teamId: string): TeamAssignment {
     workStartDate: state.startDate,
     days: Math.round(sizePlanDays(size, szRanges())),
     demandStatus: "draft",
+    roles: makeDefaultAssignmentRoles(),
   };
 }
 
@@ -3151,6 +3154,17 @@ function withDemandTeams(
   return { ...rest, assignments: nextAssignments };
 }
 
+function demandRoleRowHtml(
+  item: WorkItem,
+  a: TeamAssignment,
+  role: AssignmentRole
+): string {
+  return `<div class="need-role">
+    <span class="need-role-name">${escapeHtml(role.name)}</span>
+    <button type="button" class="need-role-del" data-need-role-del="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" title="Удалить роль" aria-label="Удалить роль ${escapeAttr(role.name)}">×</button>
+  </div>`;
+}
+
 function demandAssignRowHtml(item: WorkItem, a: TeamAssignment): string {
   const t = teamById(a.teamId);
   const days = assignmentPlanDays(a, szRanges());
@@ -3168,7 +3182,12 @@ function demandAssignRowHtml(item: WorkItem, a: TeamAssignment): string {
     st === "draft"
       ? `<button type="button" class="btn btn-primary need-send-btn" data-need-send="${item.id}" data-team="${a.teamId}">Отправить</button>`
       : `<button type="button" class="btn need-change-btn" data-need-revert="${item.id}" data-team="${a.teamId}">Изменить</button>`;
-  return `<div class="need-row">
+  const roles = a.roles ?? [];
+  const rolesHtml = roles.length
+    ? `<div class="need-roles">${roles.map((role) => demandRoleRowHtml(item, a, role)).join("")}</div>`
+    : "";
+  return `<div class="need-assign">
+    <div class="need-row">
     <span class="need-row-left">
       <span class="need-assign-name"><span class="team-dot" style="background:${t?.color ?? "#93999e"}"></span>${escapeHtml(t?.name ?? a.teamId)}</span>
       <span class="need-row-days">${daysCell}</span>
@@ -3178,6 +3197,8 @@ function demandAssignRowHtml(item: WorkItem, a: TeamAssignment): string {
       <button type="button" class="need-edit-days" data-need-edit-days="${editKey}">Изменить дни</button>
       ${action}
     </span>
+    </div>
+    ${rolesHtml}
   </div>`;
 }
 
@@ -3793,6 +3814,7 @@ function editorHtml(item: WorkItem | null): string {
           teamId: state.teams[0]?.id ?? "",
           size: "M",
           workStartDate: state.startDate,
+          roles: makeDefaultAssignmentRoles(),
         },
       ],
       status: "ready",
@@ -4752,6 +4774,7 @@ function readAssignments(): TeamAssignment[] {
           : Math.round(sizePlanDays(size, szRanges()));
     }
     if (existing?.demandStatus) next.demandStatus = existing.demandStatus;
+    next.roles = existing?.roles ?? makeDefaultAssignmentRoles();
     assignments.push(next);
   }
   return assignments;
@@ -4937,6 +4960,43 @@ function removeDemandTeam(itemId: string, teamId: string) {
   persist();
 }
 
+function removeDemandRole(itemId: string, teamId: string, roleId: string) {
+  const item = state.items.find((i) => i.id === itemId);
+  const team = teamById(teamId);
+  if (!item) return;
+  const assign = item.assignments.find((a) => a.teamId === teamId);
+  const role = assign?.roles?.find((r) => r.id === roleId);
+  if (!assign || !role) return;
+  patchDemandAssignment(itemId, teamId, (a) => ({
+    ...a,
+    roles: (a.roles ?? []).filter((r) => r.id !== roleId),
+  }));
+  logChange(
+    `Потребность «${item.title}»: ${team?.name ?? teamId} — удалена роль «${role.name}»`,
+    "team"
+  );
+  persist();
+}
+
+function confirmRemoveDemandRole(
+  itemId: string,
+  teamId: string,
+  roleId: string,
+  anchor: HTMLElement
+) {
+  const item = state.items.find((i) => i.id === itemId);
+  const assign = item?.assignments.find((a) => a.teamId === teamId);
+  const role = assign?.roles?.find((r) => r.id === roleId);
+  if (!role) return;
+  askAppConfirm(
+    anchor,
+    `Удалить роль «<strong>${escapeHtml(role.name)}</strong>»?`,
+    () => removeDemandRole(itemId, teamId, roleId),
+    () => undefined,
+    { wide: true }
+  );
+}
+
 function patchDemandAssignment(
   itemId: string,
   teamId: string,
@@ -5102,6 +5162,18 @@ function bindDemandTab() {
         demandStatus: "draft",
       }));
       persist();
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-need-role-del]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const itemId = btn.dataset.needRoleDel;
+      const teamId = btn.dataset.team;
+      const roleId = btn.dataset.role;
+      if (!itemId || !teamId || !roleId) return;
+      confirmRemoveDemandRole(itemId, teamId, roleId, btn);
     });
   });
 }

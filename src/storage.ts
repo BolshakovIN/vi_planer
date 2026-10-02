@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   AppState,
   ensureUniquePriorities,
+  ensureStateAssignmentRoles,
   normalizeState,
   prependChangeLog,
 } from "./model";
@@ -187,7 +188,7 @@ export function applyCurrentPortfolioPack(
   } catch {
     /* ignore */
   }
-  const next = structuredClone(SEED);
+  const next = ensureStateAssignmentRoles(structuredClone(SEED));
   next.demoVariantA = current.demoVariantA;
   next.demoVariantB = false;
   next.changeLog = prependChangeLog(
@@ -227,7 +228,7 @@ export async function loadState(): Promise<AppState> {
     (await loadFromApi()) ??
     (await loadFromSupabase()) ??
     loadLocal() ??
-    structuredClone(SEED);
+    ensureStateAssignmentRoles(structuredClone(SEED));
 
   const { state, applied } = applyCurrentPortfolioPack(remote);
   if (applied) {

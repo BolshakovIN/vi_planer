@@ -266,12 +266,353 @@ export function resolveAssignmentDemandStatus(
   );
 }
 
+export interface TeamMember {
+  id: string;
+  /** Full ФИО, e.g. «Романов Сергей» */
+  name: string;
+}
+
 export interface Team {
   id: string;
   name: string;
   /** Person-weeks available per calendar week */
   capacityPw: number;
   color: string;
+  /** People on the team (Команды tab / Планирование исполнители). */
+  members?: TeamMember[];
+}
+
+const FIO_LAST_M = [
+  "Романов",
+  "Иванов",
+  "Петров",
+  "Соколов",
+  "Морозов",
+  "Волков",
+  "Лебедев",
+  "Козлов",
+  "Новиков",
+  "Павлов",
+  "Семёнов",
+  "Голубев",
+  "Виноградов",
+  "Богданов",
+  "Воробьёв",
+  "Фёдоров",
+  "Михайлов",
+  "Белов",
+  "Тарасов",
+  "Киселёв",
+];
+const FIO_LAST_F = [
+  "Романова",
+  "Иванова",
+  "Петрова",
+  "Соколова",
+  "Волкова",
+  "Соловьёва",
+  "Лебедева",
+  "Козлова",
+  "Новикова",
+  "Морозова",
+  "Павлова",
+  "Кузнецова",
+  "Попова",
+  "Васильева",
+  "Смирнова",
+];
+const FIO_FIRST_M = [
+  "Сергей",
+  "Александр",
+  "Дмитрий",
+  "Андрей",
+  "Алексей",
+  "Иван",
+  "Михаил",
+  "Николай",
+  "Павел",
+  "Егор",
+  "Артём",
+  "Кирилл",
+];
+const FIO_FIRST_F = [
+  "Анна",
+  "Елена",
+  "Мария",
+  "Ольга",
+  "Наталья",
+  "Татьяна",
+  "Екатерина",
+  "Ирина",
+  "Светлана",
+  "Юлия",
+  "Анастасия",
+  "Дарья",
+];
+
+function hashString(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** «Романов Сергей» → «Романов С.» */
+export function shortFio(name: string): string {
+  const parts = String(name ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!parts.length) return "";
+  if (parts.length === 1) return parts[0]!;
+  return `${parts[0]} ${parts[1]!.charAt(0).toUpperCase()}.`;
+}
+
+export function makeSeedTeamMembers(teamId: string): TeamMember[] {
+  const h0 = hashString(teamId || "team");
+  const n = 3 + (h0 % 4);
+  const out: TeamMember[] = [];
+  const used = new Set<string>();
+  for (let i = 0; i < n + 8 && out.length < n; i++) {
+    const h = hashString(`${teamId}:${i}:${h0}`);
+    const female = (h & 1) === 1;
+    const last = female
+      ? FIO_LAST_F[h % FIO_LAST_F.length]!
+      : FIO_LAST_M[(h >>> 3) % FIO_LAST_M.length]!;
+    const first = female
+      ? FIO_FIRST_F[(h >>> 7) % FIO_FIRST_F.length]!
+      : FIO_FIRST_M[(h >>> 11) % FIO_FIRST_M.length]!;
+    const name = `${last} ${first}`;
+    if (used.has(name)) continue;
+    used.add(name);
+    out.push({ id: uid("p"), name });
+  }
+  return out;
+}
+
+export function parseTeamMembers(raw: unknown, teamId: string): TeamMember[] {
+  if (raw == null) return makeSeedTeamMembers(teamId);
+  if (!Array.isArray(raw)) return makeSeedTeamMembers(teamId);
+  const out: TeamMember[] = [];
+  const seen = new Set<string>();
+  for (const row of raw) {
+    let id = "";
+    let name = "";
+    if (typeof row === "string") {
+      name = row.trim();
+    } else if (row && typeof row === "object") {
+      const rec = row as Record<string, unknown>;
+      name = String(rec.name ?? rec.fio ?? rec.title ?? "").trim();
+      id = String(rec.id ?? "").trim();
+    }
+    if (!name) continue;
+    const memberId = id || uid("p");
+    if (seen.has(memberId)) continue;
+    seen.add(memberId);
+    out.push({ id: memberId, name });
+  }
+  return out;
+}
+
+/** Default Потребность roles seeded on each team assignment. */
+export const DEFAULT_ASSIGNMENT_ROLE_NAMES = [
+  "бизнес-аналитик",
+  "архитектура",
+  "аналитика",
+  "разработка",
+  "тестирование",
+] as const;
+
+/** One role row nested under a team assignment (Потребность). */
+export interface AssignmentRole {
+  id: string;
+  name: string;
+  size?: TShirtSize;
+  days?: number;
+  demandStatus?: AssignmentDemandStatus;
+  workStartDate?: string;
+  /** Team member id (Планирование исполнитель). */
+  assigneeId?: string;
+}
+
+export function makeDefaultAssignmentRoles(
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): AssignmentRole[] {
+  const size: TShirtSize = "M";
+  const days = Math.round(sizePlanDays(size, ranges));
+  return DEFAULT_ASSIGNMENT_ROLE_NAMES.map((name) => ({
+    id: uid("role"),
+    name,
+    size,
+    days,
+    demandStatus: "draft" as const,
+  }));
+}
+
+function parseAssignmentRoleRow(row: unknown): AssignmentRole | null {
+  let name = "";
+  let id = "";
+  let size: TShirtSize | undefined;
+  let days: number | undefined;
+  let demandStatus: AssignmentDemandStatus | undefined;
+  let workStartDate: string | undefined;
+  if (typeof row === "string") {
+    name = row.trim();
+  } else if (row && typeof row === "object") {
+    const rec = row as Record<string, unknown>;
+    name = String(rec.name ?? rec.title ?? rec.role ?? "").trim();
+    id = String(rec.id ?? "").trim();
+    days = parseOptionalDays(rec.days);
+    if (rec.size != null) size = parseSize(rec.size);
+    else if (days != null) size = nearestSizeFromDays(days);
+    demandStatus = parseAssignmentDemandStatus(rec.demandStatus);
+    const startRaw = String(rec.workStartDate ?? "").trim();
+    if (startRaw) workStartDate = snapToMonday(startRaw);
+  }
+  if (!name) return null;
+  return {
+    id: id || uid("role"),
+    name,
+    ...(size ? { size } : {}),
+    ...(days != null ? { days } : {}),
+    ...(demandStatus ? { demandStatus } : {}),
+    ...(workStartDate ? { workStartDate } : {}),
+  };
+}
+
+/**
+ * Missing / invalid roles → seed the 5 defaults.
+ * Empty array is kept (user deleted every role).
+ */
+export function parseAssignmentRoles(raw: unknown): AssignmentRole[] {
+  if (raw == null) return makeDefaultAssignmentRoles();
+  if (!Array.isArray(raw)) return makeDefaultAssignmentRoles();
+  if (raw.length === 0) return [];
+  const out: AssignmentRole[] = [];
+  const seen = new Set<string>();
+  for (const row of raw) {
+    const role = parseAssignmentRoleRow(row);
+    if (!role || seen.has(role.id)) continue;
+    seen.add(role.id);
+    out.push(role);
+  }
+  return out.length ? out : makeDefaultAssignmentRoles();
+}
+
+export function isArchitectureRole(role: AssignmentRole): boolean {
+  return /архитектур/i.test(role.name) || role.id === "architecture";
+}
+
+export function rolePlanDays(
+  role: AssignmentRole,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): number {
+  const days = parseOptionalDays(role.days);
+  if (days != null) return days;
+  return sizePlanDays(role.size ?? "M", ranges);
+}
+
+export function resolveRoleDemandStatus(
+  role: AssignmentRole
+): AssignmentDemandStatus {
+  return parseAssignmentDemandStatus(role.demandStatus) ?? "draft";
+}
+
+function preferRoleIndexByTeamName(
+  roles: AssignmentRole[],
+  teamName: string
+): number {
+  const n = teamName.toLowerCase();
+  const needle = /архитектур/.test(n)
+    ? "архитектур"
+    : /бизнес/.test(n)
+      ? "бизнес"
+      : /тестир|\bqa\b/.test(n)
+        ? "тестир"
+        : /разраб/.test(n)
+          ? "разраб"
+          : /аналит/.test(n)
+            ? "аналит"
+            : "";
+  if (needle) {
+    const i = roles.findIndex((r) => r.name.toLowerCase().includes(needle));
+    if (i >= 0) return i;
+  }
+  return 0;
+}
+
+export function syncAssignmentFromRoles(
+  a: TeamAssignment,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): TeamAssignment {
+  if (!a.roles?.length) return a;
+  const days = a.roles.reduce((sum, role) => sum + rolePlanDays(role, ranges), 0);
+  const size = nearestSizeFromDays(Math.max(1, days), ranges);
+  const starts = a.roles
+    .map((r) => r.workStartDate)
+    .filter((s): s is string => Boolean(s));
+  const workStartDate = starts.length
+    ? starts.reduce((min, s) => (s < min ? s : min))
+    : a.workStartDate;
+  const statuses = a.roles.map(resolveRoleDemandStatus);
+  const demandStatus = statuses.some((s) => s === "pending")
+    ? "pending"
+    : statuses.length && statuses.every((s) => s === "approved")
+      ? "approved"
+      : "draft";
+  return { ...a, days, size, workStartDate, demandStatus };
+}
+
+/** Seed defaults / fill missing role effort from the parent assignment. */
+export function fillAssignmentRoles(
+  a: TeamAssignment,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES,
+  teamName = ""
+): TeamAssignment {
+  let roles = a.roles;
+  if (roles == null) roles = makeDefaultAssignmentRoles(ranges);
+  if (!roles.length) return { ...a, roles };
+  const defaultDays = Math.round(sizePlanDays("M", ranges));
+  const hasRoleDays = roles.some((r) => parseOptionalDays(r.days) != null);
+  const inheritDays = parseOptionalDays(a.days);
+  const inheritStatus = parseAssignmentDemandStatus(a.demandStatus);
+  const prefer = preferRoleIndexByTeamName(roles, teamName);
+  const nextRoles = roles.map((r, i) => {
+    const days = parseOptionalDays(r.days);
+    if (days != null) {
+      return {
+        ...r,
+        days,
+        size: r.size ?? nearestSizeFromDays(days, ranges),
+        demandStatus: resolveRoleDemandStatus(r),
+        workStartDate: r.workStartDate || a.workStartDate,
+      };
+    }
+    if (!hasRoleDays && i === prefer && inheritDays != null) {
+      return {
+        ...r,
+        days: inheritDays,
+        size: a.size,
+        demandStatus: inheritStatus ?? "draft",
+        workStartDate: r.workStartDate || a.workStartDate,
+      };
+    }
+    return {
+      ...r,
+      days: defaultDays,
+      size: r.size ?? "M",
+      demandStatus: parseAssignmentDemandStatus(r.demandStatus) ?? "draft",
+      workStartDate: r.workStartDate || a.workStartDate,
+    };
+  });
+  return syncAssignmentFromRoles({ ...a, roles: nextRoles }, ranges);
+}
+
+export function ensureAssignmentRoles(a: TeamAssignment): TeamAssignment {
+  if (a.roles != null) return a;
+  return { ...a, roles: makeDefaultAssignmentRoles() };
 }
 
 /** Work of one initiative for a specific team (own effort → own ETA) */
@@ -288,6 +629,8 @@ export interface TeamAssignment {
   days?: number;
   /** Потребность row status; default Черновик. */
   demandStatus?: AssignmentDemandStatus;
+  /** Nested roles under this team; seeded on load / add if missing. */
+  roles?: AssignmentRole[];
 }
 
 export interface WorkItem {
@@ -324,6 +667,19 @@ export interface WorkItem {
   roi12m: number | null;
   /** Потребность: «Отправлено» after submit. Absent = черновик. */
   demandStatus?: DemandStatus;
+}
+
+export function ensureItemAssignmentRoles(items: WorkItem[]): WorkItem[] {
+  return items.map((item) => ({
+    ...item,
+    assignments: item.assignments.map(ensureAssignmentRoles),
+  }));
+}
+
+export function ensureStateAssignmentRoles<T extends { items: WorkItem[] }>(
+  state: T
+): T {
+  return { ...state, items: ensureItemAssignmentRoles(state.items) };
 }
 
 /** Kind of activity-log entry (optional filter / icon hint). */
@@ -1454,6 +1810,7 @@ export function normalizeState(raw: unknown): AppState | null {
             ),
             ...(days != null ? { days } : {}),
             ...(demandStatus ? { demandStatus } : {}),
+            roles: parseAssignmentRoles(a.roles),
           };
         });
     } else if (typeof r.teamId === "string") {
@@ -1462,12 +1819,18 @@ export function normalizeState(raw: unknown): AppState | null {
           teamId: r.teamId,
           size: pwToSize(Number(r.estimatePw) || 1, teamCap.get(r.teamId) ?? 3),
           workStartDate: planStart,
+          roles: makeDefaultAssignmentRoles(),
         },
       ];
     }
     if (!assignments.length && teams[0]) {
       assignments = [
-        { teamId: teams[0].id, size: "M", workStartDate: planStart },
+        {
+          teamId: teams[0].id,
+          size: "M",
+          workStartDate: planStart,
+          roles: makeDefaultAssignmentRoles(),
+        },
       ];
     }
 
