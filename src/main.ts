@@ -50,6 +50,7 @@ import {
   calendarWeeksForSize,
   assignmentPlanDays,
   assignmentPlanWeeks,
+  totalEstimateDays,
   uniqCatalogNames,
   containerNameFromBacklog,
   ChangeLogKind,
@@ -204,10 +205,8 @@ interface UiState {
   colPickerOpen: boolean;
   /** Selected functionality on Потребность (legacy detail; optional) */
   needItemId: string | null;
-  /** Single-select project chip; null = all projects */
+  /** Single-select project chip; null = pick a project */
   needProjectKey: string | null;
-  /** Single-select team filter; null = all teams */
-  needTeamFilter: string | null;
   /** Functionality whose «+ Добавить команду» picker is open */
   needAddItemId: string | null;
   /** `${itemId}:${teamId}` while days input is shown */
@@ -250,7 +249,6 @@ const ui: UiState = {
   colPickerOpen: false,
   needItemId: null,
   needProjectKey: null,
-  needTeamFilter: null,
   needAddItemId: null,
   needDaysEdit: null,
   needCollapsedProjects: {},
@@ -453,14 +451,6 @@ function statusLabel(s: ItemStatus): string {
   return map[s];
 }
 
-function statusSelectHtml(item: WorkItem): string {
-  const opts = ITEM_STATUSES.map(
-    (s) =>
-      `<option value="${s}" ${item.status === s ? "selected" : ""}>${statusLabel(s)}</option>`
-  ).join("");
-  return `<select class="status-select badge-status-${item.status}" data-status-id="${item.id}" data-stop-edit aria-label="Статус">${opts}</select>`;
-}
-
 function rollupById(rollups: ItemSchedule[]): Map<string, ItemSchedule> {
   return new Map(rollups.map((r) => [r.item.id, r]));
 }
@@ -596,7 +586,7 @@ const ALL_PORTFOLIO_COLS: PortfolioCol[] = [
 const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
   priority: "Приоритет",
   type: "Тип",
-  title: "Функциональность",
+  title: "Проект",
   teams: "Команды (оценка · старт)",
   status: "Статус",
   rice: "RICE",
@@ -912,7 +902,7 @@ function portfolioTheadCellsHtml(): string {
   return `
     ${sortHeader("Приоритет", "priority", "prio-cell")}
     ${resizableTh("Тип", "type", "type-cell")}
-    ${resizableTh("Функциональность", "title", "title-cell")}
+    ${resizableTh("Проект", "title", "title-cell")}
     ${resizableTh("Команды (оценка · старт)", "teams")}
     ${resizableTh("Статус", "status", "status-cell")}
     ${sortHeader("RICE", "rice", "rice-cell")}
@@ -959,7 +949,7 @@ function bindColPickerOutsideClose(colPicker: HTMLDetailsElement) {
     closeColPickerOutside();
     ui.colPickerOpen = false;
     // Close in place — do NOT render() on mousedown. A full re-render destroys
-    // the click target before click fires, so «+ Функциональность» / «Экспорт PDF»
+    // the click target before click fires, so «+ Добавить» / «Экспорт PDF»
     // appear dead while the column picker is open.
     colPicker.open = false;
   };
@@ -1044,28 +1034,19 @@ function productProjectName(backlog: string): string {
   return containerNameFromBacklog(backlog);
 }
 
-function functionalitySubtitleHtml(item: WorkItem): string {
-  const owner = item.owner.trim();
-  const assignee = item.assignee.trim();
-  const bits: string[] = [];
-  if (owner && owner !== "—") bits.push(`Заказчик: ${escapeHtml(owner)}`);
-  if (assignee) bits.push(`Исполнитель: ${escapeHtml(assignee)}`);
-  return bits.join(" · ");
-}
-
 function columnsHelpHtml(): string {
   return `
     <details class="callout callout-cols agenda">
       <summary class="agenda-summary">Адженда</summary>
       <div class="cols-help">
-        <div><span class="cols-help-k">Приоритет</span> — сквозной ранг (1 = выше); тяните строку за ⋮⋮, чтобы переставить. Сортировка других колонок приоритет не меняет</div>
-        <div><span class="cols-help-k">Тип</span> — продукт или проект и название (колонка «Название проекта / продукта»)</div>
-        <div><span class="cols-help-k">Функциональность</span> — набор задач → бизнес-результат с эффектом; в ячейке — название, заказчик и исполнитель</div>
-        <div><span class="cols-help-k">Команды</span> — кто делает, маечная оценка (XS–XXL) и план старта</div>
+        <div><span class="cols-help-k">Приоритет</span> — сквозной ранг проекта (1 = выше; минимум по работам проекта)</div>
+        <div><span class="cols-help-k">Тип</span> — проект</div>
+        <div><span class="cols-help-k">Проект</span> — контейнер плана; функциональности смотрите на вкладке «Потребность»</div>
+        <div><span class="cols-help-k">Команды</span> — кто задействован в проекте, маечная оценка (XS–XXL) и план старта</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
-        <div><span class="cols-help-k">RICE</span> — (Охват × Влияние × Уверенность) / Трудозатраты (чел·нед по маечной оценке)</div>
-        <div><span class="cols-help-k">ЧП, млрд ₽</span> — чистая прибыль за 12 мес. (карточка функциональности)</div>
-        <div><span class="cols-help-k">ROI, %</span> — ROI за 12 мес. (карточка функциональности)</div>
+        <div><span class="cols-help-k">RICE</span> — сумма RICE по работам проекта</div>
+        <div><span class="cols-help-k">ЧП, млрд ₽</span> — чистая прибыль за 12 мес. (сумма по проекту)</div>
+        <div><span class="cols-help-k">ROI, %</span> — ROI за 12 мес.</div>
         <div><span class="cols-help-k">Маечная оценка</span> — XS / S / M / L / XL / XXL (дни в Настройках)</div>
         <div><span class="cols-help-k">Дата завершения</span> — когда закончила последняя команда (bottleneck)</div>
       </div>
@@ -1073,21 +1054,88 @@ function columnsHelpHtml(): string {
   `;
 }
 
+function groupByProjectKey(
+  items: WorkItem[]
+): { key: string; title: string; items: WorkItem[] }[] {
+  const map = new Map<string, WorkItem[]>();
+  for (const it of items) {
+    const key = demandProjectKey(it);
+    const list = map.get(key);
+    if (list) list.push(it);
+    else map.set(key, [it]);
+  }
+  return [...map.entries()].map(([key, grouped]) => ({
+    key,
+    title: key,
+    items: grouped,
+  }));
+}
+
+function uniqueAssignments(items: WorkItem[]): TeamAssignment[] {
+  const seen = new Set<string>();
+  const out: TeamAssignment[] = [];
+  for (const it of items) {
+    for (const a of it.assignments) {
+      if (seen.has(a.teamId)) continue;
+      seen.add(a.teamId);
+      out.push(a);
+    }
+  }
+  return out;
+}
+
 function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): string {
   const byId = rollupById(rollups);
   const visible = filteredItems(rollups);
-  const canDrag = ui.sortKey === "priority";
+  const order = new Map(visible.map((it, i) => [it.id, i]));
+  const groups = groupByProjectKey(visible).sort((a, b) => {
+    const ia = Math.min(...a.items.map((it) => order.get(it.id) ?? 9999));
+    const ib = Math.min(...b.items.map((it) => order.get(it.id) ?? 9999));
+    return ia - ib;
+  });
 
-  const rows = visible
-    .map((item) => {
-      const r = byId.get(item.id);
-      const score = rice(item, szRanges());
-      const total = totalEstimateWeeks(item, szRanges());
-      const prio = item.manualRank ?? "—";
-      const container = productProjectName(item.backlog);
-      const ownerSub = functionalitySubtitleHtml(item);
-      const etaMeta = r
-        ? `<div class="eta-teams">${r.slices
+  const rows = groups
+    .map((g) => {
+      const minPrio = Math.min(
+        ...g.items.map((it) => it.manualRank ?? Number.POSITIVE_INFINITY)
+      );
+      const prio = Number.isFinite(minPrio) ? minPrio : "—";
+      const assigns = uniqueAssignments(g.items);
+      const teamItem: WorkItem = { ...g.items[0], assignments: assigns };
+      const score = g.items.reduce((s, it) => s + rice(it, szRanges()), 0);
+      const total = g.items.reduce(
+        (s, it) => s + totalEstimateWeeks(it, szRanges()),
+        0
+      );
+      const sizes = [...new Set(assigns.map((a) => a.size))].join(" + ");
+      const cashVals = g.items
+        .map((it) => it.cashFlow12m)
+        .filter((n): n is number => n != null && Number.isFinite(n));
+      const cash = cashVals.length
+        ? cashVals.reduce((s, n) => s + n, 0)
+        : null;
+      const rois = [
+        ...new Set(
+          g.items
+            .map((it) => it.roi12m)
+            .filter((n): n is number => n != null && Number.isFinite(n))
+        ),
+      ];
+      const statuses = [...new Set(g.items.map((it) => it.status))];
+      const statusHtml =
+        statuses.length === 1
+          ? `<span class="badge badge-status-${statuses[0]}">${statusLabel(statuses[0])}</span>`
+          : `<span class="meta">несколько</span>`;
+      let latest: ItemSchedule | undefined;
+      const etaSlices: ItemSchedule["slices"] = [];
+      for (const it of g.items) {
+        const r = byId.get(it.id);
+        if (!r) continue;
+        etaSlices.push(...r.slices);
+        if (!latest || r.endDate > latest.endDate) latest = r;
+      }
+      const etaMeta = etaSlices.length
+        ? `<div class="eta-teams">${etaSlices
             .map((s) => {
               const t = teamById(s.teamId);
               const color = t?.color ?? "#64748b";
@@ -1096,51 +1144,29 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
             .join("")}</div>`
         : "";
       return `
-        <tr class="clickable ${canDrag ? "row-draggable" : ""}" data-edit="${item.id}" data-row-id="${item.id}">
+        <tr class="clickable" data-need-open-project="${escapeAttr(g.key)}" title="Открыть потребность проекта">
           <td${tdAttrs("priority", "prio-cell")}>
-            <div class="prio-edit" data-stop-edit>
-              ${
-                canDrag
-                  ? `<span class="drag-handle" data-drag-handle title="Перетащить для смены приоритета" role="button" tabindex="0" aria-label="Перетащить">⋮⋮</span>`
-                  : ""
-              }
-              <input
-                class="prio-input"
-                type="number"
-                min="1"
-                step="1"
-                inputmode="numeric"
-                data-prio-id="${item.id}"
-                value="${prio}"
-                title="Приоритет (1 = выше)"
-                aria-label="Приоритет"
-              />
-            </div>
+            <span class="prio-num">${prio}</span>
           </td>
           <td${tdAttrs("type", "type-cell")}>
-            <span class="badge badge-${item.type}">${item.type === "product" ? "Продукт" : "Проект"}</span>
-            ${
-              container
-                ? `<div class="type-container-name" title="Название проекта / продукта">${escapeHtml(container)}</div>`
-                : ""
-            }
-            ${item.assignments.length > 1 ? `<div class="type-team-count">${item.assignments.length} команды</div>` : ""}
+            <span class="badge badge-project">Проект</span>
           </td>
           <td${tdAttrs("title", "title-cell")}>
-            <div class="name">${escapeHtml(item.title)}</div>
-            ${ownerSub ? `<div class="meta">${ownerSub}</div>` : ""}
+            <div class="name">${escapeHtml(g.title)}</div>
           </td>
-          <td${tdAttrs("teams", "teams-cell")}>${teamsCellHtml(item)}</td>
-          <td${tdAttrs("status", "status-cell")} data-stop-edit>${statusSelectHtml(item)}</td>
-          <td${tdAttrs("rice", "rice-cell mono metric-num")}>${score}</td>
-          <td${tdAttrs("cashFlow", "finance-cell mono metric-num")}>${formatMlrd(item.cashFlow12m)}</td>
-          <td${tdAttrs("roi", "finance-cell mono metric-num")}>${formatPercent(item.roi12m)}</td>
+          <td${tdAttrs("teams", "teams-cell")}>${teamsCellHtml(teamItem)}</td>
+          <td${tdAttrs("status", "status-cell")}>${statusHtml}</td>
+          <td${tdAttrs("rice", "rice-cell mono metric-num")}>${Math.round(score * 10) / 10}</td>
+          <td${tdAttrs("cashFlow", "finance-cell mono metric-num")}>${formatMlrd(cash)}</td>
+          <td${tdAttrs("roi", "finance-cell mono metric-num")}>${
+            rois.length === 1 ? formatPercent(rois[0]) : "—"
+          }</td>
           <td${tdAttrs("estimate", "estimate-cell mono metric-num")}>
-            <span class="size-badge">${sizesSummary(item)}</span>
+            <span class="size-badge">${sizes || "—"}</span>
             <div class="meta">~${total} чел·нед</div>
           </td>
-          <td${tdAttrs("eta", `mono eta-cell ${r && r.waitWeeks > 4 ? "eta-late" : "eta-good"}`)}>
-            ${r ? `<span class="eta-final">${formatDate(r.endDate)}</span>` : "—"}
+          <td${tdAttrs("eta", `mono eta-cell ${latest && latest.waitWeeks > 4 ? "eta-late" : "eta-good"}`)}>
+            ${latest ? `<span class="eta-final">${formatDate(latest.endDate)}</span>` : "—"}
             ${etaMeta}
           </td>
         </tr>
@@ -1177,7 +1203,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
             </select>
             ${portfolioColPickerHtml()}
             <button class="btn" id="resetFilters" title="Сбросить фильтры, сортировку и колонки">Сбросить фильтры</button>
-            <button class="btn btn-primary" id="addItem">+ Функциональность</button>
+            <button class="btn btn-primary" id="addItem">+ Добавить</button>
           </div>
         </div>
         <div class="table-scroll-top" aria-hidden="true"><div class="table-scroll-top-inner"></div></div>
@@ -1192,17 +1218,12 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           </table>
         </div>
       </div>
-      ${
-        canDrag
-          ? ""
-          : `<p class="sort-prio-hint">Сейчас сортировка не по приоритету — перестановка строк отключена, приоритеты не меняются. Верните сортировку по «Приоритет», чтобы двигать строки.</p>`
-      }
       <div class="table-scroll-wrap">
         <div class="table-scroll">
           <table class="portfolio-table portfolio-body-table">
             ${portfolioColgroupHtml()}
             <tbody id="portfolioBody">
-              ${rows || `<tr><td colspan="${visiblePortfolioColCount()}" class="empty">Нет элементов по фильтру</td></tr>`}
+              ${rows || `<tr><td colspan="${visiblePortfolioColCount()}" class="empty">Нет проектов по фильтру</td></tr>`}
             </tbody>
           </table>
         </div>
@@ -3092,26 +3113,7 @@ function demandProjectKey(item: WorkItem): string {
 }
 
 function demandGroupedItems(): { key: string; title: string; items: WorkItem[] }[] {
-  const map = new Map<string, WorkItem[]>();
-  for (const it of demandProjectItems()) {
-    const key = demandProjectKey(it);
-    const list = map.get(key);
-    if (list) list.push(it);
-    else map.set(key, [it]);
-  }
-  return [...map.entries()].map(([key, items]) => ({ key, title: key, items }));
-}
-
-function demandVisibleGroups(): {
-  key: string;
-  title: string;
-  items: WorkItem[];
-}[] {
-  let groups = demandGroupedItems();
-  if (ui.needProjectKey) {
-    groups = groups.filter((g) => g.key === ui.needProjectKey);
-  }
-  return groups.filter((g) => g.items.length);
+  return groupByProjectKey(demandProjectItems());
 }
 
 function demandStatusClass(status: AssignmentDemandStatus): string {
@@ -3174,23 +3176,43 @@ function demandAssignRowHtml(item: WorkItem, a: TeamAssignment): string {
       ? `<button type="button" class="btn btn-primary need-send-btn" data-need-send="${item.id}" data-team="${a.teamId}">Отправить</button>`
       : `<button type="button" class="btn need-change-btn" data-need-revert="${item.id}" data-team="${a.teamId}">Изменить</button>`;
   return `<div class="need-row">
-    <span class="need-assign-name"><span class="team-dot" style="background:${t?.color ?? "#93999e"}"></span>${escapeHtml(t?.name ?? a.teamId)}</span>
-    <span class="need-row-days">${daysCell}</span>
-    <select class="need-st-select ${demandStatusClass(st)}" data-need-status="${item.id}" data-team="${a.teamId}">${statusOpts}</select>
-    <button type="button" class="need-edit-days" data-need-edit-days="${editKey}">Изменить дни</button>
-    ${action}
+    <span class="need-row-left">
+      <span class="need-assign-name"><span class="team-dot" style="background:${t?.color ?? "#93999e"}"></span>${escapeHtml(t?.name ?? a.teamId)}</span>
+      <span class="need-row-days">${daysCell}</span>
+    </span>
+    <span class="need-row-right">
+      <select class="need-st-select ${demandStatusClass(st)}" data-need-status="${item.id}" data-team="${a.teamId}">${statusOpts}</select>
+      <button type="button" class="need-edit-days" data-need-edit-days="${editKey}">Изменить дни</button>
+      ${action}
+    </span>
   </div>`;
 }
 
-function demandFnHtml(item: WorkItem, teamId: string): string {
-  const assign = item.assignments.find((a) => a.teamId === teamId);
-  const days = assign ? assignmentPlanDays(assign, szRanges()) : 0;
+function demandFnHtml(item: WorkItem): string {
+  const days = totalEstimateDays(item, szRanges());
   const open = !ui.needCollapsedItems[item.id];
-  const addBtn = assign
-    ? ""
-    : `<button type="button" class="btn need-add-btn" data-need-add-selected="${item.id}">+ Добавить команду</button>`;
-  const body = assign
-    ? demandAssignRowHtml(item, assign)
+  const used = new Set(item.assignments.map((a) => a.teamId));
+  const unused = state.teams.filter((t) => !used.has(t.id));
+  const pickerOpen = ui.needAddItemId === item.id;
+  const addBtn = unused.length
+    ? `<div class="need-add-wrap">
+        <button type="button" class="btn need-add-btn" data-need-add-open="${item.id}">+ Добавить команду</button>
+        ${
+          pickerOpen
+            ? `<div class="need-add-menu" role="menu">
+                ${unused
+                  .map(
+                    (t) =>
+                      `<button type="button" class="need-add-option" data-need-add="${item.id}" data-team="${t.id}"><span class="team-dot" style="background:${t.color}"></span>${escapeHtml(t.name)}</button>`
+                  )
+                  .join("")}
+              </div>`
+            : ""
+        }
+      </div>`
+    : "";
+  const body = item.assignments.length
+    ? item.assignments.map((a) => demandAssignRowHtml(item, a)).join("")
     : `<p class="need-fn-empty meta">Команда ещё не назначена. Нажмите «+ Добавить команду», затем «Отправить».</p>`;
   return `<details class="need-fn" data-need-fn="${item.id}"${open ? " open" : ""}>
     <summary class="need-fn-sum">
@@ -3205,76 +3227,55 @@ function demandFnHtml(item: WorkItem, teamId: string): string {
 }
 
 function demandHtml(): string {
-  const teamId = ui.needTeamFilter;
-  const team = teamId ? teamById(teamId) : null;
   const allGroups = demandGroupedItems();
-  const chips = state.teams
-    .map((t) => {
-      const on = teamId === t.id;
-      return `<button type="button" class="need-team-chip${on ? " is-on" : ""}" data-need-team-filter="${t.id}" title="${escapeAttr(on ? "Снять выбор" : "Показать потребность команды")}">
-        <span class="team-dot" style="background:${t.color}"></span>
-        <span class="need-team-chip-name">${escapeHtml(t.name)}</span>
-      </button>`;
+  const selectedKey = ui.needProjectKey;
+  const selectedGroup = selectedKey
+    ? allGroups.find((g) => g.key === selectedKey)
+    : undefined;
+
+  const projectChips = allGroups
+    .map((g) => {
+      const on = selectedKey === g.key;
+      return `<button type="button" class="need-project-chip${on ? " is-on" : ""}" data-need-project-chip="${escapeAttr(g.key)}" title="${escapeAttr(on ? "Снять выбор" : "Показать проект")}">${escapeHtml(g.title)}</button>`;
     })
     .join("");
 
-  let body = `<div class="need-hint meta">Выберите команду сверху — затем проекты и функциональности этой команды. Назначьте её через «+ Добавить команду» и подтвердите «Отправить».</div>`;
+  let body = `<div class="need-hint meta">Выберите проект сверху, чтобы увидеть функциональности и назначить команды.</div>`;
 
-  if (teamId && team) {
-    const groups = demandVisibleGroups();
-    const visibleItems = groups.flatMap((g) => g.items);
-    const teamAssigns = visibleItems
-      .map((it) => {
-        const a = it.assignments.find((x) => x.teamId === teamId);
-        return a ? { item: it, a } : null;
-      })
-      .filter((x): x is { item: WorkItem; a: TeamAssignment } => x != null);
-    const fnCount = teamAssigns.length;
-    const totalDays = teamAssigns.reduce(
-      (s, x) => s + assignmentPlanDays(x.a, szRanges()),
+  if (selectedGroup) {
+    const items = selectedGroup.items;
+    const assigns = items.flatMap((it) =>
+      it.assignments.map((a) => ({ item: it, a }))
+    );
+    const fnCount = items.length;
+    const totalDays = items.reduce(
+      (s, it) => s + totalEstimateDays(it, szRanges()),
       0
     );
-    const pendingCount = teamAssigns.filter(
+    const pendingCount = assigns.filter(
       (x) => resolveAssignmentDemandStatus(x.a, x.item) === "pending"
     ).length;
-    const approvedCount = teamAssigns.filter(
+    const approvedCount = assigns.filter(
       (x) => resolveAssignmentDemandStatus(x.a, x.item) === "approved"
     ).length;
-
-    const projectChips = allGroups
-      .map((g) => {
-        const on = ui.needProjectKey === g.key;
-        return `<button type="button" class="need-project-chip${on ? " is-on" : ""}" data-need-project-chip="${escapeAttr(g.key)}">${escapeHtml(g.title)}</button>`;
-      })
-      .join("");
-
-    const tree = groups
-      .map((g) => {
-        const open = !ui.needCollapsedProjects[g.key];
-        const fns = g.items.map((it) => demandFnHtml(it, teamId)).join("");
-        const gDays = g.items.reduce((s, it) => {
-          const a = it.assignments.find((x) => x.teamId === teamId);
-          return s + (a ? assignmentPlanDays(a, szRanges()) : 0);
-        }, 0);
-        return `<details class="need-project" data-need-project="${escapeAttr(g.key)}"${open ? " open" : ""}>
-          <summary class="need-project-sum">
-            <span class="need-project-title">${escapeHtml(g.title)}</span>
-            <span class="need-project-meta">${g.items.length} функц. · ${gDays} дн.</span>
-          </summary>
-          <div class="need-project-body">${fns}</div>
-        </details>`;
-      })
-      .join("");
+    const open = !ui.needCollapsedProjects[selectedGroup.key];
+    const fns = items.map((it) => demandFnHtml(it)).join("");
+    const tree = `<details class="need-project" data-need-project="${escapeAttr(selectedGroup.key)}"${open ? " open" : ""}>
+      <summary class="need-project-sum">
+        <span class="need-project-title">${escapeHtml(selectedGroup.title)}</span>
+        <span class="need-project-meta">${items.length} функц. · ${totalDays} дн.</span>
+      </summary>
+      <div class="need-project-body">${fns || `<p class="meta">Нет функциональностей</p>`}</div>
+    </details>`;
 
     body = `
-      <div class="need-projects" aria-label="Проекты">${projectChips}</div>
       <div class="need-stats">
         <div class="need-stat"><div class="label">Функциональностей</div><div class="value">${fnCount}</div></div>
         <div class="need-stat"><div class="label">Запрошено дней</div><div class="value">${totalDays}</div></div>
         <div class="need-stat"><div class="label">На согласовании</div><div class="value is-pending">${pendingCount}</div></div>
         <div class="need-stat"><div class="label">Согласовано</div><div class="value is-approved">${approvedCount}</div></div>
       </div>
-      <div class="need-tree">${tree || `<p class="need-hint meta">Нет функциональностей</p>`}</div>
+      <div class="need-tree">${tree}</div>
     `;
   }
 
@@ -3283,12 +3284,10 @@ function demandHtml(): string {
       <div class="panel-header need-page-head">
         <div>
           <h2>Потребность по проекту</h2>
-          <p class="meta">Сначала выберите команду. Затем смотрите её проекты и функциональности, назначайте через «+ Добавить команду» и подтверждайте «Отправить».</p>
+          <p class="meta">Выберите один проект. Назначьте команды через «+ Добавить команду» и подтвердите «Отправить».</p>
         </div>
       </div>
-      <div class="need-teams" aria-label="Команды">
-        ${chips || `<span class="meta">Нет команд в справочнике</span>`}
-      </div>
+      <div class="need-projects" aria-label="Проекты">${projectChips || `<span class="meta">Нет проектов</span>`}</div>
       ${body}
     </div>
   `;
@@ -4401,6 +4400,15 @@ function bindPortfolioDrag() {
   });
 }
 
+function brandMarkSvg(): string {
+  return `<svg class="brand-mark-svg" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <rect width="64" height="64" rx="16" fill="#d60000"/>
+    <text x="30" y="44" text-anchor="middle" fill="#fff" font-family="PT Serif, Times New Roman, Times, serif" font-size="30" font-weight="700">Ви</text>
+    <circle cx="50.5" cy="13.5" r="10.5" fill="#fff"/>
+    <text x="50.5" y="17.2" text-anchor="middle" fill="#d60000" font-family="PT Serif, Times New Roman, Times, serif" font-size="9" font-weight="700">ру</text>
+  </svg>`;
+}
+
 function render() {
   closePrioPop();
   closeResetPop();
@@ -4424,14 +4432,8 @@ function render() {
       <div class="topbar">
         <div class="topbar-brand">
           <button type="button" class="brand-home" id="brandHomeBtn" title="На главную">
-            <span class="brand-mark" aria-hidden="true">
-              <span class="brand-mark-vi">Ви</span>
-              <span class="brand-mark-ru">ру</span>
-            </span>
-            <span class="brand-word">
-              <span>VI</span>
-              <span>Planer</span>
-            </span>
+            <span class="brand-mark" aria-hidden="true">${brandMarkSvg()}</span>
+            <span class="brand-word">VI Planer</span>
           </button>
         </div>
         <div class="top-actions">
@@ -4689,29 +4691,38 @@ function bindDemandTab() {
   const root = document.querySelector(".need-page");
   if (!root) return;
 
-  root.querySelectorAll<HTMLButtonElement>("[data-need-team-filter]").forEach((btn) => {
+  root.querySelectorAll<HTMLButtonElement>("[data-need-project-chip]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const id = btn.dataset.needTeamFilter ?? "";
-      ui.needTeamFilter = ui.needTeamFilter === id ? null : id;
+      const key = btn.dataset.needProjectChip ?? "";
+      ui.needProjectKey = ui.needProjectKey === key ? null : key;
       ui.needAddItemId = null;
       render();
     });
   });
 
-  root.querySelectorAll<HTMLButtonElement>("[data-need-project-chip]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const key = btn.dataset.needProjectChip ?? "";
-      ui.needProjectKey = ui.needProjectKey === key ? null : key;
+  root.querySelectorAll(".need-add-wrap").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-need-add-open]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const itemId = btn.dataset.needAddOpen ?? null;
+      ui.needAddItemId = ui.needAddItemId === itemId ? null : itemId;
       render();
     });
   });
 
-  root.querySelectorAll<HTMLButtonElement>("[data-need-add-selected]").forEach((btn) => {
+  root.querySelectorAll<HTMLButtonElement>("[data-need-add]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const itemId = btn.dataset.needAddSelected;
-      const teamId = ui.needTeamFilter;
+      const itemId = btn.dataset.needAdd;
+      const teamId = btn.dataset.team;
       if (!itemId || !teamId) return;
       addDemandTeam(itemId, teamId);
     });
@@ -4977,6 +4988,14 @@ function bindUiRest() {
         )
       )
         return;
+      const projectRow = t.closest<HTMLTableRowElement>("[data-need-open-project]");
+      if (projectRow) {
+        ui.needProjectKey = projectRow.dataset.needOpenProject ?? null;
+        ui.needAddItemId = null;
+        ui.tab = "demand";
+        render();
+        return;
+      }
       const row = t.closest<HTMLTableRowElement>("[data-edit]");
       if (!row) return;
       ui.editingId = row.dataset.edit ?? null;
