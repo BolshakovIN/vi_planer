@@ -392,7 +392,11 @@ function preferredSeedRoles(teamId: string): string[] {
             ? "аналит"
             : "";
   if (needle) {
-    const i = catalog.findIndex((r) => r.includes(needle));
+    const i = catalog.findIndex((r) =>
+      needle === "аналит"
+        ? r === "аналитик"
+        : r.includes(needle)
+    );
     if (i > 0) {
       const [hit] = catalog.splice(i, 1);
       catalog.unshift(hit!);
@@ -468,7 +472,7 @@ export function parseTeamMembers(
     const memberId = id || uid("p");
     if (seen.has(memberId)) continue;
     seen.add(memberId);
-    const canonical = canonicalizeCatalogRole(role) ?? role;
+    const canonical = migrateStoredRoleLabel(role);
     out.push({
       id: memberId,
       name,
@@ -485,7 +489,7 @@ export function uniqueRoleNames(
   const out: string[] = [];
   const seen = new Set<string>();
   for (const raw of names ?? []) {
-    const name = raw.trim();
+    const name = migrateStoredRoleLabel(raw);
     if (!name) continue;
     const key = normalizeAssignmentRoleName(name);
     if (seen.has(key)) continue;
@@ -516,16 +520,23 @@ export function syncTeamRoster<T extends Team>(team: T): T {
 export const ASSIGNMENT_ROLE_CATALOG = [
   "бизнес аналитик",
   "архитектура",
-  "аналитика",
-  "разработка",
-  "тестирование",
+  "аналитик",
+  "разработчик",
+  "тестировщик",
 ] as const;
 
 /** Default Потребность roles seeded on each new team assignment. */
 export const DEFAULT_ASSIGNMENT_ROLE_NAMES = [
-  "аналитика",
-  "разработка",
+  "аналитик",
+  "разработчик",
 ] as const;
+
+/** Exact old catalog labels → person titles. «бизнес аналитик» is not «аналитика». */
+const LEGACY_ROLE_RENAMES: Record<string, string> = {
+  аналитика: "аналитик",
+  разработка: "разработчик",
+  тестирование: "тестировщик",
+};
 
 /** One role row nested under a team assignment (Потребность). */
 export interface AssignmentRole {
@@ -540,7 +551,19 @@ export interface AssignmentRole {
 }
 
 export function normalizeAssignmentRoleName(name: string): string {
-  return name.trim().toLowerCase().replace(/-/g, " ").replace(/\s+/g, " ");
+  const key = name.trim().toLowerCase().replace(/-/g, " ").replace(/\s+/g, " ");
+  return LEGACY_ROLE_RENAMES[key] ?? key;
+}
+
+/** Stored Команды / Потребность role label after catalog rename. */
+export function migrateStoredRoleLabel(name: string): string {
+  return canonicalizeCatalogRole(name) ?? name.trim();
+}
+
+/** Persist `role` / `roleId` when the whole string was an old catalog label. */
+export function migrateStoredRoleId(id: string): string {
+  const key = id.trim().toLowerCase().replace(/-/g, " ").replace(/\s+/g, " ");
+  return LEGACY_ROLE_RENAMES[key] ?? id;
 }
 
 export function assignmentHasRoleName(
@@ -725,6 +748,9 @@ function parseAssignmentRoleRow(row: unknown): AssignmentRole | null {
     extraAssigneeId = String(rec.assigneeId ?? rec.memberId ?? "").trim();
   }
   if (!name) return null;
+  name = migrateStoredRoleLabel(name);
+  id = id ? migrateStoredRoleId(id) : "";
+  if (!name) return null;
   return {
     id: id || uid("role"),
     name,
@@ -816,7 +842,11 @@ function preferRoleIndexByTeamName(
             ? "аналит"
             : "";
   if (needle) {
-    const i = roles.findIndex((r) => r.name.toLowerCase().includes(needle));
+    const i = roles.findIndex((r) =>
+      needle === "аналит"
+        ? normalizeAssignmentRoleName(r.name) === "аналитик"
+        : r.name.toLowerCase().includes(needle)
+    );
     if (i >= 0) return i;
   }
   return 0;
@@ -857,8 +887,15 @@ export function fillAssignmentRoles(
       id: uid("role"),
       name,
     }));
-  } else if (teamRoleNames !== undefined) {
-    roles = filterAssignmentRolesToTeam(roles, teamRoleNames);
+  } else {
+    roles = roles.map((r) => {
+      const name = migrateStoredRoleLabel(r.name);
+      const id = migrateStoredRoleId(r.id);
+      return name === r.name && id === r.id ? r : { ...r, name, id };
+    });
+    if (teamRoleNames !== undefined) {
+      roles = filterAssignmentRolesToTeam(roles, teamRoleNames);
+    }
   }
   if (!roles.length) return { ...a, roles };
   const defaultDays = Math.round(sizePlanDays("M", ranges));
@@ -1184,6 +1221,43 @@ export function applySeededTeamRoster(current: AppState): {
     state: { ...current, teams, teamRosterSeeded: SEEDED_TEAM_ROSTER_V1 },
     applied: true,
   };
+}
+
+/** Rewrite persisted «аналитика/разработка/тестирование» to person titles. */
+export function migrateLegacyCatalogRoles(current: AppState): {
+  state: AppState;
+  applied: boolean;
+} {
+  let applied = false;
+  const teams = current.teams.map((team) => {
+    const members = (team.members ?? []).map((m) => {
+      const role = migrateStoredRoleLabel(m.role);
+      if (role !== m.role) applied = true;
+      return role === m.role ? m : { ...m, role };
+    });
+    const roles = uniqueRoleNames(
+      members.length ? members.map((m) => m.role) : team.roles
+    );
+    if ((team.roles ?? []).some((r, i) => r !== roles[i]) || roles.length !== (team.roles ?? []).length) {
+      applied = true;
+    }
+    return syncTeamRoster({ ...team, members, roles });
+  });
+  const items = current.items.map((item) => ({
+    ...item,
+    assignments: item.assignments.map((a) => {
+      if (!a.roles?.length) return a;
+      const roles = a.roles.map((r) => {
+        const name = migrateStoredRoleLabel(r.name);
+        const id = migrateStoredRoleId(r.id);
+        if (name !== r.name || id !== r.id) applied = true;
+        return name === r.name && id === r.id ? r : { ...r, name, id };
+      });
+      return { ...a, roles };
+    }),
+  }));
+  if (!applied) return { state: current, applied: false };
+  return { state: { ...current, teams, items }, applied: true };
 }
 
 /**

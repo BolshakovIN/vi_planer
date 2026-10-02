@@ -6,6 +6,7 @@ import {
   applySeededTeamRoster,
   mergeMissingSeedItems,
   applyLocalDeletionTombstones,
+  migrateLegacyCatalogRoles,
   CLEARED_DEMAND_TEAMS_V1,
   ensureUniquePriorities,
   ensureStateAssignmentRoles,
@@ -363,14 +364,16 @@ export async function loadState(): Promise<AppState> {
   const cleared = applyClearedDemandTeams(tombstoned.state);
   const roster = applySeededTeamRoster(cleared.state);
   const merged = mergeMissingSeedItems(roster.state, SEED.items);
-  const state = merged.state;
+  const roles = migrateLegacyCatalogRoles(merged.state);
+  const state = roles.state;
   if (
     isolated ||
     packed.applied ||
     tombstoned.applied ||
     cleared.applied ||
     roster.applied ||
-    merged.applied
+    merged.applied ||
+    roles.applied
   ) {
     saveState(state);
   } else {
