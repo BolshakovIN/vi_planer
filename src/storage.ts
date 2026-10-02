@@ -5,6 +5,7 @@ import {
   applyComputedTeamCapacities,
   applySeededTeamRoster,
   mergeMissingSeedItems,
+  applyLocalDeletionTombstones,
   ensureUniquePriorities,
   ensureStateAssignmentRoles,
   normalizeState,
@@ -240,18 +241,24 @@ export function rollbackPortfolioPack(): AppState | null {
 export async function loadState(): Promise<AppState> {
   setSyncStatus("loading");
 
-  const remote =
-    (await loadFromApi()) ??
-    (await loadFromSupabase()) ??
-    loadLocal() ??
-    ensureStateAssignmentRoles(structuredClone(SEED));
+  const local = loadLocal();
+  const remote = (await loadFromApi()) ?? (await loadFromSupabase());
+  const base =
+    remote ?? local ?? ensureStateAssignmentRoles(structuredClone(SEED));
 
-  const packed = applyCurrentPortfolioPack(remote);
-  const cleared = applyClearedDemandTeams(packed.state);
+  const packed = applyCurrentPortfolioPack(base);
+  const tombstoned = applyLocalDeletionTombstones(packed.state, local);
+  const cleared = applyClearedDemandTeams(tombstoned.state);
   const roster = applySeededTeamRoster(cleared.state);
   const merged = mergeMissingSeedItems(roster.state, SEED.items);
   const state = merged.state;
-  if (packed.applied || cleared.applied || roster.applied || merged.applied) {
+  if (
+    packed.applied ||
+    tombstoned.applied ||
+    cleared.applied ||
+    roster.applied ||
+    merged.applied
+  ) {
     saveState(state);
   } else {
     saveLocal(state);

@@ -91,6 +91,7 @@ import {
   ensureStateAssignmentRoles,
   weekIndex,
   WORKING_DAYS_PER_WEEK,
+  rememberDeletedIds,
 } from "./model";
 import { SEED, PORTFOLIO_PACK_ID } from "./seed";
 import {
@@ -122,7 +123,6 @@ type Tab =
   | "demoA"
   | "demoB"
   | "capacity"
-  | "projects"
   | "changelog"
   | "settings";
 type SortKey = "priority" | "rice" | "estimate" | "eta";
@@ -138,7 +138,6 @@ const TAB_LABELS: Record<Tab, string> = {
   demoA: "Мониторинг",
   demoB: "Мониторинг",
   capacity: "Команды",
-  projects: "Проекты",
   changelog: "Журнал",
   settings: "Настройки",
 };
@@ -147,6 +146,7 @@ const TAB_LABELS: Record<Tab, string> = {
 function normalizeTab(tab: string | undefined | null): Tab {
   if (tab === "teams") return "queuesTest";
   if (tab === "roles") return "capacity";
+  if (tab === "projects") return "portfolio";
   if (
     tab === "portfolio" ||
     tab === "demand" ||
@@ -156,7 +156,6 @@ function normalizeTab(tab: string | undefined | null): Tab {
     tab === "demoA" ||
     tab === "demoB" ||
     tab === "capacity" ||
-    tab === "projects" ||
     tab === "changelog" ||
     tab === "settings"
   ) {
@@ -2344,71 +2343,6 @@ function capacityHtml(): string {
 
 type CatalogKind = "customers" | "executors" | "projects" | "products";
 
-function catalogListHtml(
-  kind: CatalogKind,
-  title: string,
-  addLabel: string
-): string {
-  const names = state[kind];
-  const rows = names
-    .map(
-      (name, idx) => `
-      <div class="role-row" data-catalog-kind="${kind}" data-catalog-idx="${idx}">
-        <input
-          class="role-name-input"
-          type="text"
-          data-catalog-name="${kind}"
-          data-catalog-idx="${idx}"
-          value="${escapeAttr(name)}"
-          aria-label="${escapeAttr(title)}"
-        />
-        <button
-          type="button"
-          class="btn btn-ghost team-delete-btn"
-          data-catalog-delete="${kind}"
-          data-catalog-idx="${idx}"
-          title="Удалить"
-        >Удалить</button>
-      </div>`
-    )
-    .join("");
-
-  return `
-    <div class="panel catalog-panel">
-      <div class="panel-header">
-        <h2>${escapeHtml(title)}</h2>
-      </div>
-      <div class="role-list" data-catalog-list="${kind}">
-        ${rows || `<div class="empty role-list-empty">Нет имён — добавьте ниже</div>`}
-      </div>
-      <div class="team-add-bar role-add-bar">
-        <input
-          id="newCatalog_${kind}"
-          type="text"
-          placeholder="Новое имя"
-          aria-label="Новое имя: ${escapeAttr(title)}"
-        />
-        <button class="btn btn-primary" data-catalog-add="${kind}">${escapeHtml(addLabel)}</button>
-      </div>
-    </div>
-  `;
-}
-
-function projectsTabHtml(): string {
-  return `
-    <div class="settings-stack">
-      <div class="callout">
-        Списки <strong>Проекты</strong> и <strong>Продукты</strong> задают варианты поля
-        «Название проекта / продукта» в карточке (по выбранному типу).
-      </div>
-      <div class="catalog-pair">
-        ${catalogListHtml("projects", "Проекты", "+ Проект")}
-        ${catalogListHtml("products", "Продукты", "+ Продукт")}
-      </div>
-    </div>
-  `;
-}
-
 /** Strict select from a catalog list; keeps orphan value once if missing. */
 function catalogSelectHtml(
   id: string,
@@ -2439,7 +2373,11 @@ function catalogSelectHtml(
 }
 
 function backlogNamesForType(type: ItemType): string[] {
-  return type === "project" ? state.projects : state.products;
+  return uniqCatalogNames(
+    state.items
+      .filter((i) => i.type === type)
+      .map((i) => productProjectName(i.backlog))
+  );
 }
 
 function refillBacklogSelect(type: ItemType, keep: string) {
@@ -3741,8 +3679,6 @@ function tabContentHtml(
       return demoVariantBHtml(load, overflowByTeam);
     case "capacity":
       return capacityHtml();
-    case "projects":
-      return projectsTabHtml();
     case "changelog":
       return changeLogHtml();
     case "settings":
@@ -4134,7 +4070,7 @@ function editorHtml(item: WorkItem | null): string {
                   backlogNamesForType(draft.type),
                   productProjectName(draft.backlog) || draft.backlog
                 )}
-                <div class="meta">Список зависит от типа (Проект / Продукт); правится на вкладке «Проекты».</div>
+                <div class="meta">Список из существующих проектов и продуктов в Реестре.</div>
               </div>
               <div class="field">
                 <label>Статус</label>
@@ -4962,7 +4898,6 @@ function render() {
         <h1>VI Planer — ${TAB_LABELS[ui.tab]}</h1>
         <p>Старт портфеля: ${state.startDate} · Экспорт: ${new Date().toLocaleString("ru-RU")}</p>
       </div>
-      ${ui.tab === "portfolio" ? metricsHtml(rollups, slices) : ""}
       <div class="tabs no-print">
         <button class="tab ${ui.tab === "portfolio" ? "active" : ""}" data-tab="portfolio">Реестр</button>
         <button class="tab ${ui.tab === "demand" ? "active" : ""}" data-tab="demand">Потребность</button>
@@ -4971,10 +4906,10 @@ function render() {
         ${isDemoVariantVisible("A") ? demoTabButtonHtml("demoA", "Мониторинг") : ""}
         <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очередь команд</button>
         <button class="tab tab-end ${ui.tab === "capacity" ? "active" : ""}" data-tab="capacity">Команды</button>
-        <button class="tab ${ui.tab === "projects" ? "active" : ""}" data-tab="projects">Проекты</button>
         <button class="tab ${ui.tab === "changelog" ? "active" : ""}" data-tab="changelog">Журнал</button>
         <button class="tab ${ui.tab === "settings" ? "active" : ""}" data-tab="settings">Настройки</button>
       </div>
+      ${ui.tab === "portfolio" ? metricsHtml(rollups, slices) : ""}
       <div class="tab-print-root" id="tabPrintRoot">
       ${tabContentHtml(rollups, slices, load, overflowByTeam)}
       </div>
@@ -5206,10 +5141,21 @@ function createDemandFunctionality(rawTitle: string) {
   return true;
 }
 
+function forgetWorkItemIds(ids: Iterable<string>) {
+  state.deletedItemIds = rememberDeletedIds(state.deletedItemIds, ids);
+}
+
+function forgetProjectKey(name: string) {
+  const key = name.trim();
+  if (!key) return;
+  state.deletedProjectKeys = rememberDeletedIds(state.deletedProjectKeys, [key]);
+}
+
 function deleteDemandFunctionality(itemId: string) {
   const prev = state.items.find((i) => i.id === itemId);
   if (!prev) return;
   state.items = state.items.filter((i) => i.id !== itemId);
+  forgetWorkItemIds([itemId]);
   delete ui.needCollapsedItems[itemId];
   if (ui.needItemId === itemId) ui.needItemId = null;
   if (ui.needAddItemId === itemId) ui.needAddItemId = null;
@@ -6699,6 +6645,7 @@ function bindUiRest() {
     if (!ui.editingId) return;
     const prev = state.items.find((i) => i.id === ui.editingId);
     state.items = state.items.filter((i) => i.id !== ui.editingId);
+    forgetWorkItemIds([ui.editingId]);
     if (prev) {
       logChange(
         `Удалена функциональность «${prev.title}» (#${prev.manualRank ?? "—"})`,
@@ -7000,12 +6947,24 @@ function bindUiRest() {
           it.assignee === removed ? { ...it, assignee: "" } : it
         );
       } else if (kind === "projects") {
+        const matching = state.items.filter(
+          (it) =>
+            it.type === "project" && productProjectName(it.backlog) === removed
+        );
+        forgetWorkItemIds(matching.map((it) => it.id));
+        forgetProjectKey(removed);
         state.items = state.items.map((it) =>
           it.type === "project" && productProjectName(it.backlog) === removed
             ? { ...it, backlog: "" }
             : it
         );
       } else {
+        const matching = state.items.filter(
+          (it) =>
+            it.type === "product" && productProjectName(it.backlog) === removed
+        );
+        forgetWorkItemIds(matching.map((it) => it.id));
+        forgetProjectKey(removed);
         state.items = state.items.map((it) =>
           it.type === "product" && productProjectName(it.backlog) === removed
             ? { ...it, backlog: "" }

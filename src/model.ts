@@ -1060,7 +1060,85 @@ export interface AppState {
    * After `"v1"`, missing members stay empty — never re-seed on load.
    */
   teamRosterSeeded?: string;
+  /**
+   * Work-item ids the user deleted. Seed merge must not resurrect these
+   * (x001–x063 or later user-created ids).
+   */
+  deletedItemIds?: string[];
+  /**
+   * Project / product container names the user removed. Seed merge must not
+   * restore those groups or re-add catalog chips.
+   */
+  deletedProjectKeys?: string[];
   version: 3;
+}
+
+/** Deduped id / catalog-key list; empty strings dropped. */
+export function rememberDeletedIds(
+  existing: readonly string[] | undefined,
+  ids: Iterable<string>
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of [...(existing ?? []), ...ids]) {
+    const id = String(raw ?? "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function parseIdList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return rememberDeletedIds([], raw.map((x) => String(x)));
+}
+
+function catalogKey(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/**
+ * Keep user deletions even when a stale cloud snapshot wins load order.
+ * Unions local tombstones, drops those items, and strips deleted catalog names.
+ */
+export function applyLocalDeletionTombstones(
+  current: AppState,
+  local: AppState | null
+): { state: AppState; applied: boolean } {
+  const deletedItemIds = rememberDeletedIds(
+    current.deletedItemIds,
+    local?.deletedItemIds ?? []
+  );
+  const deletedProjectKeys = rememberDeletedIds(
+    current.deletedProjectKeys,
+    local?.deletedProjectKeys ?? []
+  );
+  const drop = new Set(deletedItemIds);
+  const deletedProjects = new Set(
+    deletedProjectKeys.map((k) => catalogKey(k)).filter(Boolean)
+  );
+  const items = current.items.filter((item) => !drop.has(item.id));
+  const projects = current.projects.filter((p) => !deletedProjects.has(catalogKey(p)));
+  const products = current.products.filter((p) => !deletedProjects.has(catalogKey(p)));
+  const applied =
+    items.length !== current.items.length ||
+    deletedItemIds.length !== (current.deletedItemIds ?? []).length ||
+    deletedProjectKeys.length !== (current.deletedProjectKeys ?? []).length ||
+    projects.length !== current.projects.length ||
+    products.length !== current.products.length;
+  if (!applied) return { state: current, applied: false };
+  return {
+    state: {
+      ...current,
+      items,
+      projects,
+      products,
+      deletedItemIds,
+      deletedProjectKeys,
+    },
+    applied: true,
+  };
 }
 
 /** Persist flag: team rows removed from every functionality (catalog stays). */
@@ -1100,9 +1178,9 @@ export function applySeededTeamRoster(current: AppState): {
 }
 
 /**
- * Re-insert seed portfolio rows missing from persist (by id).
- * Keeps live items and their demand assignments; does not copy seed teams onto
- * existing rows. Missing rows come back without assignments.
+ * Restore seed PROJECT groups the user never had. Does not resurrect
+ * user-deleted functionalities (`deletedItemIds`) or deleted project chips
+ * (`deletedProjectKeys`). Never copies seed team assignments onto rows.
  */
 export function mergeMissingSeedItems(
   current: AppState,
@@ -1110,6 +1188,17 @@ export function mergeMissingSeedItems(
 ): { state: AppState; applied: boolean } {
   const seedById = new Map(seedItems.map((item) => [item.id, item]));
   const have = new Set(current.items.map((item) => item.id));
+  const deletedIds = new Set(current.deletedItemIds ?? []);
+  const deletedProjects = new Set(
+    (current.deletedProjectKeys ?? [])
+      .map((k) => catalogKey(k))
+      .filter(Boolean)
+  );
+  const liveProjectKeys = new Set(
+    current.items
+      .map((item) => catalogKey(containerNameFromBacklog(item.backlog)))
+      .filter(Boolean)
+  );
 
   let typeFixed = 0;
   const kept = current.items.map((item) => {
@@ -1120,7 +1209,14 @@ export function mergeMissingSeedItems(
   });
 
   const missing = seedItems
-    .filter((item) => !have.has(item.id))
+    .filter((item) => {
+      if (have.has(item.id) || deletedIds.has(item.id)) return false;
+      const key = catalogKey(containerNameFromBacklog(item.backlog));
+      if (!key || deletedProjects.has(key)) return false;
+      // User already has this project — do not fill in deleted siblings.
+      if (liveProjectKeys.has(key)) return false;
+      return true;
+    })
     .map((item) => {
       const clone = structuredClone(item);
       clone.assignments = [];
@@ -1139,19 +1235,22 @@ export function mergeMissingSeedItems(
     ? `Восстановлены ${missing.length} проектов из таблицы приоритезации`
     : `Тип ${typeFixed} записей возвращён к проектному портфелю`;
 
+  const keepCatalog = (names: string[]) =>
+    names.filter((n) => !deletedProjects.has(catalogKey(n)));
+
   return {
     state: {
       ...current,
       items,
       projects: uniqCatalogNames([
-        ...current.projects,
-        ...seedItems
+        ...keepCatalog(current.projects),
+        ...missing
           .filter((item) => item.type === "project")
           .map((item) => containerNameFromBacklog(item.backlog)),
       ]),
       products: uniqCatalogNames([
-        ...current.products,
-        ...seedItems
+        ...keepCatalog(current.products),
+        ...missing
           .filter((item) => item.type === "product")
           .map((item) => containerNameFromBacklog(item.backlog)),
       ]),
@@ -2508,6 +2607,8 @@ export function normalizeState(raw: unknown): AppState | null {
       data.teamRosterSeeded != null && String(data.teamRosterSeeded).trim()
         ? String(data.teamRosterSeeded).trim()
         : undefined,
+    deletedItemIds: parseIdList(data.deletedItemIds),
+    deletedProjectKeys: parseIdList(data.deletedProjectKeys),
     items: ensureUniquePriorities(filledItems, parsedRanges),
   };
 }
