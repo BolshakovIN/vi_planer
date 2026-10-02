@@ -1,8 +1,12 @@
 import {
   AppState,
-  ensureUniquePriorities,
-  uniqCatalogNames,
+  TeamAssignment,
+  TShirtSize,
+  addWeeks,
   containerNameFromBacklog,
+  ensureUniquePriorities,
+  prependChangeLog,
+  uniqCatalogNames,
 } from "./model";
 
 /** ISO start for the Oct 2026 prioritization pack (all assignments). */
@@ -16,7 +20,114 @@ export const PORTFOLIO_PACK_V2 = "xlsx-prio-2026-10-v2";
 export const PORTFOLIO_PACK_V1 = "xlsx-prio-2026-10";
 export const PORTFOLIO_PACK_ROLLED_BACK = "xlsx-prio-2026-10-rolled-back";
 
+/** One-shot flag for the frozen v1 demo plan (teams + Gantt dates). */
+export const V1_RANDOM_PLAN_ID = "v1";
+
+/** Deterministic mulberry32 seed — reload must not reshuffle. */
+const V1_RANDOM_PLAN_SEED = 0x5631a7e1;
+
+const PLAN_SIZES: TShirtSize[] = ["XS", "S", "M", "L", "XL"];
+const PLAN_MAX_START_WEEKS = 12;
+
 const START = PORTFOLIO_START;
+
+function mulberry32(seed: number): () => number {
+  let a = seed | 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function pickN<T>(rng: () => number, list: T[], n: number): T[] {
+  const copy = list.slice();
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    const tmp = copy[i];
+    copy[i] = copy[j];
+    copy[j] = tmp;
+  }
+  return copy.slice(0, Math.max(0, Math.min(n, copy.length)));
+}
+
+function catalogTeams(state: AppState) {
+  const named = state.teams.filter((t) => t.id && t.id !== "tbd");
+  const list = named.length ? named : state.teams.filter((t) => t.id);
+  return [...list].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/** True when most functionalities have no team assignments (empty Gantt). */
+export function isV1PlanSparse(state: AppState): boolean {
+  const items = state.items;
+  if (!items.length) return true;
+  const withTeams = items.filter((item) => item.assignments.length > 0).length;
+  return withTeams / items.length < 0.5;
+}
+
+/**
+ * Assign 1–3 catalog teams per functionality with XS–XL sizes and staggered
+ * starts from PORTFOLIO_START. Same seed → same plan.
+ */
+export function buildV1RandomPlan(
+  state: AppState,
+  opts: { onlyEmpty?: boolean } = {}
+): AppState {
+  const teams = catalogTeams(state);
+  if (!teams.length) {
+    return { ...state, v1RandomPlan: V1_RANDOM_PLAN_ID };
+  }
+  const rng = mulberry32(V1_RANDOM_PLAN_SEED);
+  const origin = state.startDate || PORTFOLIO_START;
+  const planned = new Map(
+    [...state.items]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((item) => {
+        if (opts.onlyEmpty && item.assignments.length > 0) {
+          return [item.id, item] as const;
+        }
+        const rank = item.manualRank ?? 999;
+        const n = 1 + Math.floor(rng() * 3);
+        const chosen = pickN(rng, teams, n);
+        const wave = Math.min(
+          PLAN_MAX_START_WEEKS,
+          Math.max(0, Math.floor((Math.max(1, rank) - 1) / 5))
+        );
+        const assignments: TeamAssignment[] = chosen.map((team) => {
+          const jitter = Math.floor(rng() * 3);
+          const size = PLAN_SIZES[Math.floor(rng() * PLAN_SIZES.length)] ?? "M";
+          return {
+            teamId: team.id,
+            size,
+            workStartDate: addWeeks(origin, wave + jitter),
+          };
+        });
+        return [item.id, { ...item, assignments }] as const;
+      })
+  );
+  const items = state.items.map((item) => planned.get(item.id) ?? item);
+  return { ...state, items, v1RandomPlan: V1_RANDOM_PLAN_ID };
+}
+
+/** Fill a sparse live/cloud v1 portfolio once. */
+export function applyV1RandomPlan(
+  current: AppState
+): { state: AppState; applied: boolean } {
+  if (current.v1RandomPlan === V1_RANDOM_PLAN_ID) {
+    return { state: current, applied: false };
+  }
+  if (!isV1PlanSparse(current)) {
+    return { state: current, applied: false };
+  }
+  const next = buildV1RandomPlan(current, { onlyEmpty: true });
+  next.changeLog = prependChangeLog(
+    current.changeLog,
+    "Назначены команды и сроки (демо-план v1)",
+    "system"
+  );
+  return { state: next, applied: true };
+}
 
 const SEED_RAW: AppState = {
   version: 3,
@@ -1514,7 +1625,7 @@ const SEED_RAW: AppState = {
   ],
 };
 
-export const SEED: AppState = {
+const BASE_SEED: AppState = {
   ...SEED_RAW,
   customers: uniqCatalogNames(SEED_RAW.items.map((i) => i.owner)),
   executors: uniqCatalogNames(SEED_RAW.items.map((i) => i.assignee)),
@@ -1530,3 +1641,5 @@ export const SEED: AppState = {
   ),
   items: ensureUniquePriorities(SEED_RAW.items),
 };
+
+export const SEED: AppState = buildV1RandomPlan(BASE_SEED);

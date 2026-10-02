@@ -287,6 +287,11 @@ export interface AppState {
    * `xlsx-prio-2026-10-v4` — таблица приоритезации; `…-rolled-back` — откат.
    */
   portfolioPack?: string;
+  /**
+   * One-shot v1 demo plan: catalog teams + staggered Gantt starts.
+   * `"v1"` after apply (`v1RandomPlan`).
+   */
+  v1RandomPlan?: string;
   version: 3;
 }
 
@@ -1426,6 +1431,10 @@ export function normalizeState(raw: unknown): AppState | null {
     portfolioPack:
       data.portfolioPack != null && String(data.portfolioPack).trim()
         ? String(data.portfolioPack).trim()
+        : undefined,
+    v1RandomPlan:
+      data.v1RandomPlan != null && String(data.v1RandomPlan).trim()
+        ? String(data.v1RandomPlan).trim()
         : undefined,
     items: ensureUniquePriorities(items, parsedRanges),
   };

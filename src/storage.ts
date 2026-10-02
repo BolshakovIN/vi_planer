@@ -9,6 +9,7 @@ import {
   SEED,
   PORTFOLIO_PACK_ID,
   PORTFOLIO_PACK_ROLLED_BACK,
+  applyV1RandomPlan,
 } from "./seed";
 
 const STORAGE_KEY = "vi-planer-v3";
@@ -229,8 +230,10 @@ export async function loadState(): Promise<AppState> {
     loadLocal() ??
     structuredClone(SEED);
 
-  const { state, applied } = applyCurrentPortfolioPack(remote);
-  if (applied) {
+  const packed = applyCurrentPortfolioPack(remote);
+  const planned = applyV1RandomPlan(packed.state);
+  const state = planned.state;
+  if (packed.applied || planned.applied) {
     saveState(state);
   } else {
     saveLocal(state);
