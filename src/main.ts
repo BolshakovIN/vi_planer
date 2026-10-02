@@ -65,14 +65,15 @@ import {
   makeAssignmentRole,
   makeAssignmentRolesForTeam,
   availableAssignmentRolesForTeam,
-  availableTeamSettingsRoles,
   resolveTeamRoleNames,
-  DEFAULT_ASSIGNMENT_ROLE_NAMES,
+  ASSIGNMENT_ROLE_CATALOG,
   canonicalizeCatalogRole,
+  normalizeAssignmentRoleName,
   teamHasRoleName,
   assignmentHasRoleName,
   computedTeamCapacityPw,
   applyComputedTeamCapacities,
+  syncTeamRoster,
   AssignmentRole,
   fillAssignmentRoles,
   rolePlanDays,
@@ -81,7 +82,6 @@ import {
   submittedAssignmentRoles,
   roleJobLabel,
   shortFio,
-  makeSeedTeamMembers,
   TeamMember,
   ensureStateAssignmentRoles,
   weekIndex,
@@ -105,7 +105,8 @@ import {
 } from "./pdfExport";
 
 /** Release / deploy stamp in the header (DD.MM.YYYY) */
-const RELEASE_UPDATED = "02.10.2026";
+const RELEASE_UPDATED = "03.10.2026";
+const EDITION_STORAGE_KEY = "vi-planer-edition";
 
 type Tab =
   | "portfolio"
@@ -116,7 +117,6 @@ type Tab =
   | "demoA"
   | "demoB"
   | "capacity"
-  | "roles"
   | "projects"
   | "changelog"
   | "settings";
@@ -133,7 +133,6 @@ const TAB_LABELS: Record<Tab, string> = {
   demoA: "Мониторинг",
   demoB: "Мониторинг",
   capacity: "Команды",
-  roles: "Роли",
   projects: "Проекты",
   changelog: "Журнал",
   settings: "Настройки",
@@ -142,6 +141,7 @@ const TAB_LABELS: Record<Tab, string> = {
 /** Legacy deep-link / tab ids: `teams` → Очередь команд. */
 function normalizeTab(tab: string | undefined | null): Tab {
   if (tab === "teams") return "queuesTest";
+  if (tab === "roles") return "capacity";
   if (
     tab === "portfolio" ||
     tab === "demand" ||
@@ -151,7 +151,6 @@ function normalizeTab(tab: string | undefined | null): Tab {
     tab === "demoA" ||
     tab === "demoB" ||
     tab === "capacity" ||
-    tab === "roles" ||
     tab === "projects" ||
     tab === "changelog" ||
     tab === "settings"
@@ -170,6 +169,7 @@ function isDemoVariantVisible(which: "A" | "B"): boolean {
 function ensureVisibleTab() {
   if (ui.tab === "demoA" && !isDemoVariantVisible("A")) ui.tab = "portfolio";
   if (ui.tab === "demoB" && !isDemoVariantVisible("B")) ui.tab = "portfolio";
+  if ((ui.tab as string) === "roles") ui.tab = "capacity";
 }
 
 function setDemoVariantVisible(which: "A" | "B", visible: boolean) {
@@ -236,7 +236,7 @@ interface UiState {
   needItemId: string | null;
   /** Single-select project chip; null = pick a project */
   needProjectKey: string | null;
-  /** Functionality whose «+ Добавить команду» picker is open */
+  /** Functionality whose «+ Добавить команду» picker is open (Потребность) */
   needAddItemId: string | null;
   /** `${itemId}:${teamId}` whose «+ Роль» picker is open */
   needAddRoleKey: string | null;
@@ -248,16 +248,8 @@ interface UiState {
   planTeamIds: string[];
   /** Last-clicked team chip (stronger highlight) */
   planFocusTeamId: string | null;
-  /** Functionality whose «+» team picker is open */
-  planAddItemId: string | null;
   planCollapsedProjects: Record<string, true>;
   planCollapsedItems: Record<string, true>;
-  /** Expanded people lists on Команды */
-  teamPeopleOpen: Record<string, true>;
-  /** Role lists on Команды; missing/true = open so defaults are visible */
-  teamRolesOpen: Record<string, boolean>;
-  /** Team id whose «+ Роль» picker is open on Команды */
-  teamAddRoleId: string | null;
   ganttCollapsedProjects: Record<string, true>;
   ganttCollapsedItems: Record<string, true>;
   /** Inline «Новая задача на таймлайн» */
@@ -312,12 +304,8 @@ const ui: UiState = {
   needCollapsedItems: {},
   planTeamIds: [],
   planFocusTeamId: null,
-  planAddItemId: null,
   planCollapsedProjects: {},
   planCollapsedItems: {},
-  teamPeopleOpen: {},
-  teamRolesOpen: {},
-  teamAddRoleId: null,
   ganttCollapsedProjects: {},
   ganttCollapsedItems: {},
   planTaskForm: null,
@@ -2184,61 +2172,64 @@ function openTeamColorPicker(
   });
 }
 
-function teamsManageHtml(): string {
-  for (const t of state.teams) {
-    if (t.members == null) t.members = makeSeedTeamMembers(t.id);
-    if (t.roles == null) t.roles = [...DEFAULT_ASSIGNMENT_ROLE_NAMES];
+function catalogRoleOptionsHtml(selected: string): string {
+  const sel = canonicalizeCatalogRole(selected) ?? selected.trim();
+  const names: string[] = [...ASSIGNMENT_ROLE_CATALOG];
+  if (sel && !names.some((n) => normalizeAssignmentRoleName(n) === normalizeAssignmentRoleName(sel))) {
+    names.unshift(sel);
   }
+  return names
+    .map(
+      (name) =>
+        `<option value="${escapeAttr(name)}"${
+          sel && normalizeAssignmentRoleName(name) === normalizeAssignmentRoleName(sel)
+            ? " selected"
+            : ""
+        }>${escapeHtml(name)}</option>`
+    )
+    .join("");
+}
+
+function fioSuggestions(): string[] {
+  const names: string[] = [];
+  for (const t of state.teams) {
+    for (const m of t.members ?? []) names.push(m.name);
+  }
+  return uniqCatalogNames([...names, ...state.executors]);
+}
+
+function teamsManageHtml(): string {
+  applyComputedTeamCapacities(state.teams);
+  const suggest = fioSuggestions();
+  const datalist = `<datalist id="fio-suggest">${suggest
+    .map((n) => `<option value="${escapeAttr(n)}"></option>`)
+    .join("")}</datalist>`;
   const rows = state.teams
     .map((t) => {
       const members = t.members ?? [];
-      const teamRoles = t.roles ?? [];
-      const peopleOpen = Boolean(ui.teamPeopleOpen[t.id]);
-      const rolesOpen = ui.teamRolesOpen[t.id] !== false;
-      const remainingRoles = availableTeamSettingsRoles(teamRoles);
-      const rolePickerOpen = ui.teamAddRoleId === t.id;
-      const peopleRows = members
+      const seatRows = members
         .map(
           (m) => `
-          <div class="team-person-row">
+          <div class="team-roster-row">
+            <select
+              class="team-roster-role"
+              data-team-row-role="${t.id}"
+              data-person-id="${escapeAttr(m.id)}"
+              aria-label="Роль"
+            >${catalogRoleOptionsHtml(m.role)}</select>
             <input
-              class="team-person-input"
+              class="team-roster-fio"
               type="text"
-              data-team-person="${t.id}"
+              list="fio-suggest"
+              data-team-row-fio="${t.id}"
               data-person-id="${escapeAttr(m.id)}"
               value="${escapeAttr(m.name)}"
               aria-label="ФИО"
             />
-            <button type="button" class="need-role-del" data-team-person-del="${t.id}" data-person-id="${escapeAttr(m.id)}" title="Удалить" aria-label="Удалить">×</button>
+            <button type="button" class="need-role-del" data-team-row-del="${t.id}" data-person-id="${escapeAttr(m.id)}" title="Удалить строку" aria-label="Удалить строку">×</button>
           </div>`
         )
         .join("");
-      const roleRows = teamRoles
-        .map(
-          (name) => `
-          <div class="team-person-row">
-            <span class="team-role-name">${escapeHtml(name)}</span>
-            <button type="button" class="need-role-del" data-team-role-del="${t.id}" data-role-name="${escapeAttr(name)}" title="Удалить роль" aria-label="Удалить роль ${escapeAttr(name)}">×</button>
-          </div>`
-        )
-        .join("");
-      const addRoleBtn = remainingRoles.length
-        ? `<div class="need-add-wrap team-role-add-wrap">
-            <button type="button" class="btn btn-primary" data-team-role-add-open="${t.id}">+ Роль</button>
-            ${
-              rolePickerOpen
-                ? `<div class="need-add-menu" role="menu">
-                    ${remainingRoles
-                      .map(
-                        (name) =>
-                          `<button type="button" class="need-add-option" data-team-role-add="${t.id}" data-role-name="${escapeAttr(name)}">${escapeHtml(name)}</button>`
-                      )
-                      .join("")}
-                  </div>`
-                : ""
-            }
-          </div>`
-        : "";
       return `
       <div class="team-manage-card" data-team-row="${t.id}">
         <div class="capacity-row">
@@ -2250,10 +2241,6 @@ function teamsManageHtml(): string {
             value="${escapeAttr(t.name)}"
             aria-label="Название команды"
           />
-          <div class="team-capacity-field">
-            <span class="meta">Ёмкость (факт)</span>
-            <strong class="mono team-capacity-fact">${escapeHtml(teamCapacityFactLabel(t))}</strong>
-          </div>
           <button
             type="button"
             class="btn btn-ghost team-delete-btn"
@@ -2262,32 +2249,35 @@ function teamsManageHtml(): string {
             ${state.teams.length <= 1 ? "disabled" : ""}
           >Удалить</button>
         </div>
-        <details class="team-people-details"${peopleOpen ? " open" : ""} data-team-people="${t.id}">
-          <summary class="team-people-sum">ФИО · ${members.length}</summary>
-          <div class="team-people-list">
-            ${peopleRows || `<div class="meta">Нет людей — добавьте ниже</div>`}
-            <div class="team-person-add">
-              <input type="text" data-team-person-new="${t.id}" placeholder="ФИО" aria-label="Новое ФИО" />
-              <button type="button" class="btn btn-primary" data-team-person-add="${t.id}">+ Человек</button>
-            </div>
+        <div class="team-roster">
+          <div class="team-roster-head" aria-hidden="true"><span>Роль</span><span>ФИО</span></div>
+          ${seatRows || `<div class="meta team-roster-empty">Нет строк — добавьте роль и ФИО</div>`}
+          <div class="team-roster-row team-roster-add">
+            <select class="team-roster-role" data-team-row-role-new="${t.id}" aria-label="Новая роль">
+              <option value="">Роль</option>
+              ${catalogRoleOptionsHtml("")}
+            </select>
+            <input
+              class="team-roster-fio"
+              type="text"
+              list="fio-suggest"
+              data-team-row-fio-new="${t.id}"
+              placeholder="ФИО"
+              aria-label="Новое ФИО"
+            />
+            <button type="button" class="btn btn-primary" data-team-row-add="${t.id}">+ Строка</button>
           </div>
-        </details>
-        <details class="team-people-details team-roles-details"${rolesOpen ? " open" : ""} data-team-roles="${t.id}">
-          <summary class="team-people-sum">Роли · ${teamRoles.length}</summary>
-          <div class="team-people-list">
-            ${roleRows || `<div class="meta">Нет ролей — добавьте из каталога</div>`}
-            ${addRoleBtn}
-          </div>
-        </details>
+        </div>
       </div>`;
     })
     .join("");
 
   return `
     <div class="callout">
-      <strong>Ёмкость</strong> — факт: 1 чел·нед на человека в неделю; если людей нет — по числу ролей команды.
-      Новую команду добавляете сами ниже. В Потребности выбираете её через «+ Добавить команду».
+      Каждая строка — <strong>роль — ФИО</strong>. В Потребности доступны роли, которые есть в команде.
+      Новую команду добавляете ниже и назначаете на вкладке «Потребность».
     </div>
+    ${datalist}
     <div class="panel panel-sticky-host">
       <div class="panel-sticky">
         <div class="panel-header">
@@ -2358,21 +2348,6 @@ function catalogListHtml(
           aria-label="Новое имя: ${escapeAttr(title)}"
         />
         <button class="btn btn-primary" data-catalog-add="${kind}">${escapeHtml(addLabel)}</button>
-      </div>
-    </div>
-  `;
-}
-
-function rolesHtml(): string {
-  return `
-    <div class="settings-stack">
-      <div class="callout">
-        Списки <strong>Заказчик</strong> и <strong>Исполнитель</strong> задают допустимые значения
-        в карточке функциональности. Имена из старых данных подтягиваются автоматически.
-      </div>
-      <div class="catalog-pair">
-        ${catalogListHtml("customers", "Заказчик", "+ Заказчик")}
-        ${catalogListHtml("executors", "Исполнитель", "+ Исполнитель")}
       </div>
     </div>
   `;
@@ -2983,7 +2958,7 @@ function demandAssignRowHtml(item: WorkItem, a: TeamAssignment): string {
     : "";
   const emptyHint = teamRoles.length
     ? `<p class="need-fn-empty meta">Ролей нет. Нажмите «+ Роль».</p>`
-    : `<p class="need-fn-empty meta">У команды нет ролей. Настройте их на вкладке «Команды».</p>`;
+    : `<p class="need-fn-empty meta">У команды нет ролей. Добавьте строки «роль — ФИО» на вкладке «Команды».</p>`;
   const rolesHtml = roles.length
     ? `<div class="need-roles">${roles.map((role) => demandRoleRowHtml(item, a, role)).join("")}</div>`
     : emptyHint;
@@ -3231,7 +3206,15 @@ function planTaskFormHtml(item: WorkItem, teamId: string, roleId: string): strin
   const assign = item.assignments.find((a) => a.teamId === teamId);
   const role = assign?.roles?.find((r) => r.id === roleId);
   const job = roleJobLabel(role?.name ?? "");
-  const people = (team?.members ?? [])
+  const allPeople = team?.members ?? [];
+  const roleKey = role?.name ? normalizeAssignmentRoleName(role.name) : "";
+  const matched = roleKey
+    ? allPeople.filter(
+        (m) => normalizeAssignmentRoleName(m.role) === roleKey
+      )
+    : allPeople;
+  const peopleSrc = matched.length ? matched : allPeople;
+  const people = peopleSrc
     .map((m) => {
       const on = form.memberId === m.id;
       return `<button type="button" class="plan-chip${on ? " is-on" : ""}" data-plan-form-member="${escapeAttr(m.id)}">${escapeHtml(shortFio(m.name))} · ${escapeHtml(job)}</button>`;
@@ -3248,7 +3231,7 @@ function planTaskFormHtml(item: WorkItem, teamId: string, roleId: string): strin
   return `<div class="plan-task-form">
     <div class="plan-task-form-title">Новая задача на таймлайн: ${escapeHtml(item.title)}</div>
     <div class="plan-task-label">Исполнитель</div>
-    <div class="plan-chips">${people || `<span class="meta">Добавьте людей на вкладке «Команды»</span>`}</div>
+    <div class="plan-chips">${people || `<span class="meta">Добавьте строки роль — ФИО на вкладке «Команды»</span>`}</div>
     <div class="plan-task-label">Дата старта</div>
     <div class="plan-chips">${starts}</div>
     <div class="plan-task-label">Длительность, рабочих дней</div>
@@ -3472,7 +3455,7 @@ function planningHtml(
     .map((t) => {
       const on = selectedSet.has(t.id);
       const focus = t.id === focusId;
-      return `<button type="button" class="plan-team-chip${on ? " is-on" : ""}${focus ? " is-focus" : ""}" data-plan-team="${escapeAttr(t.id)}" title="${escapeAttr(on ? "Снять команду" : "Добавить команду")}">
+      return `<button type="button" class="plan-team-chip${on ? " is-on" : ""}${focus ? " is-focus" : ""}" data-plan-team="${escapeAttr(t.id)}" title="${escapeAttr(on ? "Скрыть команду" : "Показать команду")}">
         <span class="team-dot${on ? "" : " is-hollow"}" style="${on ? `background:${t.color}` : `border-color:${t.color}`}"></span>${escapeHtml(t.name)}
       </button>`;
     })
@@ -3521,26 +3504,6 @@ function planningHtml(
               );
               const plan = itemSlices.reduce((s, sl) => s + planSliceDays(sl), 0);
               const fnOpen = !ui.planCollapsedItems[item.id];
-              const used = new Set(item.assignments.map((a) => a.teamId));
-              const unused = state.teams.filter((t) => !used.has(t.id));
-              const pickerOpen = ui.planAddItemId === item.id;
-              const addBtn = unused.length
-                ? `<div class="need-add-wrap">
-                    <button type="button" class="plan-add-btn" data-plan-add-open="${item.id}" title="Добавить исполнителя">+</button>
-                    ${
-                      pickerOpen
-                        ? `<div class="need-add-menu" role="menu">
-                            ${unused
-                              .map(
-                                (t) =>
-                                  `<button type="button" class="need-add-option" data-plan-add="${item.id}" data-team="${t.id}"><span class="team-dot" style="background:${t.color}"></span>${escapeHtml(t.name)}</button>`
-                              )
-                              .join("")}
-                          </div>`
-                        : ""
-                    }
-                  </div>`
-                : "";
               const execRows = assigns
                 .map((a) => {
                   const team = teamById(a.teamId);
@@ -3607,7 +3570,6 @@ function planningHtml(
                   <div class="plan-cell">
                     <span class="plan-fn-title">${escapeHtml(item.title)}</span>
                     <span class="plan-fn-days">${req}/${plan || "—"}</span>
-                    ${addBtn}
                   </div>
                   ${planTrackHtml(fnBar, weeks)}
                 </summary>
@@ -3681,8 +3643,6 @@ function tabContentHtml(
       return demoVariantBHtml(load, overflowByTeam);
     case "capacity":
       return capacityHtml();
-    case "roles":
-      return rolesHtml();
     case "projects":
       return projectsTabHtml();
     case "changelog":
@@ -4564,11 +4524,10 @@ function confirmDeleteTeam(teamId: string, anchor: HTMLElement) {
     return;
   }
   const n = countTeamUsage(teamId);
-  const cap = `${team.capacityPw} чел·нед/нед`;
   const text =
     n > 0
-      ? `Удалить «<strong>${escapeHtml(team.name)}</strong>» (${cap}/нед)?<br/>Снимется с <span class="accent">${n}</span> функциональностей. Карточки без команд тоже удалятся.`
-      : `Удалить «<strong>${escapeHtml(team.name)}</strong>» (${cap}/нед)?`;
+      ? `Удалить «<strong>${escapeHtml(team.name)}</strong>»?<br/>Снимется с <span class="accent">${n}</span> функциональностей. Карточки без команд тоже удалятся.`
+      : `Удалить «<strong>${escapeHtml(team.name)}</strong>»?`;
   askAppConfirm(anchor, text, () => removeTeam(teamId), () => undefined, {
     wide: true,
   });
@@ -4771,16 +4730,28 @@ function brandMarkSrc(): string {
   return new URL("vi-mark.png", new URL(base, window.location.href)).href;
 }
 
+function isV1Edition(): boolean {
+  return /\/v1(\/|$)/.test(window.location.pathname);
+}
+
+function editionSwitcherHtml(): string {
+  const isV1 = isV1Edition();
+  const v1Href = isV1 ? "./" : "./v1/";
+  const v2Href = isV1 ? "../" : "./";
+  const persist = (ed: "v1" | "v2") =>
+    `try{localStorage.setItem('${EDITION_STORAGE_KEY}','${ed}')}catch(e){}`;
+  return `<nav class="edition-switch no-print" aria-label="Версия интерфейса">
+    <a class="edition-switch-btn${isV1 ? " is-on" : ""}" href="${v1Href}" data-edition="v1" onclick="${persist("v1")}">v1</a>
+    <a class="edition-switch-btn${!isV1 ? " is-on" : ""}" href="${v2Href}" data-edition="v2" onclick="${persist("v2")}">v2</a>
+  </nav>`;
+}
+
 function render() {
   closePrioPop();
   closeResetPop();
   closeColPickerOutside();
   closeOverloadPop();
   ensureVisibleTab();
-  for (const t of state.teams) {
-    if (t.members == null) t.members = makeSeedTeamMembers(t.id);
-    if (t.roles == null) t.roles = [...DEFAULT_ASSIGNMENT_ROLE_NAMES];
-  }
   applyComputedTeamCapacities(state.teams);
   const { slices, rollups, load } = scheduleState();
   const overflowByTeam = scheduledOverloadWeeks(load);
@@ -4806,6 +4777,7 @@ function render() {
           </button>
         </div>
         <div class="top-actions">
+          ${editionSwitcherHtml()}
           <span class="release-stamp" title="Дата релиза">updated ${RELEASE_UPDATED}</span>
           <span class="sync-badge" id="syncStatus" data-status="${getSyncStatus()}">${syncStatusLabel(getSyncStatus())}</span>
           <button class="btn" id="exportPdfBtn">Экспорт PDF</button>
@@ -4829,7 +4801,6 @@ function render() {
         <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очередь команд</button>
         ${isDemoVariantVisible("A") ? demoTabButtonHtml("demoA", "Мониторинг") : ""}
         <button class="tab tab-end ${ui.tab === "capacity" ? "active" : ""}" data-tab="capacity">Команды</button>
-        <button class="tab ${ui.tab === "roles" ? "active" : ""}" data-tab="roles">Роли</button>
         <button class="tab ${ui.tab === "projects" ? "active" : ""}" data-tab="projects">Проекты</button>
         <button class="tab ${ui.tab === "changelog" ? "active" : ""}" data-tab="changelog">Журнал</button>
         <button class="tab ${ui.tab === "settings" ? "active" : ""}" data-tab="settings">Настройки</button>
@@ -5044,7 +5015,6 @@ function addDemandTeam(itemId: string, teamId: string) {
   );
   ui.needAddItemId = null;
   ui.needAddRoleKey = null;
-  ui.planAddItemId = null;
   logChange(
     `Потребность «${item.title}»: добавлена команда «${team.name}»`,
     "team"
@@ -5464,40 +5434,7 @@ function bindPlanningTab() {
         : [...current, id];
       ui.planTeamIds = next.length ? next : [id];
       ui.planFocusTeamId = id;
-      ui.planAddItemId = null;
       render();
-    });
-  });
-
-  root.querySelectorAll(".need-add-wrap").forEach((el) => {
-    el.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    });
-  });
-
-  root.querySelectorAll<HTMLButtonElement>("[data-plan-add-open]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const itemId = btn.dataset.planAddOpen ?? null;
-      ui.planAddItemId = ui.planAddItemId === itemId ? null : itemId;
-      render();
-    });
-  });
-
-  root.querySelectorAll<HTMLButtonElement>("[data-plan-add]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const itemId = btn.dataset.planAdd;
-      const teamId = btn.dataset.team;
-      if (!itemId || !teamId) return;
-      if (!ui.planTeamIds.includes(teamId)) {
-        ui.planTeamIds = [...planSelectedTeamIds(), teamId];
-      }
-      ui.planFocusTeamId = teamId;
-      addDemandTeam(itemId, teamId);
     });
   });
 
@@ -5510,11 +5447,19 @@ function bindPlanningTab() {
     const nearest = PLAN_DURATION_CHIPS.reduce((best, d) =>
       Math.abs(d - days) < Math.abs(best - days) ? d : best
     );
+    const members = teamById(teamId)?.members ?? [];
+    const roleKey = normalizeAssignmentRoleName(role.name);
+    const byId = role.assigneeId
+      ? members.find((m) => m.id === role.assigneeId)
+      : undefined;
+    const byRole = members.find(
+      (m) => normalizeAssignmentRoleName(m.role) === roleKey
+    );
     ui.planTaskForm = {
       itemId,
       teamId,
       roleId,
-      memberId: role.assigneeId ?? teamById(teamId)?.members?.[0]?.id ?? null,
+      memberId: byId?.id ?? byRole?.id ?? members[0]?.id ?? null,
       startWeek: weekIndex(
         state.startDate,
         role.workStartDate || assign.workStartDate
@@ -5781,10 +5726,8 @@ function bindUiRest() {
         ui.needAddRoleKey = null;
       }
       if (next !== "planning") {
-        ui.planAddItemId = null;
         ui.planTaskForm = null;
       }
-      if (next !== "capacity") ui.teamAddRoleId = null;
       ui.tab = next;
       render();
     });
@@ -6357,18 +6300,25 @@ function bindUiRest() {
     });
   });
 
-  document.querySelectorAll<HTMLDetailsElement>("[data-team-people]").forEach((el) => {
-    el.addEventListener("toggle", () => {
-      const id = el.dataset.teamPeople;
-      if (!id) return;
-      if (el.open) ui.teamPeopleOpen[id] = true;
-      else delete ui.teamPeopleOpen[id];
+  document.querySelectorAll<HTMLSelectElement>("[data-team-row-role]").forEach((sel) => {
+    sel.addEventListener("change", () => {
+      const teamId = sel.dataset.teamRowRole!;
+      const personId = sel.dataset.personId!;
+      const team = state.teams.find((t) => t.id === teamId);
+      const person = team?.members?.find((m) => m.id === personId);
+      const role = canonicalizeCatalogRole(sel.value) ?? sel.value.trim();
+      if (!team || !person || !role) return;
+      if (person.role === role) return;
+      person.role = role;
+      syncTeamRoster(team);
+      logChange(`Команда «${team.name}»: роль «${role}»`, "team");
+      persist();
     });
   });
 
-  document.querySelectorAll<HTMLInputElement>("[data-team-person]").forEach((input) => {
+  document.querySelectorAll<HTMLInputElement>("[data-team-row-fio]").forEach((input) => {
     const commit = () => {
-      const teamId = input.dataset.teamPerson!;
+      const teamId = input.dataset.teamRowFio!;
       const personId = input.dataset.personId!;
       const team = state.teams.find((t) => t.id === teamId);
       const person = team?.members?.find((m) => m.id === personId);
@@ -6389,103 +6339,67 @@ function bindUiRest() {
     });
   });
 
-  document.querySelectorAll<HTMLButtonElement>("[data-team-person-del]").forEach((btn) => {
+  document.querySelectorAll<HTMLButtonElement>("[data-team-row-del]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const teamId = btn.dataset.teamPersonDel!;
+      const teamId = btn.dataset.teamRowDel!;
       const personId = btn.dataset.personId!;
       const team = state.teams.find((t) => t.id === teamId);
-      if (!team?.members) return;
-      const person = team.members.find((m) => m.id === personId);
-      team.members = team.members.filter((m) => m.id !== personId);
-      logChange(
-        `Команда «${team.name}»: удалён ${person?.name ?? "человек"}`,
-        "team"
-      );
-      persist();
-    });
-  });
-
-  document.querySelectorAll<HTMLButtonElement>("[data-team-person-add]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const teamId = btn.dataset.teamPersonAdd!;
-      const team = state.teams.find((t) => t.id === teamId);
-      const input = document.querySelector<HTMLInputElement>(
-        `[data-team-person-new="${CSS.escape(teamId)}"]`
-      );
-      const name = input?.value.trim() || "";
-      if (!team || !name) {
-        input?.focus();
-        return;
-      }
-      team.members = [...(team.members ?? []), { id: uid("p"), name }];
-      ui.teamPeopleOpen[teamId] = true;
-      logChange(`Команда «${team.name}»: добавлен ${name}`, "team");
-      persist();
-    });
-  });
-  document.querySelectorAll<HTMLInputElement>("[data-team-person-new]").forEach((input) => {
-    input.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter") return;
-      e.preventDefault();
-      const teamId = input.dataset.teamPersonNew;
-      document
-        .querySelector<HTMLButtonElement>(`[data-team-person-add="${CSS.escape(teamId ?? "")}"]`)
-        ?.click();
-    });
-  });
-
-  document.querySelectorAll<HTMLDetailsElement>("[data-team-roles]").forEach((el) => {
-    el.addEventListener("toggle", () => {
-      const id = el.dataset.teamRoles;
-      if (!id) return;
-      ui.teamRolesOpen[id] = el.open;
-    });
-  });
-
-  document.querySelectorAll<HTMLButtonElement>("[data-team-role-add-open]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const id = btn.dataset.teamRoleAddOpen ?? null;
-      ui.teamAddRoleId = ui.teamAddRoleId === id ? null : id;
-      render();
-    });
-  });
-
-  document.querySelectorAll<HTMLButtonElement>("[data-team-role-add]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const teamId = btn.dataset.teamRoleAdd;
-      const raw = btn.dataset.roleName ?? "";
-      const name = canonicalizeCatalogRole(raw);
-      const team = state.teams.find((t) => t.id === teamId);
-      if (!team || !name || teamHasRoleName(team.roles, name)) return;
-      team.roles = [...resolveTeamRoleNames(team), name];
-      ui.teamRolesOpen[team.id] = true;
-      ui.teamAddRoleId = null;
-      logChange(`Команда «${team.name}»: добавлена роль «${name}»`, "team");
-      persist();
-    });
-  });
-
-  document.querySelectorAll<HTMLButtonElement>("[data-team-role-del]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const teamId = btn.dataset.teamRoleDel;
-      const raw = btn.dataset.roleName ?? "";
-      const team = state.teams.find((t) => t.id === teamId);
-      if (!team || !raw) return;
+      const person = team?.members?.find((m) => m.id === personId);
+      if (!team?.members || !person) return;
       askAppConfirm(
         btn,
-        `Удалить роль «<strong>${escapeHtml(raw)}</strong>» у команды «${escapeHtml(team.name)}»?`,
+        `Удалить «<strong>${escapeHtml(person.role)}</strong> — ${escapeHtml(person.name)}» у команды «${escapeHtml(team.name)}»?`,
         () => {
-          team.roles = resolveTeamRoleNames(team).filter(
-            (name) => !teamHasRoleName([name], raw)
+          team.members = (team.members ?? []).filter((m) => m.id !== personId);
+          syncTeamRoster(team);
+          logChange(
+            `Команда «${team.name}»: удалена строка ${person.role} — ${person.name}`,
+            "team"
           );
-          logChange(`Команда «${team.name}»: удалена роль «${raw}»`, "team");
           persist();
         },
         () => undefined,
         { wide: true, yesLabel: "Удалить", noLabel: "Отмена" }
       );
+    });
+  });
+
+  const addTeamRow = (teamId: string) => {
+    const team = state.teams.find((t) => t.id === teamId);
+    const roleSel = document.querySelector<HTMLSelectElement>(
+      `[data-team-row-role-new="${CSS.escape(teamId)}"]`
+    );
+    const fioInput = document.querySelector<HTMLInputElement>(
+      `[data-team-row-fio-new="${CSS.escape(teamId)}"]`
+    );
+    const role = canonicalizeCatalogRole(roleSel?.value ?? "") ?? "";
+    const name = fioInput?.value.trim() || "";
+    if (!team) return;
+    if (!role) {
+      roleSel?.focus();
+      return;
+    }
+    if (!name) {
+      fioInput?.focus();
+      return;
+    }
+    team.members = [
+      ...(team.members ?? []),
+      { id: uid("p"), name, role },
+    ];
+    syncTeamRoster(team);
+    logChange(`Команда «${team.name}»: ${role} — ${name}`, "team");
+    persist();
+  };
+
+  document.querySelectorAll<HTMLButtonElement>("[data-team-row-add]").forEach((btn) => {
+    btn.addEventListener("click", () => addTeamRow(btn.dataset.teamRowAdd!));
+  });
+  document.querySelectorAll<HTMLInputElement>("[data-team-row-fio-new]").forEach((input) => {
+    input.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      addTeamRow(input.dataset.teamRowFioNew ?? "");
     });
   });
 
@@ -6678,18 +6592,17 @@ function bindUiRest() {
       return;
     }
     const id = uid("team");
-    const members = makeSeedTeamMembers(id);
-    const roles = [...DEFAULT_ASSIGNMENT_ROLE_NAMES];
-    state.teams.push({
-      id,
-      name,
-      color: newTeamColor(),
-      members,
-      roles,
-      capacityPw: computedTeamCapacityPw({ members, roles }),
-    });
-    ui.teamPeopleOpen[id] = true;
-    ui.teamRolesOpen[id] = true;
+    const members: TeamMember[] = [];
+    state.teams.push(
+      syncTeamRoster({
+        id,
+        name,
+        color: newTeamColor(),
+        members,
+        roles: [],
+        capacityPw: 0,
+      })
+    );
     draftNewTeamColor = null;
     if (nameInput) nameInput.value = "";
     logChange(`Добавлена команда «${name}»`, "team");

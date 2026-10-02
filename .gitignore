@@ -1,6 +1,8 @@
 node_modules
 dist
 dist-pages
+dist-pages-v1
+.worktrees
 .DS_Store
 *.local
 .surge

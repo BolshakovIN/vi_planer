@@ -270,19 +270,21 @@ export interface TeamMember {
   id: string;
   /** Full ФИО, e.g. «Романов Сергей» */
   name: string;
+  /** Catalog role for this seat (Команды row «роль — ФИО»). */
+  role: string;
 }
 
 export interface Team {
   id: string;
   name: string;
-  /** Person-weeks available per calendar week */
+  /** Person-weeks available per calendar week (derived: row count). */
   capacityPw: number;
   color: string;
-  /** People on the team (Команды tab / Планирование исполнители). */
+  /** Seats on the team: each row is роль — ФИО. */
   members?: TeamMember[];
   /**
-   * Role names this team can use on Потребность (from ASSIGNMENT_ROLE_CATALOG).
-   * Empty array = none configured. Missing → seed defaults on load.
+   * Distinct role names present in `members` (kept in sync for older loads).
+   * Потребность uses these — not a separate catalog tab.
    */
   roles?: string[];
 }
@@ -375,9 +377,44 @@ export function shortFio(name: string): string {
   return `${parts[0]} ${parts[1]!.charAt(0).toUpperCase()}.`;
 }
 
+function preferredSeedRoles(teamId: string): string[] {
+  const catalog = [...ASSIGNMENT_ROLE_CATALOG];
+  const n = teamId.toLowerCase();
+  const needle = /архитектур/.test(n)
+    ? "архитектур"
+    : /бизнес/.test(n)
+      ? "бизнес"
+      : /тестир|\bqa\b/.test(n)
+        ? "тестир"
+        : /разраб/.test(n)
+          ? "разраб"
+          : /аналит/.test(n)
+            ? "аналит"
+            : "";
+  if (needle) {
+    const i = catalog.findIndex((r) => r.includes(needle));
+    if (i > 0) {
+      const [hit] = catalog.splice(i, 1);
+      catalog.unshift(hit!);
+    }
+  }
+  return catalog;
+}
+
+function roleCycleForTeam(
+  teamId: string,
+  fallbackRoles?: readonly string[]
+): string[] {
+  const fromFallback = (fallbackRoles ?? [])
+    .map((name) => canonicalizeCatalogRole(name))
+    .filter((name): name is string => Boolean(name));
+  return fromFallback.length ? fromFallback : preferredSeedRoles(teamId);
+}
+
 export function makeSeedTeamMembers(teamId: string): TeamMember[] {
   const h0 = hashString(teamId || "team");
   const n = 3 + (h0 % 4);
+  const roles = preferredSeedRoles(teamId);
   const out: TeamMember[] = [];
   const used = new Set<string>();
   for (let i = 0; i < n + 8 && out.length < n; i++) {
@@ -392,33 +429,72 @@ export function makeSeedTeamMembers(teamId: string): TeamMember[] {
     const name = `${last} ${first}`;
     if (used.has(name)) continue;
     used.add(name);
-    out.push({ id: uid("p"), name });
+    out.push({
+      id: uid("p"),
+      name,
+      role: roles[out.length % roles.length]!,
+    });
   }
   return out;
 }
 
-export function parseTeamMembers(raw: unknown, teamId: string): TeamMember[] {
+export function parseTeamMembers(
+  raw: unknown,
+  teamId: string,
+  fallbackRoles?: readonly string[]
+): TeamMember[] {
   if (raw == null) return makeSeedTeamMembers(teamId);
   if (!Array.isArray(raw)) return makeSeedTeamMembers(teamId);
+  const cycle = roleCycleForTeam(teamId, fallbackRoles);
   const out: TeamMember[] = [];
   const seen = new Set<string>();
   for (const row of raw) {
     let id = "";
     let name = "";
+    let role = "";
     if (typeof row === "string") {
       name = row.trim();
     } else if (row && typeof row === "object") {
       const rec = row as Record<string, unknown>;
       name = String(rec.name ?? rec.fio ?? rec.title ?? "").trim();
       id = String(rec.id ?? "").trim();
+      role = String(rec.role ?? rec.roleName ?? rec.job ?? "").trim();
     }
     if (!name) continue;
     const memberId = id || uid("p");
     if (seen.has(memberId)) continue;
     seen.add(memberId);
-    out.push({ id: memberId, name });
+    const canonical = canonicalizeCatalogRole(role) ?? role;
+    out.push({
+      id: memberId,
+      name,
+      role: canonical || cycle[out.length % cycle.length]!,
+    });
   }
   return out;
+}
+
+/** Distinct catalog roles present in роль—ФИО rows, in first-seen order. */
+export function uniqueRolesFromMembers(
+  members: readonly TeamMember[] | undefined
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const m of members ?? []) {
+    const canonical = canonicalizeCatalogRole(m.role) ?? m.role.trim();
+    if (!canonical) continue;
+    const key = normalizeAssignmentRoleName(canonical);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(canonical);
+  }
+  return out;
+}
+
+export function syncTeamRoster<T extends Team>(team: T): T {
+  team.roles = uniqueRolesFromMembers(team.members);
+  team.capacityPw = team.members?.length ?? 0;
+  return team;
 }
 
 /** Catalog of Потребность roles the user can add to a team. */
@@ -506,28 +582,25 @@ export function availableAssignmentCatalogRoles(
 }
 
 export function resolveTeamRoleNames(
-  team: Pick<Team, "roles"> | undefined
+  team: Pick<Team, "members" | "roles"> | undefined
 ): string[] {
-  if (team?.roles != null) return team.roles;
-  return [...DEFAULT_ASSIGNMENT_ROLE_NAMES];
+  const fromRows = uniqueRolesFromMembers(team?.members);
+  if (fromRows.length) return fromRows;
+  return team?.roles ?? [];
 }
 
 /**
- * Ёмкость is a fact: 1 чел·нед per person per week.
- * Empty roster falls back to configured role seats.
+ * Silent capacity for queues/Gantt: 1 чел·нед per роль—ФИО row.
+ * Not shown on the Команды tab.
  */
 export function computedTeamCapacityPw(
   team: Pick<Team, "members" | "roles">
 ): number {
-  const people = team.members?.length ?? 0;
-  if (people > 0) return people;
-  return resolveTeamRoleNames(team).length;
+  return team.members?.length ?? 0;
 }
 
 export function applyComputedTeamCapacities<T extends Team>(teams: T[]): T[] {
-  for (const team of teams) {
-    team.capacityPw = computedTeamCapacityPw(team);
-  }
+  for (const team of teams) syncTeamRoster(team);
   return teams;
 }
 
@@ -855,11 +928,11 @@ export function ensureStateAssignmentRoles<T extends { items: WorkItem[]; teams?
   state: T
 ): T {
   const teams = applyComputedTeamCapacities(
-    (state.teams ?? []).map((t) => ({
-      ...t,
-      members: t.members != null ? t.members : makeSeedTeamMembers(t.id),
-      roles: t.roles != null ? t.roles : [...DEFAULT_ASSIGNMENT_ROLE_NAMES],
-    }))
+    (state.teams ?? []).map((t) => {
+      const members =
+        t.members != null ? t.members : makeSeedTeamMembers(t.id);
+      return syncTeamRoster({ ...t, members });
+    })
   );
   return {
     ...state,
@@ -2010,16 +2083,17 @@ export function normalizeState(raw: unknown): AppState | null {
   const teams: Team[] = (data.teams as unknown[]).map((row) => {
     const t = row as Record<string, unknown>;
     const teamId = String(t.id ?? uid("team"));
-    const members = parseTeamMembers(t.members, teamId);
-    const roles = parseTeamRoles(t.roles);
-    return {
+    const fallbackRoles = parseTeamRoles(t.roles);
+    const members = parseTeamMembers(t.members, teamId, fallbackRoles);
+    const roles = uniqueRolesFromMembers(members);
+    return syncTeamRoster({
       id: teamId,
       name: String(t.name ?? "Команда"),
       color: String(t.color ?? "#737373"),
       members,
       roles,
-      capacityPw: computedTeamCapacityPw({ members, roles }),
-    };
+      capacityPw: members.length,
+    });
   });
   const teamCap = new Map(teams.map((t) => [t.id, t.capacityPw]));
 
