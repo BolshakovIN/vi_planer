@@ -502,8 +502,8 @@ function teamsCellHtml(item: WorkItem): string {
     .map((a) => {
       const t = teamById(a.teamId);
       const name = t?.name ?? a.teamId;
-      const tip = `${name} ${a.size} · план старт ${formatDate(a.workStartDate)}`;
-      return `<span class="team-chip" title="${escapeAttr(tip)}"><span class="team-chip-name"><span class="team-dot" style="background:${t?.color ?? "#94a3b8"}"></span><span class="team-chip-text">${escapeHtml(name)}</span></span><span class="team-chip-estimate"><span class="size-badge mono">${a.size}</span><span class="mono muted-inline">план старт ${formatDate(a.workStartDate)}</span></span></span>`;
+      const tip = `${name} · план старт ${formatDate(a.workStartDate)}`;
+      return `<span class="team-chip" title="${escapeAttr(tip)}"><span class="team-chip-name"><span class="team-dot" style="background:${t?.color ?? "#94a3b8"}"></span><span class="team-chip-text">${escapeHtml(name)}</span></span><span class="team-chip-estimate"><span class="mono muted-inline">план старт ${formatDate(a.workStartDate)}</span></span></span>`;
     })
     .join("");
   return `<div class="teams-stack">${chips}</div>`;
@@ -599,7 +599,7 @@ const ALL_PORTFOLIO_COLS: PortfolioCol[] = [
 const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
   priority: "Приоритет",
   title: "Проект",
-  teams: "Команды (оценка · старт)",
+  teams: "Команды (старт)",
   status: "Статус",
   rice: "RICE",
   cashFlow: "ЧП, млрд ₽",
@@ -913,7 +913,7 @@ function portfolioTheadCellsHtml(): string {
   return `
     ${sortHeader("Приоритет", "priority", "prio-cell")}
     ${resizableTh("Проект", "title", "title-cell")}
-    ${resizableTh("Команды (оценка · старт)", "teams")}
+    ${resizableTh("Команды (старт)", "teams")}
     ${resizableTh("Статус", "status", "status-cell")}
     ${sortHeader("RICE", "rice", "rice-cell")}
     ${resizableTh("ЧП", "cashFlow", "finance-cell", undefined, "млрд ₽")}
@@ -1051,7 +1051,7 @@ function columnsHelpHtml(): string {
       <div class="cols-help">
         <div><span class="cols-help-k">Приоритет</span> — сквозной ранг проекта (1 = выше; минимум по работам проекта)</div>
         <div><span class="cols-help-k">Проект</span> — контейнер плана; функциональности смотрите на вкладке «Потребность»</div>
-        <div><span class="cols-help-k">Команды</span> — кто задействован в проекте, маечная оценка (XS–XXL) и план старта</div>
+        <div><span class="cols-help-k">Команды</span> — кто задействован в проекте и план старта</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
         <div><span class="cols-help-k">RICE</span> — сумма RICE по работам проекта</div>
         <div><span class="cols-help-k">ЧП, млрд ₽</span> — чистая прибыль за 12 мес. (сумма по проекту)</div>
@@ -6304,7 +6304,7 @@ function buildPlanerReportData(
     const teamBits = item.assignments
       .map((a) => {
         const t = teamById(a.teamId);
-        return `${t?.name ?? a.teamId} ${a.size}`;
+        return t?.name ?? a.teamId;
       })
       .join(", ");
     return {
