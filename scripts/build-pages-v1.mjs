@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const worktree = join(root, ".worktrees", "v1");
 const outDir = join(root, "dist-pages-v1");
-const commit = "e8e81a4";
+const commit = "refs/heads/v1";
 const base = "/vi_planer/v1/";
 
 const EDITION_CSS = `
@@ -112,6 +112,13 @@ try {
 sh(`git worktree add --detach .worktrees/v1 ${commit}`);
 patchSwitcher();
 patchStorageIsolation();
+
+for (const name of [".env.local", ".env"]) {
+  const src = join(root, name);
+  if (existsSync(src)) {
+    cpSync(src, join(worktree, name), { force: true });
+  }
+}
 
 const nm = join(worktree, "node_modules");
 if (!existsSync(nm)) {
