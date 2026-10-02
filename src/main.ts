@@ -42,6 +42,7 @@ import {
   reorderVisiblePriority,
   orderedProjectGroups,
   moveProjectGroupToPriority,
+  projectGroupKey,
   TeamLoadWeek,
   Team,
   scheduledOverloadWeeks,
@@ -84,6 +85,7 @@ import {
   roleJobLabel,
   shortFio,
   TeamMember,
+  SEEDED_TEAM_ROSTER_V1,
   ensureStateAssignmentRoles,
   weekIndex,
   WORKING_DAYS_PER_WEEK,
@@ -223,6 +225,9 @@ interface UiState {
   sortDir: SortDir;
   editingId: string | null;
   creating: boolean;
+  /** Реестр project card (group key); null when closed */
+  editingProjectKey: string | null;
+  creatingProject: boolean;
   /** Gantt horizon in weeks */
   ganttWeeks: number;
   /**
@@ -294,6 +299,8 @@ const ui: UiState = {
   sortDir: "asc",
   editingId: null,
   creating: false,
+  editingProjectKey: null,
+  creatingProject: false,
   ganttWeeks: 16,
   scheduleMode: "teamQueue",
   hiddenCols: [],
@@ -346,7 +353,9 @@ function armSuppressPortfolioRowEdit() {
     const t = e.target;
     if (!(t instanceof Element)) return;
     if (
-      t.closest("[data-edit], .portfolio-table, .status-select, .status-cell")
+      t.closest(
+        "[data-edit], [data-project-card], .portfolio-table, .prio-input, .status-select, .status-cell"
+      )
     ) {
       e.stopPropagation();
       e.stopImmediatePropagation();
@@ -1118,7 +1127,7 @@ function groupByProjectKey(
 ): { key: string; title: string; items: WorkItem[] }[] {
   const map = new Map<string, WorkItem[]>();
   for (const it of items) {
-    const key = demandProjectKey(it);
+    const key = projectGroupKey(it);
     const list = map.get(key);
     if (list) list.push(it);
     else map.set(key, [it]);
@@ -1217,15 +1226,15 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
         if (!latest || r.endDate > latest.endDate) latest = r;
       }
       return `
-        <tr class="clickable" data-need-open-project="${escapeAttr(g.key)}" data-row-id="${escapeAttr(g.key)}" title="Открыть потребность проекта">
-          <td${tdAttrs("priority", "prio-cell")}>
+        <tr class="clickable" data-project-card="${escapeAttr(g.key)}" data-row-id="${escapeAttr(g.key)}" title="Открыть карточку проекта">
+          <td${tdAttrs("priority", "prio-cell")} data-stop-edit>
             <input class="prio-input" type="number" min="1" max="${projectCount}" step="1" value="${prio}" data-project-prio="${escapeAttr(g.key)}" data-project-prio-now="${prio}" data-stop-edit aria-label="Приоритет проекта" />
           </td>
           <td${tdAttrs("title", "title-cell")}>
             <div class="name">${escapeHtml(g.title)}</div>
           </td>
           <td${tdAttrs("teams", "teams-cell")}>${teamsCellHtml(teamItem)}</td>
-          <td${tdAttrs("status", "status-cell")}>
+          <td${tdAttrs("status", "status-cell")} data-stop-edit>
             <select class="status-select ${statusClass}" data-project-status="${escapeAttr(g.key)}" data-status-was="${statusVal}" data-stop-edit aria-label="Статус проекта">${statusOpts}</select>
           </td>
           <td${tdAttrs("rice", "rice-cell mono metric-num")}>${Math.round(score * 10) / 10}</td>
@@ -2930,7 +2939,7 @@ function demandRoleRowHtml(
   role: AssignmentRole
 ): string {
   const days = rolePlanDays(role, szRanges());
-  const st = resolveRoleDemandStatus(role);
+  const st = resolveRoleDemandStatus(role, a);
   const editKey = `${item.id}:${a.teamId}:${role.id}`;
   const editing = ui.needDaysEdit === editKey;
   const daysCell = editing
@@ -3053,11 +3062,11 @@ function demandFnHtml(item: WorkItem): string {
     : `<p class="need-fn-empty meta">Команда ещё не назначена. Нажмите «+ Добавить команду», затем «Отправить».</p>`;
   return `<details class="need-fn" data-need-fn="${item.id}"${open ? " open" : ""}>
     <summary class="need-fn-sum">
-      <span class="need-fn-left">
+        <span class="need-fn-left">
         <span class="need-fn-title">${escapeHtml(item.title)}</span>
-        <span class="need-fn-req">запрошено ${days} дн.</span>
       </span>
       <span class="need-fn-actions">
+        <span class="need-fn-req">запрошено ${days} дн.</span>
         ${addBtn}
         <button type="button" class="need-fn-x" data-need-del-fn="${item.id}" title="Удалить функциональность" aria-label="Удалить функциональность ${escapeAttr(item.title)}">×</button>
       </span>
@@ -3124,12 +3133,12 @@ function demandHtml(): string {
     );
     const pendingCount = roleEntries.filter((x) =>
       x.role
-        ? resolveRoleDemandStatus(x.role) === "pending"
+        ? resolveRoleDemandStatus(x.role, x.a, x.it) === "pending"
         : resolveAssignmentDemandStatus(x.a, x.it) === "pending"
     ).length;
     const approvedCount = roleEntries.filter((x) =>
       x.role
-        ? resolveRoleDemandStatus(x.role) === "approved"
+        ? resolveRoleDemandStatus(x.role, x.a, x.it) === "approved"
         : resolveAssignmentDemandStatus(x.a, x.it) === "approved"
     ).length;
     const open = !ui.needCollapsedProjects[selectedGroup.key];
@@ -3360,12 +3369,19 @@ type GanttRoleBar = {
   endWeek: number;
 };
 
+function planningDemandRoles(a: TeamAssignment): AssignmentRole[] {
+  const sent = submittedAssignmentRoles(a);
+  if (sent.length) return sent;
+  const team = teamById(a.teamId);
+  return filterAssignmentRolesToTeam(a.roles, resolveTeamRoleNames(team));
+}
+
 function collectGanttRoleBars(ranges = szRanges()): GanttRoleBar[] {
   const out: GanttRoleBar[] = [];
   for (const item of demandProjectItems()) {
     if (item.status === "done") continue;
     for (const a of item.assignments) {
-      for (const role of submittedAssignmentRoles(a)) {
+      for (const role of planningDemandRoles(a)) {
         const member = teamMemberById(a.teamId, role.assigneeId);
         if (!member) continue;
         const days = rolePlanDays(role, ranges);
@@ -3421,18 +3437,16 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
               const execRows = assigns
                 .map((a) => {
                   const team = teamById(a.teamId);
-                  const roles = submittedAssignmentRoles(a);
+                  const roles = planningDemandRoles(a);
                   const conflict =
                     planConflictWeeks(a.teamId, overflowByTeam, weeks) > 0;
+                  if (!roles.length) return "";
                   const head = `<div class="plan-row plan-exec-row plan-team-row">
                     <div class="plan-cell">
                       <span class="plan-exec-name"><span class="team-dot" style="background:${team?.color ?? "#93999e"}"></span>${escapeHtml(team?.name ?? a.teamId)}</span>
                     </div>
                     ${planTrackHtml("", weeks)}
                   </div>`;
-                  if (!roles.length) {
-                    return `${head}<div class="plan-row plan-role-row"><div class="plan-cell"><span class="meta">Нет отправленных ролей</span></div>${planTrackHtml("", weeks)}</div>`;
-                  }
                   const roleRows = roles
                     .map((role) => {
                       const member = teamMemberById(a.teamId, role.assigneeId);
@@ -3590,18 +3604,16 @@ function planningHtml(
               const execRows = assigns
                 .map((a) => {
                   const team = teamById(a.teamId);
-                  const roles = submittedAssignmentRoles(a);
+                  const roles = planningDemandRoles(a);
                   const conflict =
                     planConflictWeeks(a.teamId, overflowByTeam, weeks) > 0;
+                  if (!roles.length) return "";
                   const head = `<div class="plan-row plan-exec-row plan-team-row">
                     <div class="plan-cell">
                       <span class="plan-exec-name"><span class="team-dot" style="background:${team?.color ?? "#93999e"}"></span>${escapeHtml(team?.name ?? a.teamId)}</span>
                     </div>
                     ${planTrackHtml("", weeks)}
                   </div>`;
-                  if (!roles.length) {
-                    return `${head}<div class="plan-row plan-role-row"><div class="plan-cell"><span class="meta">Нет отправленных ролей</span></div>${planTrackHtml("", weeks)}</div>`;
-                  }
                   const roleRows = roles
                     .map((role) => {
                       const member = teamMemberById(a.teamId, role.assigneeId);
@@ -3944,6 +3956,85 @@ function applySizeRangesFromInputs() {
       el?.select();
     }
   }, 200);
+}
+
+function projectCardGroup(key: string | null):
+  | { key: string; title: string; items: WorkItem[] }
+  | undefined {
+  if (!key) return undefined;
+  return groupByProjectKey(state.items).find((g) => g.key === key);
+}
+
+function projectCardHtml(): string {
+  const creating = ui.creatingProject;
+  const group = creating ? undefined : projectCardGroup(ui.editingProjectKey);
+  const items = group?.items ?? [];
+  const name = creating ? "" : (group?.title ?? ui.editingProjectKey ?? "");
+  const statuses = [...new Set(items.map((it) => it.status))];
+  const status = statuses.length === 1 ? statuses[0]! : items[0]?.status ?? "ready";
+  const prioMap = projectPrioMap();
+  const prio =
+    (group ? prioMap.get(group.key) : undefined) ??
+    Math.max(1, prioMap.size + 1);
+  const cashVals = items
+    .map((it) => it.cashFlow12m)
+    .filter((n): n is number => n != null && Number.isFinite(n));
+  const cash = cashVals.length ? cashVals.reduce((s, n) => s + n, 0) : "";
+  const rois = [
+    ...new Set(
+      items
+        .map((it) => it.roi12m)
+        .filter((n): n is number => n != null && Number.isFinite(n))
+    ),
+  ];
+  const roi = rois.length === 1 ? rois[0] : "";
+  const projectCount = Math.max(1, prioMap.size + (creating ? 1 : 0));
+  return `
+    <div class="modal-backdrop" id="projectCardModal">
+      <div class="modal modal-compact modal-project-card" role="dialog" aria-modal="true" aria-labelledby="projectCardTitle">
+        <div class="modal-head">
+          <h3 id="projectCardTitle">${creating ? "Новый проект" : "Карточка проекта"}</h3>
+          <div class="modal-head-actions">
+            <button type="button" class="btn" id="closeProjectCard2">Отмена</button>
+            <button type="button" class="btn btn-ghost" id="closeProjectCard">Закрыть</button>
+            <button type="button" class="btn btn-primary" id="saveProjectCard">Сохранить</button>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label for="p_name">Название проекта</label>
+            <input id="p_name" type="text" value="${escapeAttr(name)}" autocomplete="off" />
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label for="p_status">Статус</label>
+              <select id="p_status">
+                ${ITEM_STATUSES.map(
+                  (s) =>
+                    `<option value="${s}"${s === status ? " selected" : ""}>${statusLabel(s)}</option>`
+                ).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label for="p_rank">Приоритет (1 = выше)</label>
+              <input id="p_rank" type="number" min="1" max="${projectCount}" step="1" value="${prio}" />
+              <div class="meta">Смена приоритета — после подтверждения.</div>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label for="p_cashFlow12m">ЧП (12 мес., млрд ₽)</label>
+              <input id="p_cashFlow12m" type="number" step="0.1" inputmode="decimal" placeholder="напр. 1,2" value="${cash}" />
+            </div>
+            <div class="field">
+              <label for="p_roi12m">ROI (12 мес., %)</label>
+              <input id="p_roi12m" type="number" step="0.1" inputmode="decimal" placeholder="напр. 15" value="${roi}" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function editorHtml(item: WorkItem | null): string {
@@ -4891,6 +4982,7 @@ function render() {
       <button type="button" class="req-dl-btn" id="downloadReqsBtn" title="Скачать требования (PDF)">Требования PDF (BR / UC / FR / NFR)</button>
     </div>
     ${ui.creating || editing ? editorHtml(editing) : ""}
+    ${ui.creatingProject || ui.editingProjectKey ? projectCardHtml() : ""}
   `;
 
   bind();
@@ -5524,16 +5616,30 @@ function bindDemandTab() {
       const roleId = btn.dataset.role;
       if (!itemId || !teamId) return;
       const item = state.items.find((i) => i.id === itemId);
-      if (roleId) {
+      const team = teamById(teamId);
+      const assign = item?.assignments.find((a) => a.teamId === teamId);
+      const hit = roleId
+        ? assign?.roles?.some((r) => r.id === roleId)
+        : false;
+      if (roleId && hit) {
         patchDemandRole(itemId, teamId, roleId, (r) => ({
           ...r,
           demandStatus: "pending",
         }));
       } else {
-        patchDemandAssignment(itemId, teamId, (a) => ({
-          ...a,
-          demandStatus: "pending",
-        }));
+        patchDemandAssignment(itemId, teamId, (a) =>
+          fillTeamDemandRoles(
+            {
+              ...a,
+              demandStatus: "pending",
+              roles: (a.roles ?? []).map((r) => ({
+                ...r,
+                demandStatus: "pending" as const,
+              })),
+            },
+            team
+          )
+        );
       }
       logChange(
         `Отправлена потребность: «${item?.title ?? itemId}»`,
@@ -5867,8 +5973,205 @@ function bindPlanBarDrag(root: Element) {
   });
 }
 
+function closeProjectCard() {
+  ui.creatingProject = false;
+  ui.editingProjectKey = null;
+}
+
+function readProjectCardDraft(): {
+  name: string;
+  status: ItemStatus;
+  priority: number;
+  cashFlow12m: number | null;
+  roi12m: number | null;
+} | null {
+  const name = document.querySelector<HTMLInputElement>("#p_name")?.value.trim() ?? "";
+  if (!name) {
+    document.querySelector<HTMLInputElement>("#p_name")?.focus();
+    return null;
+  }
+  const statusRaw = document.querySelector<HTMLSelectElement>("#p_status")?.value ?? "";
+  const status = ITEM_STATUSES.includes(statusRaw as ItemStatus)
+    ? (statusRaw as ItemStatus)
+    : "ready";
+  const rankRaw = Number(document.querySelector<HTMLInputElement>("#p_rank")?.value);
+  const priority = Number.isFinite(rankRaw) && rankRaw >= 1 ? Math.round(rankRaw) : 1;
+  return {
+    name,
+    status,
+    priority,
+    cashFlow12m: optionalNum("p_cashFlow12m"),
+    roi12m: optionalNum("p_roi12m"),
+  };
+}
+
+function applyProjectFinance(items: WorkItem[], cash: number | null, roi: number | null) {
+  if (!items.length) return;
+  const firstId = items[0]!.id;
+  state.items = state.items.map((it) => {
+    if (!items.some((g) => g.id === it.id)) return it;
+    if (it.id === firstId) return { ...it, cashFlow12m: cash, roi12m: roi };
+    return { ...it, cashFlow12m: null, roi12m: roi };
+  });
+}
+
+function saveProjectCard() {
+  const draft = readProjectCardDraft();
+  if (!draft) return;
+  const rankInput = document.querySelector<HTMLInputElement>("#p_rank");
+  const statusSel = document.querySelector<HTMLSelectElement>("#p_status");
+
+  const applyCreate = () => {
+    const key = draft.name;
+    if (groupByProjectKey(state.items).some((g) => g.key === key)) {
+      ui.creatingProject = false;
+      ui.editingProjectKey = key;
+      applyEdit({ confirmStatus: true, confirmPrio: true });
+      return;
+    }
+    const item: WorkItem = {
+      id: uid("item"),
+      title: draft.name,
+      type: "project",
+      backlog: draft.name,
+      assignments: [],
+      status: draft.status,
+      owner: "",
+      assignee: "",
+      reach: 100,
+      impact: 1,
+      confidence: 0.8,
+      notes: "",
+      manualRank: nextPriority(state.items),
+      cashFlow12m: draft.cashFlow12m,
+      roi12m: draft.roi12m,
+    };
+    state.projects = uniqCatalogNames([...state.projects, draft.name]);
+    state.items = [...state.items, item];
+    state.items = moveProjectGroupToPriority(
+      state.items,
+      projectGroupKey(item),
+      draft.priority,
+      szRanges()
+    );
+    logChange(`Добавлен проект «${draft.name}»`, "catalog");
+    closeProjectCard();
+    persist();
+  };
+
+  const applyEdit = (opts: { confirmStatus: boolean; confirmPrio: boolean }) => {
+    const key = ui.editingProjectKey;
+    if (!key) return;
+    const group = projectCardGroup(key);
+    if (!group) return;
+    const prevName = group.title;
+    const prevStatus = [...new Set(group.items.map((it) => it.status))];
+    const wasStatus = prevStatus.length === 1 ? prevStatus[0]! : "";
+    const prevPrio = projectPrioMap().get(key) ?? 1;
+
+    if (draft.name !== prevName) {
+      state.items = state.items.map((it) =>
+        projectGroupKey(it) === key ? { ...it, backlog: draft.name } : it
+      );
+      state.projects = uniqCatalogNames([
+        ...state.projects.map((p) => (p === prevName ? draft.name : p)),
+        draft.name,
+      ]);
+      if (ui.needProjectKey === key) ui.needProjectKey = draft.name;
+      ui.editingProjectKey = draft.name;
+      logChange(`Проект «${prevName}» → «${draft.name}»`, "catalog");
+    }
+
+    const nextKey = ui.editingProjectKey ?? draft.name;
+    const members = projectCardGroup(nextKey)?.items ?? group.items;
+    applyProjectFinance(members, draft.cashFlow12m, draft.roi12m);
+
+    if (opts.confirmStatus && draft.status !== wasStatus) {
+      state.items = state.items.map((it) =>
+        projectGroupKey(it) === nextKey ? { ...it, status: draft.status } : it
+      );
+      logChange(
+        `Статус проекта «${draft.name}»: ${
+          wasStatus ? statusLabel(wasStatus as ItemStatus) : "несколько"
+        } → ${statusLabel(draft.status)}`,
+        "item"
+      );
+    }
+
+    if (opts.confirmPrio && draft.priority !== prevPrio) {
+      state.items = moveProjectGroupToPriority(
+        state.items,
+        nextKey,
+        draft.priority,
+        szRanges()
+      );
+      logChange(
+        `Приоритет проекта «${draft.name}»: #${prevPrio} → #${draft.priority}`,
+        "priority"
+      );
+    }
+
+    closeProjectCard();
+    persist();
+  };
+
+  if (ui.creatingProject) {
+    applyCreate();
+    return;
+  }
+
+  const key = ui.editingProjectKey;
+  const group = projectCardGroup(key);
+  if (!group) return;
+  const prevStatus = [...new Set(group.items.map((it) => it.status))];
+  const wasStatus = prevStatus.length === 1 ? prevStatus[0]! : "";
+  const prevPrio = projectPrioMap().get(group.key) ?? 1;
+  const statusChanged = draft.status !== wasStatus;
+  const prioChanged = draft.priority !== prevPrio;
+
+  const run = (confirmStatus: boolean, confirmPrio: boolean) => {
+    applyEdit({ confirmStatus, confirmPrio });
+  };
+
+  if (prioChanged && rankInput) {
+    askPrioConfirm(
+      rankInput,
+      `Сменить приоритет проекта «${escapeHtml(group.title)}» на <span class="accent">${draft.priority}</span>?`,
+      () => {
+        if (statusChanged && statusSel) {
+          askAppConfirm(
+            statusSel,
+            `Сменить статус проекта «${escapeHtml(draft.name)}» на «<strong>${escapeHtml(statusLabel(draft.status))}</strong>»?`,
+            () => run(true, true),
+            () => undefined,
+            { wide: true, yesLabel: "Да", noLabel: "Отмена" }
+          );
+          return;
+        }
+        run(false, true);
+      },
+      () => undefined
+    );
+    return;
+  }
+
+  if (statusChanged && statusSel) {
+    askAppConfirm(
+      statusSel,
+      `Сменить статус проекта «${escapeHtml(group.title)}» на «<strong>${escapeHtml(statusLabel(draft.status))}</strong>»?`,
+      () => run(true, false),
+      () => undefined,
+      { wide: true, yesLabel: "Да", noLabel: "Отмена" }
+    );
+    return;
+  }
+
+  run(false, false);
+}
+
 function persist() {
   applyComputedTeamCapacities(state.teams);
+  if (!state.teamRosterSeeded) state.teamRosterSeeded = SEEDED_TEAM_ROSTER_V1;
   state = ensureStateAssignmentRoles(state);
   saveState(state);
   render();
@@ -5877,8 +6180,10 @@ function persist() {
 function bind() {
   // Critical actions first so a later bind helper throw cannot orphan these buttons.
   document.querySelector("#addItem")?.addEventListener("click", () => {
-    ui.creating = true;
+    ui.creating = false;
     ui.editingId = null;
+    ui.creatingProject = true;
+    ui.editingProjectKey = null;
     render();
   });
   document.querySelector("#exportPdfBtn")?.addEventListener("click", () => {
@@ -6013,6 +6318,7 @@ function bindUiRest() {
   if (portfolioBody) {
     portfolioBody.addEventListener("click", (e) => {
       if (performance.now() < suppressPortfolioRowEditUntil) return;
+      if (document.querySelector("#appConfirmPop")) return;
       const t = e.target as HTMLElement;
       if (isPortfolioStatusChrome(t)) return;
       if (
@@ -6021,12 +6327,12 @@ function bindUiRest() {
         )
       )
         return;
-      const projectRow = t.closest<HTMLTableRowElement>("[data-need-open-project]");
+      const projectRow = t.closest<HTMLTableRowElement>("[data-project-card]");
       if (projectRow) {
-        ui.needProjectKey = projectRow.dataset.needOpenProject ?? null;
-        ui.needAddItemId = null;
-        ui.needAddRoleKey = null;
-        ui.tab = "demand";
+        ui.creatingProject = false;
+        ui.editingProjectKey = projectRow.dataset.projectCard ?? null;
+        ui.creating = false;
+        ui.editingId = null;
         render();
         return;
       }
@@ -6109,6 +6415,7 @@ function bindUiRest() {
       const priority = Math.round(raw);
       input.value = String(priority);
       if (priority === now) return;
+      armSuppressPortfolioRowEdit();
       const group = groupByProjectKey(state.items).find((g) => g.key === key);
       const title = group?.title ?? key;
       askPrioConfirm(
@@ -6163,6 +6470,7 @@ function bindUiRest() {
         return;
       }
       if (next === was) return;
+      armSuppressPortfolioRowEdit();
       const group = groupByProjectKey(state.items).find((g) => g.key === key);
       const title = group?.title ?? key;
       askAppConfirm(
@@ -6244,12 +6552,21 @@ function bindUiRest() {
   const close = () => {
     ui.creating = false;
     ui.editingId = null;
+    closeProjectCard();
     render();
   };
   document.querySelector("#closeModal")?.addEventListener("click", close);
   document.querySelector("#closeModal2")?.addEventListener("click", close);
   document.querySelector("#modal")?.addEventListener("click", (e) => {
     if ((e.target as HTMLElement).id === "modal") close();
+  });
+  document.querySelector("#closeProjectCard")?.addEventListener("click", close);
+  document.querySelector("#closeProjectCard2")?.addEventListener("click", close);
+  document.querySelector("#projectCardModal")?.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).id === "projectCardModal") close();
+  });
+  document.querySelector("#saveProjectCard")?.addEventListener("click", () => {
+    saveProjectCard();
   });
 
   document.querySelectorAll<HTMLInputElement>(".f_team_check").forEach((check) => {

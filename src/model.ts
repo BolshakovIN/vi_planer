@@ -430,7 +430,7 @@ export function makeSeedTeamMembers(teamId: string): TeamMember[] {
     if (used.has(name)) continue;
     used.add(name);
     out.push({
-      id: uid("p"),
+      id: `p_${teamId}_${out.length}`,
       name,
       role: roles[out.length % roles.length]!,
     });
@@ -438,13 +438,17 @@ export function makeSeedTeamMembers(teamId: string): TeamMember[] {
   return out;
 }
 
+/**
+ * Parse saved роль—ФИО rows.
+ * Missing / invalid → `undefined` (caller may one-shot seed).
+ * Empty array is kept (user deleted every row).
+ */
 export function parseTeamMembers(
   raw: unknown,
   teamId: string,
   fallbackRoles?: readonly string[]
-): TeamMember[] {
-  if (raw == null) return makeSeedTeamMembers(teamId);
-  if (!Array.isArray(raw)) return makeSeedTeamMembers(teamId);
+): TeamMember[] | undefined {
+  if (raw == null || !Array.isArray(raw)) return undefined;
   const cycle = roleCycleForTeam(teamId, fallbackRoles);
   const out: TeamMember[] = [];
   const seen = new Set<string>();
@@ -750,8 +754,13 @@ export function parseAssignmentRoles(raw: unknown): AssignmentRole[] | undefined
   return out.length ? out : undefined;
 }
 
-export function submittedAssignmentRoles(a: TeamAssignment): AssignmentRole[] {
-  return (a.roles ?? []).filter((r) => resolveRoleDemandStatus(r) !== "draft");
+export function submittedAssignmentRoles(
+  a: TeamAssignment,
+  item?: WorkItem
+): AssignmentRole[] {
+  return (a.roles ?? []).filter(
+    (r) => resolveRoleDemandStatus(r, a, item) !== "draft"
+  );
 }
 
 export function roleJobLabel(roleName: string): string {
@@ -780,9 +789,14 @@ export function rolePlanDays(
 }
 
 export function resolveRoleDemandStatus(
-  role: AssignmentRole
+  role: AssignmentRole,
+  assignment?: TeamAssignment,
+  item?: WorkItem
 ): AssignmentDemandStatus {
-  return parseAssignmentDemandStatus(role.demandStatus) ?? "draft";
+  const own = parseAssignmentDemandStatus(role.demandStatus);
+  if (own) return own;
+  if (assignment) return resolveAssignmentDemandStatus(assignment, item);
+  return "draft";
 }
 
 function preferRoleIndexByTeamName(
@@ -821,7 +835,7 @@ export function syncAssignmentFromRoles(
   const workStartDate = starts.length
     ? starts.reduce((min, s) => (s < min ? s : min))
     : a.workStartDate;
-  const statuses = a.roles.map(resolveRoleDemandStatus);
+  const statuses = a.roles.map((r) => resolveRoleDemandStatus(r, a));
   const demandStatus = statuses.some((s) => s === "pending")
     ? "pending"
     : statuses.length && statuses.every((s) => s === "approved")
@@ -855,12 +869,14 @@ export function fillAssignmentRoles(
   const nextRoles = roles.map((r, i) => {
     const keepAssignee = r.assigneeId ? { assigneeId: r.assigneeId } : {};
     const days = parseOptionalDays(r.days);
+    const status =
+      parseAssignmentDemandStatus(r.demandStatus) ?? inheritStatus ?? "draft";
     if (days != null) {
       return {
         ...r,
         days,
         size: r.size ?? nearestSizeFromDays(days, ranges),
-        demandStatus: resolveRoleDemandStatus(r),
+        demandStatus: status,
         workStartDate: r.workStartDate || a.workStartDate,
         ...keepAssignee,
       };
@@ -870,7 +886,7 @@ export function fillAssignmentRoles(
         ...r,
         days: inheritDays,
         size: a.size,
-        demandStatus: inheritStatus ?? "draft",
+        demandStatus: inheritStatus ?? status,
         workStartDate: r.workStartDate || a.workStartDate,
         ...keepAssignee,
       };
@@ -879,7 +895,7 @@ export function fillAssignmentRoles(
       ...r,
       days: defaultDays,
       size: r.size ?? "M",
-      demandStatus: parseAssignmentDemandStatus(r.demandStatus) ?? "draft",
+      demandStatus: status,
       workStartDate: r.workStartDate || a.workStartDate,
       ...keepAssignee,
     };
@@ -969,8 +985,7 @@ export function ensureStateAssignmentRoles<T extends { items: WorkItem[]; teams?
 ): T {
   const teams = applyComputedTeamCapacities(
     (state.teams ?? []).map((t) => {
-      const members =
-        t.members != null ? t.members : makeSeedTeamMembers(t.id);
+      const members = t.members != null ? t.members : [];
       return syncTeamRoster({ ...t, members });
     })
   );
@@ -1040,11 +1055,49 @@ export interface AppState {
    * re-assigned on Потребность. `"v1"` after apply (`clearedDemandTeams-v1`).
    */
   clearedDemandTeams?: string;
+  /**
+   * One-shot: demo роль—ФИО rows were written onto teams that had no roster.
+   * After `"v1"`, missing members stay empty — never re-seed on load.
+   */
+  teamRosterSeeded?: string;
   version: 3;
 }
 
 /** Persist flag: team rows removed from every functionality (catalog stays). */
 export const CLEARED_DEMAND_TEAMS_V1 = "v1";
+
+/** Persist flag: Команды role—ФИО catalog was seeded once (`teamRosterSeeded-v1`). */
+export const SEEDED_TEAM_ROSTER_V1 = "v1";
+
+/**
+ * One-shot demo roster for teams that never saved `members`.
+ * After the flag is set, empty/missing rows stay empty (user catalog).
+ */
+export function applySeededTeamRoster(current: AppState): {
+  state: AppState;
+  applied: boolean;
+} {
+  if (current.teamRosterSeeded === SEEDED_TEAM_ROSTER_V1) {
+    const teams = applyComputedTeamCapacities(
+      current.teams.map((t) =>
+        syncTeamRoster({ ...t, members: t.members ?? [] })
+      )
+    );
+    return { state: { ...current, teams }, applied: false };
+  }
+  const teams = applyComputedTeamCapacities(
+    current.teams.map((t) =>
+      syncTeamRoster({
+        ...t,
+        members: t.members != null ? t.members : makeSeedTeamMembers(t.id),
+      })
+    )
+  );
+  return {
+    state: { ...current, teams, teamRosterSeeded: SEEDED_TEAM_ROSTER_V1 },
+    applied: true,
+  };
+}
 
 /** Wipe item.assignments once; Команды role—ФИО catalog is untouched. */
 export function applyClearedDemandTeams(current: AppState): {
@@ -1647,7 +1700,6 @@ export function orderedProjectGroups(
 ): { key: string; items: WorkItem[] }[] {
   const map = new Map<string, WorkItem[]>();
   for (const it of items) {
-    if (it.type !== "project") continue;
     const key = projectGroupKey(it);
     const list = map.get(key);
     if (list) list.push(it);
@@ -2170,9 +2222,9 @@ export function normalizeState(raw: unknown): AppState | null {
       id: teamId,
       name: String(t.name ?? "Команда"),
       color: String(t.color ?? "#737373"),
-      members,
+      ...(members ? { members } : {}),
       roles,
-      capacityPw: members.length,
+      capacityPw: members?.length ?? 0,
     });
   });
   const teamCap = new Map(teams.map((t) => [t.id, t.capacityPw]));
@@ -2328,6 +2380,10 @@ export function normalizeState(raw: unknown): AppState | null {
       data.clearedDemandTeams != null &&
       String(data.clearedDemandTeams).trim()
         ? String(data.clearedDemandTeams).trim()
+        : undefined,
+    teamRosterSeeded:
+      data.teamRosterSeeded != null && String(data.teamRosterSeeded).trim()
+        ? String(data.teamRosterSeeded).trim()
         : undefined,
     items: ensureUniquePriorities(filledItems, parsedRanges),
   };

@@ -1,9 +1,14 @@
 import {
   AppState,
   CLEARED_DEMAND_TEAMS_V1,
-  ensureUniquePriorities,
-  uniqCatalogNames,
+  SEEDED_TEAM_ROSTER_V1,
+  Team,
+  applyComputedTeamCapacities,
   containerNameFromBacklog,
+  ensureUniquePriorities,
+  makeSeedTeamMembers,
+  syncTeamRoster,
+  uniqCatalogNames,
 } from "./model";
 
 /** ISO start for the Oct 2026 prioritization pack (all assignments). */
@@ -36,6 +41,7 @@ const SEED_RAW: AppState = {
   demoVariantB: false,
   portfolioPack: PORTFOLIO_PACK_ID,
   clearedDemandTeams: CLEARED_DEMAND_TEAMS_V1,
+  teamRosterSeeded: SEEDED_TEAM_ROSTER_V1,
   teams: [
     {
       id: "data-office",
@@ -1319,8 +1325,20 @@ const SEED_RAW: AppState = {
   ],
 };
 
+function withSeedRosters(teams: Team[]): Team[] {
+  return applyComputedTeamCapacities(
+    teams.map((t) =>
+      syncTeamRoster({
+        ...t,
+        members: t.members ?? makeSeedTeamMembers(t.id),
+      })
+    )
+  );
+}
+
 export const SEED: AppState = {
   ...SEED_RAW,
+  teams: withSeedRosters(SEED_RAW.teams),
   customers: uniqCatalogNames(SEED_RAW.items.map((i) => i.owner)),
   executors: uniqCatalogNames(SEED_RAW.items.map((i) => i.assignee)),
   projects: uniqCatalogNames(

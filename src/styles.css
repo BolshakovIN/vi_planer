@@ -1248,6 +1248,14 @@ th.sortable.sorted {
   font-size: 14px;
 }
 
+.modal-project-card {
+  width: min(460px, 96vw);
+}
+
+.modal-project-card .modal-head {
+  gap: 10px;
+}
+
 .need-fn-modal-foot {
   justify-content: flex-end;
   padding: 0 14px 14px;
@@ -3975,8 +3983,9 @@ body.pdf-capturing .table-scroll-top {
 .need-project-sum,
 .need-fn-sum {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  flex-wrap: nowrap;
   gap: 8px;
   cursor: pointer;
   list-style: none;
@@ -4024,8 +4033,13 @@ body.pdf-capturing .table-scroll-top {
 .need-fn-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
+  margin-left: auto;
+}
+
+.need-fn-actions .need-fn-req {
+  line-height: 1;
 }
 
 .need-project-body {

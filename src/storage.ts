@@ -2,10 +2,13 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   AppState,
   applyClearedDemandTeams,
+  applyComputedTeamCapacities,
+  applySeededTeamRoster,
   ensureUniquePriorities,
   ensureStateAssignmentRoles,
   normalizeState,
   prependChangeLog,
+  syncTeamRoster,
 } from "./model";
 import {
   SEED,
@@ -198,6 +201,17 @@ export function applyCurrentPortfolioPack(
     "system"
   );
   next.portfolioPack = PORTFOLIO_PACK_ID;
+  // Pack replaces portfolio items, not the Команды role—ФИО catalog.
+  if (current.teams.length) {
+    next.teams = applyComputedTeamCapacities(
+      current.teams.map((t) =>
+        syncTeamRoster({ ...t, members: t.members ?? [] })
+      )
+    );
+    if (current.teamRosterSeeded) {
+      next.teamRosterSeeded = current.teamRosterSeeded;
+    }
+  }
   return { state: next, applied: true };
 }
 
@@ -232,8 +246,10 @@ export async function loadState(): Promise<AppState> {
     ensureStateAssignmentRoles(structuredClone(SEED));
 
   const packed = applyCurrentPortfolioPack(remote);
-  const { state, applied } = applyClearedDemandTeams(packed.state);
-  if (packed.applied || applied) {
+  const cleared = applyClearedDemandTeams(packed.state);
+  const roster = applySeededTeamRoster(cleared.state);
+  const state = roster.state;
+  if (packed.applied || cleared.applied || roster.applied) {
     saveState(state);
   } else {
     saveLocal(state);
@@ -244,32 +260,46 @@ export async function loadState(): Promise<AppState> {
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingState: AppState | null = null;
+let savingRemote = false;
 
-export function saveState(state: AppState) {
-  saveLocal(state);
-  pendingState = state;
-
+function scheduleRemoteSave() {
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(async () => {
-    const payload = pendingState;
-    pendingState = null;
-    if (!payload) return;
+  saveTimer = setTimeout(() => {
+    void flushPendingSave();
+  }, 350);
+}
 
-    setSyncStatus("loading");
+async function flushPendingSave() {
+  if (savingRemote) return;
+  const payload = pendingState;
+  if (!payload) return;
+  pendingState = null;
+  savingRemote = true;
+  setSyncStatus("loading");
+  try {
     const supabaseOk = await saveToSupabase(payload);
     const apiOk = supabaseOk ? true : await saveToApi(payload);
-
+    if (pendingState) return;
     if (supabaseOk || apiOk) {
       setSyncStatus("saved");
       return;
     }
-
     if (getSupabase() || usesRemoteApi()) {
       setSyncStatus("offline");
     } else {
       setSyncStatus("idle");
     }
-  }, 350);
+  } finally {
+    savingRemote = false;
+    if (pendingState) scheduleRemoteSave();
+  }
+}
+
+export function saveState(state: AppState) {
+  const payload = ensureStateAssignmentRoles(state);
+  saveLocal(payload);
+  pendingState = payload;
+  scheduleRemoteSave();
 }
 
 export function syncStatusLabel(status: SyncStatus): string {
