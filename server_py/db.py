@@ -15,13 +15,22 @@ import asyncpg
 from .normalize import normalize_state
 from .seed import SEED
 
-ROW_ID = "main"
+StateEdition = Literal["v1", "v2"]
+ROW_IDS: dict[StateEdition, str] = {"v1": "main", "v2": "v2"}
 ROOT = Path(__file__).resolve().parent.parent
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", str(ROOT / "data")))
-STATE_FILE = Path(
-    os.environ.get("STATE_FILE", str(DATA_DIR / "vi-planer-state.json"))
-)
+
+
+def state_file_for(edition: StateEdition) -> Path:
+    if edition == "v2":
+        return Path(
+            os.environ.get(
+                "STATE_FILE_V2", str(DATA_DIR / "vi-planer-state-v2.json")
+            )
+        )
+    return Path(os.environ.get("STATE_FILE", str(DATA_DIR / "vi-planer-state.json")))
+
 
 StorageMode = Literal["postgres", "file"]
 
@@ -53,7 +62,7 @@ async def init_db() -> None:
     if not use_postgres():
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         _storage_mode = "file"
-        print(f"Storage: file ({STATE_FILE})")
+        print(f"Storage: file ({state_file_for('v1')}, {state_file_for('v2')})")
         return
 
     database_url = os.environ["DATABASE_URL"]
@@ -77,24 +86,26 @@ async def init_db() -> None:
             )
             """
         )
-        await conn.execute(
-            """
-            INSERT INTO app_state (id, payload, updated_at)
-            VALUES ($1, '{}'::jsonb, 0)
-            ON CONFLICT (id) DO NOTHING
-            """,
-            ROW_ID,
-        )
+        for row_id in ROW_IDS.values():
+            await conn.execute(
+                """
+                INSERT INTO app_state (id, payload, updated_at)
+                VALUES ($1, '{}'::jsonb, 0)
+                ON CONFLICT (id) DO NOTHING
+                """,
+                row_id,
+            )
 
     _storage_mode = "postgres"
     print("Storage: PostgreSQL")
 
 
-def _read_file() -> Optional[dict[str, Any]]:
-    if not STATE_FILE.exists():
+def _read_file(edition: StateEdition) -> Optional[dict[str, Any]]:
+    path = state_file_for(edition)
+    if not path.exists():
         return None
     try:
-        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             return None
         return data
@@ -102,21 +113,22 @@ def _read_file() -> Optional[dict[str, Any]]:
         return None
 
 
-def _write_file(state: dict[str, Any], updated_at: int) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = Path(str(STATE_FILE) + ".tmp")
+def _write_file(edition: StateEdition, state: dict[str, Any], updated_at: int) -> None:
+    path = state_file_for(edition)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = Path(str(path) + ".tmp")
     payload = {"state": state, "updatedAt": updated_at}
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(STATE_FILE)
+    tmp.replace(path)
 
 
-async def _read_postgres() -> Optional[dict[str, Any]]:
+async def _read_postgres(edition: StateEdition) -> Optional[dict[str, Any]]:
     if _pool is None:
         return None
     async with _pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT payload, updated_at FROM app_state WHERE id = $1",
-            ROW_ID,
+            ROW_IDS[edition],
         )
     if not row:
         return None
@@ -126,7 +138,9 @@ async def _read_postgres() -> Optional[dict[str, Any]]:
     return {"state": payload, "updatedAt": int(row["updated_at"])}
 
 
-async def _write_postgres(state: dict[str, Any], updated_at: int) -> None:
+async def _write_postgres(
+    edition: StateEdition, state: dict[str, Any], updated_at: int
+) -> None:
     if _pool is None:
         raise RuntimeError("PostgreSQL pool not initialized")
     async with _pool.acquire() as conn:
@@ -137,51 +151,53 @@ async def _write_postgres(state: dict[str, Any], updated_at: int) -> None:
             ON CONFLICT (id) DO UPDATE
             SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at
             """,
-            ROW_ID,
+            ROW_IDS[edition],
             json.dumps(state),
             updated_at,
         )
 
 
-async def _read_stored() -> Optional[dict[str, Any]]:
+async def _read_stored(edition: StateEdition) -> Optional[dict[str, Any]]:
     if _storage_mode == "postgres":
-        return await _read_postgres()
-    return _read_file()
+        return await _read_postgres(edition)
+    return _read_file(edition)
 
 
-async def _write_stored(state: dict[str, Any], updated_at: int) -> None:
+async def _write_stored(
+    edition: StateEdition, state: dict[str, Any], updated_at: int
+) -> None:
     if _storage_mode == "postgres":
-        await _write_postgres(state, updated_at)
+        await _write_postgres(edition, state, updated_at)
         return
-    _write_file(state, updated_at)
+    _write_file(edition, state, updated_at)
 
 
 def _seed_state() -> dict[str, Any]:
     return deepcopy(SEED)
 
 
-async def get_state() -> dict[str, Any]:
-    stored = await _read_stored()
+async def get_state(edition: StateEdition = "v1") -> dict[str, Any]:
+    stored = await _read_stored(edition)
     if not stored:
         seed = _seed_state()
-        await set_state(seed)
+        await set_state(seed, edition)
         return seed
     normalized = normalize_state(stored.get("state"))
     if not normalized:
         seed = _seed_state()
-        await set_state(seed)
+        await set_state(seed, edition)
         return seed
     return normalized
 
 
-async def set_state(state: dict[str, Any]) -> int:
+async def set_state(state: dict[str, Any], edition: StateEdition = "v1") -> int:
     updated_at = int(time.time() * 1000)
-    await _write_stored(state, updated_at)
+    await _write_stored(edition, state, updated_at)
     return updated_at
 
 
-async def get_updated_at() -> int:
-    stored = await _read_stored()
+async def get_updated_at(edition: StateEdition = "v1") -> int:
+    stored = await _read_stored(edition)
     if not stored:
         return 0
     return int(stored.get("updatedAt") or 0)

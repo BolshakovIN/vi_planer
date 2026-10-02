@@ -83,6 +83,23 @@ function patchSwitcher() {
   }
 }
 
+/** Keep frozen v1 on `vi-planer-v3` / Supabase `main`. Do not read v2 keys. */
+function patchStorageIsolation() {
+  const storagePath = join(worktree, "src/storage.ts");
+  let src = readFileSync(storagePath, "utf8");
+  const from = `    const raw =
+      localStorage.getItem(STORAGE_KEY) ??
+      localStorage.getItem("vi-planer-v2") ??
+      localStorage.getItem("vi-planer-v1");`;
+  const to = `    const raw = localStorage.getItem(STORAGE_KEY);`;
+  if (src.includes(from)) {
+    src = src.replace(from, to);
+  } else if (!src.includes("const raw = localStorage.getItem(STORAGE_KEY);")) {
+    throw new Error("v1 storage fallback block not found");
+  }
+  writeFileSync(storagePath, src);
+}
+
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(join(root, ".worktrees"), { recursive: true });
 
@@ -94,6 +111,7 @@ try {
 
 sh(`git worktree add --detach .worktrees/v1 ${commit}`);
 patchSwitcher();
+patchStorageIsolation();
 
 const nm = join(worktree, "node_modules");
 if (!existsSync(nm)) {

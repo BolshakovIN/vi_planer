@@ -9,6 +9,8 @@
 
 Код уже в проекте (`src/storage.ts`, `supabase/schema.sql`).
 
+v1 и v2 хранятся отдельно: localStorage `vi-planer-v3` vs `vi-planer-v2`, облако `app_state.id = 'main'` vs `'v2'`. Переключение в шапке не перезаписывает другую редакцию.
+
 ## 1. Supabase (5 минут)
 
 Проект **уже создан**: `vi_planer` (`hmqajjxjnxbrgrvfkegv`).

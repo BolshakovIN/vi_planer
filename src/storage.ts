@@ -6,11 +6,16 @@ import {
   applySeededTeamRoster,
   mergeMissingSeedItems,
   applyLocalDeletionTombstones,
+  CLEARED_DEMAND_TEAMS_V1,
   ensureUniquePriorities,
   ensureStateAssignmentRoles,
   normalizeState,
   prependChangeLog,
+  rememberDeletedIds,
+  SEEDED_TEAM_ROSTER_V1,
   syncTeamRoster,
+  teamCatalogHasRoster,
+  type Team,
 } from "./model";
 import {
   SEED,
@@ -18,9 +23,14 @@ import {
   PORTFOLIO_PACK_ROLLED_BACK,
 } from "./seed";
 
-const STORAGE_KEY = "vi-planer-v3";
-const SUPABASE_ROW_ID = "main";
-const PORTFOLIO_BACKUP_KEY = "vi-planer-v3-pre-xlsx-prio";
+/** v2-only snapshot. Frozen v1 keeps `vi-planer-v3` and never reads this key. */
+const STORAGE_KEY = "vi-planer-v2";
+/** v1 / pre-split shared key — v2 must not load or save it after bootstrap. */
+const V1_STORAGE_KEY = "vi-planer-v3";
+const SUPABASE_ROW_ID = "v2";
+const PORTFOLIO_BACKUP_KEY = "vi-planer-v2-pre-xlsx-prio";
+const TEAMS_BACKUP_KEY = "vi-planer-v2-teams";
+const API_STATE_PATH = "/api/state/v2";
 
 export type SyncStatus = "idle" | "loading" | "saved" | "error" | "offline";
 
@@ -54,13 +64,9 @@ function setSyncStatus(status: SyncStatus) {
   syncListeners.forEach((l) => l(status));
 }
 
-function loadLocal(): AppState | null {
+function parseStoredState(raw: string | null): AppState | null {
+  if (!raw) return null;
   try {
-    const raw =
-      localStorage.getItem(STORAGE_KEY) ??
-      localStorage.getItem("vi-planer-v2") ??
-      localStorage.getItem("vi-planer-v1");
-    if (!raw) return null;
     const normalized = normalizeState(JSON.parse(raw));
     if (!normalized) return null;
     return {
@@ -72,8 +78,55 @@ function loadLocal(): AppState | null {
   }
 }
 
+function loadLocal(): AppState | null {
+  try {
+    return parseStoredState(localStorage.getItem(STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function writeTeamsBackup(state: AppState) {
+  if (!teamCatalogHasRoster(state.teams)) return;
+  try {
+    localStorage.setItem(TEAMS_BACKUP_KEY, JSON.stringify(state.teams));
+  } catch {
+    /* quota */
+  }
+}
+
+function loadTeamsBackup(): Team[] | null {
+  try {
+    const raw = localStorage.getItem(TEAMS_BACKUP_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    const teams = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === "object" && Array.isArray((parsed as { teams?: unknown }).teams)
+        ? (parsed as { teams: unknown[] }).teams
+        : null;
+    if (!teams) return null;
+    const normalized = normalizeState({
+      version: 3,
+      teams,
+      items: [],
+      startDate: SEED.startDate,
+      sizeRanges: SEED.sizeRanges,
+    });
+    if (!normalized || !teamCatalogHasRoster(normalized.teams)) return null;
+    return applyComputedTeamCapacities(
+      normalized.teams.map((t) =>
+        syncTeamRoster({ ...t, members: t.members ?? [] })
+      )
+    );
+  } catch {
+    return null;
+  }
+}
+
 function saveLocal(state: AppState) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  writeTeamsBackup(state);
 }
 
 function apiBase(): string {
@@ -94,7 +147,7 @@ function usesRemoteApi(): boolean {
 async function loadFromApi(): Promise<AppState | null> {
   if (isPagesStandalone()) return null;
   try {
-    const res = await fetch(`${apiBase()}/api/state`, { cache: "no-store" });
+    const res = await fetch(`${apiBase()}${API_STATE_PATH}`, { cache: "no-store" });
     if (!res.ok) return null;
     const json = (await res.json()) as { state?: unknown };
     const normalized = normalizeState(json.state);
@@ -111,7 +164,7 @@ async function loadFromApi(): Promise<AppState | null> {
 async function saveToApi(state: AppState): Promise<boolean> {
   if (isPagesStandalone()) return false;
   try {
-    const res = await fetch(`${apiBase()}/api/state`, {
+    const res = await fetch(`${apiBase()}${API_STATE_PATH}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(state),
@@ -204,11 +257,10 @@ export function applyCurrentPortfolioPack(
   );
   next.portfolioPack = PORTFOLIO_PACK_ID;
   // Pack replaces portfolio items, not the Команды role—ФИО catalog.
+  // Do not coerce missing members to [] — that blocks one-shot FIO re-seed.
   if (current.teams.length) {
     next.teams = applyComputedTeamCapacities(
-      current.teams.map((t) =>
-        syncTeamRoster({ ...t, members: t.members ?? [] })
-      )
+      current.teams.map((t) => syncTeamRoster({ ...t }))
     );
     if (current.teamRosterSeeded) {
       next.teamRosterSeeded = current.teamRosterSeeded;
@@ -238,21 +290,82 @@ export function rollbackPortfolioPack(): AppState | null {
   }
 }
 
+/**
+ * First v2 load after the store split: never read the live v1 cloud row.
+ * Adopt the old shared local blob only when it still has a v2 role—ФИО catalog.
+ * Otherwise re-seed default teams and keep deletion / demand-clear flags.
+ */
+function bootstrapV2State(local: AppState | null, remote: AppState | null): {
+  base: AppState;
+  tombstoneSource: AppState | null;
+  isolated: boolean;
+} {
+  if (remote || local) {
+    return {
+      base: (remote ?? local) as AppState,
+      tombstoneSource: local,
+      isolated: false,
+    };
+  }
+
+  let legacy: AppState | null = null;
+  try {
+    legacy = parseStoredState(localStorage.getItem(V1_STORAGE_KEY));
+  } catch {
+    legacy = null;
+  }
+
+  if (legacy && teamCatalogHasRoster(legacy.teams)) {
+    return { base: legacy, tombstoneSource: legacy, isolated: true };
+  }
+
+  const seed = ensureStateAssignmentRoles(structuredClone(SEED));
+  const backedTeams = loadTeamsBackup();
+  if (backedTeams) {
+    seed.teams = backedTeams;
+    seed.teamRosterSeeded = SEEDED_TEAM_ROSTER_V1;
+    seed.changeLog = prependChangeLog(
+      seed.changeLog,
+      "Восстановлен каталог команд роль—ФИО из резервной копии v2",
+      "team"
+    );
+  } else if (legacy) {
+    seed.changeLog = prependChangeLog(
+      seed.changeLog,
+      "Восстановлен каталог команд роль—ФИО; хранилища v1 и v2 разделены",
+      "team"
+    );
+  }
+  if (legacy) {
+    seed.deletedItemIds = rememberDeletedIds(
+      seed.deletedItemIds,
+      legacy.deletedItemIds ?? []
+    );
+    seed.deletedProjectKeys = rememberDeletedIds(
+      seed.deletedProjectKeys,
+      legacy.deletedProjectKeys ?? []
+    );
+    seed.clearedDemandTeams = CLEARED_DEMAND_TEAMS_V1;
+    seed.demoVariantA = legacy.demoVariantA;
+  }
+  return { base: seed, tombstoneSource: legacy, isolated: true };
+}
+
 export async function loadState(): Promise<AppState> {
   setSyncStatus("loading");
 
   const local = loadLocal();
   const remote = (await loadFromApi()) ?? (await loadFromSupabase());
-  const base =
-    remote ?? local ?? ensureStateAssignmentRoles(structuredClone(SEED));
+  const { base, tombstoneSource, isolated } = bootstrapV2State(local, remote);
 
   const packed = applyCurrentPortfolioPack(base);
-  const tombstoned = applyLocalDeletionTombstones(packed.state, local);
+  const tombstoned = applyLocalDeletionTombstones(packed.state, tombstoneSource);
   const cleared = applyClearedDemandTeams(tombstoned.state);
   const roster = applySeededTeamRoster(cleared.state);
   const merged = mergeMissingSeedItems(roster.state, SEED.items);
   const state = merged.state;
   if (
+    isolated ||
     packed.applied ||
     tombstoned.applied ||
     cleared.applied ||

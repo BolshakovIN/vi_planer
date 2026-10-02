@@ -8,7 +8,7 @@ create table if not exists public.app_state (
 );
 
 insert into public.app_state (id, payload)
-values ('main', '{}'::jsonb)
+values ('main', '{}'::jsonb), ('v2', '{}'::jsonb)
 on conflict (id) do nothing;
 
 alter table public.app_state enable row level security;

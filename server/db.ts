@@ -10,11 +10,25 @@ import {
 } from "../src/model.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROW_ID = "main";
+
+export type StateEdition = "v1" | "v2";
+
+const ROW_IDS: Record<StateEdition, string> = {
+  v1: "main",
+  v2: "v2",
+};
 
 const dataDir = process.env.DATA_DIR ?? path.join(__dirname, "..", "data");
-const stateFile =
-  process.env.STATE_FILE ?? path.join(dataDir, "vi-planer-state.json");
+
+function stateFileFor(edition: StateEdition): string {
+  if (edition === "v2") {
+    return (
+      process.env.STATE_FILE_V2 ??
+      path.join(dataDir, "vi-planer-state-v2.json")
+    );
+  }
+  return process.env.STATE_FILE ?? path.join(dataDir, "vi-planer-state.json");
+}
 
 interface StoredState {
   state: AppState;
@@ -36,7 +50,7 @@ export async function initDb(): Promise<void> {
   if (!usePostgres()) {
     fs.mkdirSync(dataDir, { recursive: true });
     storageMode = "file";
-    console.log(`Storage: file (${stateFile})`);
+    console.log(`Storage: file (${stateFileFor("v1")}, ${stateFileFor("v2")})`);
     return;
   }
 
@@ -55,18 +69,21 @@ export async function initDb(): Promise<void> {
       updated_at BIGINT NOT NULL
     )
   `);
-  await pool.query(
-    `INSERT INTO app_state (id, payload, updated_at)
-     VALUES ($1, '{}'::jsonb, 0)
-     ON CONFLICT (id) DO NOTHING`,
-    [ROW_ID],
-  );
+  for (const id of Object.values(ROW_IDS)) {
+    await pool.query(
+      `INSERT INTO app_state (id, payload, updated_at)
+       VALUES ($1, '{}'::jsonb, 0)
+       ON CONFLICT (id) DO NOTHING`,
+      [id],
+    );
+  }
 
   storageMode = "postgres";
   console.log("Storage: PostgreSQL");
 }
 
-function readFile(): StoredState | null {
+function readFile(edition: StateEdition): StoredState | null {
+  const stateFile = stateFileFor(edition);
   if (!fs.existsSync(stateFile)) return null;
   try {
     return JSON.parse(fs.readFileSync(stateFile, "utf8")) as StoredState;
@@ -75,7 +92,9 @@ function readFile(): StoredState | null {
   }
 }
 
-function writeFile(state: AppState, updatedAt: number) {
+function writeFile(edition: StateEdition, state: AppState, updatedAt: number) {
+  const stateFile = stateFileFor(edition);
+  fs.mkdirSync(path.dirname(stateFile), { recursive: true });
   const tmp = `${stateFile}.tmp`;
   fs.writeFileSync(
     tmp,
@@ -85,11 +104,11 @@ function writeFile(state: AppState, updatedAt: number) {
   fs.renameSync(tmp, stateFile);
 }
 
-async function readPostgres(): Promise<StoredState | null> {
+async function readPostgres(edition: StateEdition): Promise<StoredState | null> {
   if (!pool) return null;
   const { rows } = await pool.query<{ payload: unknown; updated_at: string }>(
     "SELECT payload, updated_at FROM app_state WHERE id = $1",
-    [ROW_ID],
+    [ROW_IDS[edition]],
   );
   const row = rows[0];
   if (!row) return null;
@@ -99,60 +118,75 @@ async function readPostgres(): Promise<StoredState | null> {
   };
 }
 
-async function writePostgres(state: AppState, updatedAt: number) {
+async function writePostgres(
+  edition: StateEdition,
+  state: AppState,
+  updatedAt: number,
+) {
   if (!pool) throw new Error("PostgreSQL pool not initialized");
   await pool.query(
     `INSERT INTO app_state (id, payload, updated_at)
      VALUES ($1, $2::jsonb, $3)
      ON CONFLICT (id) DO UPDATE
      SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at`,
-    [ROW_ID, JSON.stringify(state), updatedAt],
+    [ROW_IDS[edition], JSON.stringify(state), updatedAt],
   );
 }
 
-async function readStored(): Promise<StoredState | null> {
-  if (storageMode === "postgres") return readPostgres();
-  return readFile();
+async function readStored(edition: StateEdition): Promise<StoredState | null> {
+  if (storageMode === "postgres") return readPostgres(edition);
+  return readFile(edition);
 }
 
-async function writeStored(state: AppState, updatedAt: number) {
+async function writeStored(
+  edition: StateEdition,
+  state: AppState,
+  updatedAt: number,
+) {
   if (storageMode === "postgres") {
-    await writePostgres(state, updatedAt);
+    await writePostgres(edition, state, updatedAt);
     return;
   }
-  writeFile(state, updatedAt);
+  writeFile(edition, state, updatedAt);
 }
 
 function seedState(): AppState {
   return structuredClone(SEED);
 }
 
-export async function getState(): Promise<AppState> {
-  const stored = await readStored();
+export async function getState(
+  edition: StateEdition = "v1",
+): Promise<AppState> {
+  const stored = await readStored(edition);
   if (!stored) {
     const seed = seedState();
-    await setState(seed);
+    await setState(seed, edition);
     return seed;
   }
   const normalized = normalizeState(stored.state);
   if (!normalized) {
     const seed = seedState();
-    await setState(seed);
+    await setState(seed, edition);
     return seed;
   }
   const { state, applied } = applyClearedDemandTeams(normalized);
-  if (applied) await setState(state);
+  if (applied) await setState(state, edition);
   return state;
 }
 
-export async function setState(state: AppState): Promise<number> {
+export async function setState(
+  state: AppState,
+  edition: StateEdition = "v1",
+): Promise<number> {
   const updatedAt = Date.now();
-  await writeStored(state, updatedAt);
+  await writeStored(edition, state, updatedAt);
   return updatedAt;
 }
 
-export async function getUpdatedAt(): Promise<number> {
-  const stored = await readStored();
+export async function getUpdatedAt(
+  edition: StateEdition = "v1",
+): Promise<number> {
+  const stored = await readStored(edition);
   return stored?.updatedAt ?? 0;
 }
 

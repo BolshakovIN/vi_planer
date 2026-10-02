@@ -1147,9 +1147,15 @@ export const CLEARED_DEMAND_TEAMS_V1 = "v1";
 /** Persist flag: Команды role—ФИО catalog was seeded once (`teamRosterSeeded-v1`). */
 export const SEEDED_TEAM_ROSTER_V1 = "v1";
 
+/** True when at least one Команды row has a роль—ФИО seat. */
+export function teamCatalogHasRoster(teams: readonly Team[] | undefined): boolean {
+  return (teams ?? []).some((t) => (t.members?.length ?? 0) > 0);
+}
+
 /**
  * One-shot demo roster for teams that never saved `members`.
  * After the flag is set, empty/missing rows stay empty (user catalog).
+ * Missing flag + empty members is a wipe (e.g. v1 blob) — re-seed FIO.
  */
 export function applySeededTeamRoster(current: AppState): {
   state: AppState;
@@ -1167,7 +1173,10 @@ export function applySeededTeamRoster(current: AppState): {
     current.teams.map((t) =>
       syncTeamRoster({
         ...t,
-        members: t.members != null ? t.members : makeSeedTeamMembers(t.id),
+        members:
+          t.members != null && t.members.length > 0
+            ? t.members
+            : makeSeedTeamMembers(t.id),
       })
     )
   );

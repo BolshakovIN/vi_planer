@@ -63,8 +63,8 @@ async def health():
 @app.get("/api/state")
 async def read_state():
     try:
-        state = await get_state()
-        updated_at = await get_updated_at()
+        state = await get_state("v1")
+        updated_at = await get_updated_at("v1")
         return {"state": state, "updatedAt": updated_at}
     except Exception as err:
         print(f"GET /api/state failed: {err}")
@@ -87,10 +87,50 @@ async def write_state(request: Request):
             status_code=400, content={"error": "Invalid state payload"}
         )
     try:
-        updated_at = await set_state(normalized)
+        updated_at = await set_state(normalized, "v1")
         return {"ok": True, "updatedAt": updated_at}
     except Exception as err:
         print(f"PUT /api/state failed: {err}")
+        return JSONResponse(
+            status_code=500, content={"error": "Failed to save state"}
+        )
+
+
+@app.get("/api/state/{edition}")
+async def read_state_edition(edition: str):
+    if edition not in ("v1", "v2"):
+        return JSONResponse(status_code=404, content={"error": "Unknown edition"})
+    try:
+        state = await get_state(edition)  # type: ignore[arg-type]
+        updated_at = await get_updated_at(edition)  # type: ignore[arg-type]
+        return {"state": state, "updatedAt": updated_at}
+    except Exception as err:
+        print(f"GET /api/state/{edition} failed: {err}")
+        return JSONResponse(
+            status_code=500, content={"error": "Failed to load state"}
+        )
+
+
+@app.put("/api/state/{edition}")
+async def write_state_edition(edition: str, request: Request):
+    if edition not in ("v1", "v2"):
+        return JSONResponse(status_code=404, content={"error": "Unknown edition"})
+    try:
+        body: Any = await request.json()
+    except Exception:
+        return JSONResponse(
+            status_code=400, content={"error": "Invalid state payload"}
+        )
+    normalized = normalize_state(body)
+    if not normalized:
+        return JSONResponse(
+            status_code=400, content={"error": "Invalid state payload"}
+        )
+    try:
+        updated_at = await set_state(normalized, edition)  # type: ignore[arg-type]
+        return {"ok": True, "updatedAt": updated_at}
+    except Exception as err:
+        print(f"PUT /api/state/{edition} failed: {err}")
         return JSONResponse(
             status_code=500, content={"error": "Failed to save state"}
         )
