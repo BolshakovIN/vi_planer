@@ -21,7 +21,8 @@
     "preview": "npm run build && npm start",
     "preview:py": "npm run build && npm run start:py",
     "build:presentation": "node scripts/build-presentation-pdf.mjs",
-    "build:gap-analysis": "node scripts/build-gap-analysis-pdf.mjs"
+    "build:gap-analysis": "node scripts/build-gap-analysis-pdf.mjs",
+    "test:persist": "tsx scripts/regress-v2-persist.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

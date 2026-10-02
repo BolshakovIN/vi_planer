@@ -142,6 +142,41 @@ const TAB_LABELS: Record<Tab, string> = {
   settings: "Настройки",
 };
 
+const TAB_ICON_SVG: Record<Tab, string> = {
+  portfolio:
+    '<rect x="2" y="3.1" width="2" height="2" rx="0.4"/><rect x="5.5" y="3.1" width="8.5" height="2" rx="0.4"/><rect x="2" y="7" width="2" height="2" rx="0.4"/><rect x="5.5" y="7" width="8.5" height="2" rx="0.4"/><rect x="2" y="10.9" width="2" height="2" rx="0.4"/><rect x="5.5" y="10.9" width="8.5" height="2" rx="0.4"/>',
+  demand:
+    '<path d="M4.4 2.5h5.1L11.8 4.9v8.6H4.4V2.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M9.4 2.5V5h2.4M6.4 7.8h3.4M6.4 10.2h2.4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+  planning:
+    '<rect x="2.4" y="3.4" width="11.2" height="10.2" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.4 6.4h11.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.4 2.3v2.4M10.6 2.3v2.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+  timeline:
+    '<rect x="2" y="3" width="7.6" height="2.3" rx="0.6"/><rect x="4.2" y="6.85" width="9.8" height="2.3" rx="0.6"/><rect x="3.1" y="10.7" width="6.2" height="2.3" rx="0.6"/>',
+  demoA:
+    '<rect x="2.2" y="2.4" width="11.6" height="8.1" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.6 10.5v2.2h2.8v-2.2M5.2 13.2h5.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+  demoB:
+    '<rect x="2.2" y="2.4" width="11.6" height="8.1" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.6 10.5v2.2h2.8v-2.2M5.2 13.2h5.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+  queuesTest:
+    '<circle cx="3.4" cy="7.2" r="1.35"/><circle cx="8" cy="7.2" r="1.35"/><circle cx="12.6" cy="7.2" r="1.35"/><path d="M2.2 11.1h11.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+  capacity:
+    '<circle cx="6.1" cy="5.1" r="2"/><path d="M2.6 12.4c.2-2.5 1.6-3.6 3.5-3.6s3.3 1.1 3.5 3.6"/><circle cx="11.1" cy="5.6" r="1.55"/><path d="M9.3 12.4c.15-1.7 1.1-2.5 2.2-2.5 1.15 0 2.05.8 2.2 2.5"/>',
+  changelog:
+    '<path d="M3.6 2.6h8.8v10.8H4.4c-1 0-1.8-.8-1.8-1.8V4.3c0-.9.8-1.7 1-1.7z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6.4 5.8h4M6.4 8.2h4M6.4 10.6h2.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+  settings:
+    '<path d="M3 5.2h10M3 10.8h10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="6.2" cy="5.2" r="1.55"/><circle cx="10.1" cy="10.8" r="1.55"/>',
+};
+
+function tabIconHtml(tab: Tab, quiet = false): string {
+  return `<span class="tab-ico${quiet ? " tab-ico-quiet" : ""}" aria-hidden="true"><svg viewBox="0 0 16 16" fill="currentColor" focusable="false">${TAB_ICON_SVG[tab]}</svg></span>`;
+}
+
+function tabButtonHtml(id: Tab, extraClass = ""): string {
+  const quiet = id === "capacity" || id === "changelog" || id === "settings";
+  const cls = ["tab", extraClass, ui.tab === id ? "active" : ""]
+    .filter(Boolean)
+    .join(" ");
+  return `<button type="button" class="${cls}" data-tab="${id}">${tabIconHtml(id, quiet)}${escapeHtml(TAB_LABELS[id])}</button>`;
+}
+
 /** Legacy deep-link / tab ids: `teams` → Очередь команд. */
 function normalizeTab(tab: string | undefined | null): Tab {
   if (tab === "teams") return "queuesTest";
@@ -211,6 +246,7 @@ function demoTabButtonHtml(
   return `<button type="button" class="tab tab-demo ${
     ui.tab === id ? "active" : ""
   }" data-tab="${id}" aria-label="${escapeAttr(name)}, ${escapeAttr(ariaMark)}">
+    ${tabIconHtml(id)}
     <span class="tab-demo-name">${escapeHtml(name)}</span>
     <span class="tab-demo-mark">${escapeHtml(mark)}</span>
   </button>`;
@@ -3412,7 +3448,7 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
                         : `<div class="plan-bar-empty"></div>`;
                       return `<div class="plan-row plan-role-row">
                         <div class="plan-cell">
-                          <span class="plan-exec-name">${escapeHtml(left)}${conflict && member ? " △" : ""}</span>
+                          <span class="plan-exec-name plan-fio-name">${escapeHtml(left)}${conflict && member ? " △" : ""}</span>
                         </div>
                         ${planTrackHtml(bar, weeks)}
                       </div>`;
@@ -3428,7 +3464,7 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
                   </div>
                   ${planTrackHtml("", weeks)}
                 </summary>
-                ${execRows || `<div class="plan-row"><div class="plan-cell"><span class="meta">Команда не назначена</span></div>${planTrackHtml("", weeks)}</div>`}
+                ${execRows || `<div class="plan-row plan-team-row"><div class="plan-cell"><span class="plan-exec-name">Команда не назначена</span></div>${planTrackHtml("", weeks)}</div>`}
               </details>`;
             })
             .join("");
@@ -3587,7 +3623,7 @@ function planningHtml(
                         : role.name;
                       return `${planTaskFormHtml(item, a.teamId, role.id)}<div class="plan-row plan-role-row">
                         <div class="plan-cell">
-          <span class="plan-exec-name">${escapeHtml(leftName)}${conflict && member ? " △" : ""}</span>
+          <span class="plan-exec-name plan-fio-name">${escapeHtml(leftName)}${conflict && member ? " △" : ""}</span>
                           <button type="button" class="plan-add-btn" data-plan-task-open="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" title="Поставить на таймлайн">+</button>
                         </div>
                         ${planTrackHtml(bar, weeks)}
@@ -4899,15 +4935,15 @@ function render() {
         <p>Старт портфеля: ${state.startDate} · Экспорт: ${new Date().toLocaleString("ru-RU")}</p>
       </div>
       <div class="tabs no-print">
-        <button class="tab ${ui.tab === "portfolio" ? "active" : ""}" data-tab="portfolio">Реестр</button>
-        <button class="tab ${ui.tab === "demand" ? "active" : ""}" data-tab="demand">Потребность</button>
-        <button class="tab ${ui.tab === "planning" ? "active" : ""}" data-tab="planning">Планирование</button>
-        <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Гант</button>
+        ${tabButtonHtml("portfolio")}
+        ${tabButtonHtml("demand")}
+        ${tabButtonHtml("planning")}
+        ${tabButtonHtml("timeline")}
         ${isDemoVariantVisible("A") ? demoTabButtonHtml("demoA", "Мониторинг") : ""}
-        <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очередь команд</button>
-        <button class="tab tab-end ${ui.tab === "capacity" ? "active" : ""}" data-tab="capacity">Команды</button>
-        <button class="tab ${ui.tab === "changelog" ? "active" : ""}" data-tab="changelog">Журнал</button>
-        <button class="tab ${ui.tab === "settings" ? "active" : ""}" data-tab="settings">Настройки</button>
+        ${tabButtonHtml("queuesTest")}
+        ${tabButtonHtml("capacity", "tab-end")}
+        ${tabButtonHtml("changelog")}
+        ${tabButtonHtml("settings")}
       </div>
       ${ui.tab === "portfolio" ? metricsHtml(rollups, slices) : ""}
       <div class="tab-print-root" id="tabPrintRoot">
@@ -7528,8 +7564,12 @@ async function bootstrap() {
   ui.hiddenCols = loadHiddenCols();
   ui.scheduleMode = loadScheduleMode();
   saveScheduleMode(ui.scheduleMode);
-  state = { ...state, items: ensureUniquePriorities(state.items, szRanges()) };
-  saveState(state);
+  const ranked = ensureUniquePriorities(state.items, szRanges());
+  const ranksChanged = ranked.some(
+    (item, i) => item.manualRank !== state.items[i]?.manualRank
+  );
+  state = { ...state, items: ranked };
+  if (ranksChanged) saveState(state);
   onSyncStatusChange((status) => {
     const el = document.querySelector<HTMLElement>("#syncStatus");
     if (!el) return;

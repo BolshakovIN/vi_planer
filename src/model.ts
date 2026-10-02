@@ -511,8 +511,10 @@ export function uniqueRolesFromMembers(
 }
 
 export function syncTeamRoster<T extends Team>(team: T): T {
-  team.roles = uniqueRolesFromMembers(team.members);
-  team.capacityPw = team.members?.length ?? 0;
+  if (team.members != null) {
+    team.roles = uniqueRolesFromMembers(team.members);
+    team.capacityPw = team.members.length;
+  }
   return team;
 }
 
@@ -624,8 +626,9 @@ export function filterAssignmentRolesToTeam(
   teamRoleNames: readonly string[] | undefined
 ): AssignmentRole[] {
   if (!roles?.length) return [];
-  if (teamRoleNames === undefined) return roles;
+  if (!teamRoleNames?.length) return roles;
   const allowed = uniqueRoleNames(teamRoleNames);
+  if (!allowed.length) return roles;
   const seen = new Set<string>();
   const out: AssignmentRole[] = [];
   for (const role of roles) {
@@ -893,7 +896,7 @@ export function fillAssignmentRoles(
       const id = migrateStoredRoleId(r.id);
       return name === r.name && id === r.id ? r : { ...r, name, id };
     });
-    if (teamRoleNames !== undefined) {
+    if (teamRoleNames !== undefined && teamRoleNames.length > 0) {
       roles = filterAssignmentRolesToTeam(roles, teamRoleNames);
     }
   }
@@ -1006,14 +1009,15 @@ export function ensureItemAssignmentRoles(
   const roleNames = new Map(teams.map((t) => [t.id, resolveTeamRoleNames(t)]));
   return items.map((item) => ({
     ...item,
-    assignments: item.assignments.map((a) =>
-      fillAssignmentRoles(
+    assignments: item.assignments.map((a) => {
+      const teamRoles = roleNames.get(a.teamId);
+      return fillAssignmentRoles(
         a,
         DEFAULT_SIZE_RANGES,
         names.get(a.teamId) ?? "",
-        roleNames.get(a.teamId)
-      )
-    ),
+        teamRoles?.length ? teamRoles : undefined
+      );
+    }),
   }));
 }
 
@@ -1021,10 +1025,7 @@ export function ensureStateAssignmentRoles<T extends { items: WorkItem[]; teams?
   state: T
 ): T {
   const teams = applyComputedTeamCapacities(
-    (state.teams ?? []).map((t) => {
-      const members = t.members != null ? t.members : [];
-      return syncTeamRoster({ ...t, members });
-    })
+    (state.teams ?? []).map((t) => syncTeamRoster({ ...t }))
   );
   return {
     ...state,
@@ -1107,6 +1108,8 @@ export interface AppState {
    * restore those groups or re-add catalog chips.
    */
   deletedProjectKeys?: string[];
+  /** ISO time of last local/cloud save. Used so stale remote cannot replace newer local. */
+  savedAt?: string;
   version: 3;
 }
 
@@ -1190,35 +1193,18 @@ export function teamCatalogHasRoster(teams: readonly Team[] | undefined): boolea
 }
 
 /**
- * One-shot demo roster for teams that never saved `members`.
- * After the flag is set, empty/missing rows stay empty (user catalog).
- * Missing flag + empty members is a wipe (e.g. v1 blob) — re-seed FIO.
+ * Stamp the roster flag only. Never write demo FIO onto an existing catalog.
+ * Empty `teams: []` stays empty — the load path may restore a backup or seed.
  */
 export function applySeededTeamRoster(current: AppState): {
   state: AppState;
   applied: boolean;
 } {
   if (current.teamRosterSeeded === SEEDED_TEAM_ROSTER_V1) {
-    const teams = applyComputedTeamCapacities(
-      current.teams.map((t) =>
-        syncTeamRoster({ ...t, members: t.members ?? [] })
-      )
-    );
-    return { state: { ...current, teams }, applied: false };
+    return { state: current, applied: false };
   }
-  const teams = applyComputedTeamCapacities(
-    current.teams.map((t) =>
-      syncTeamRoster({
-        ...t,
-        members:
-          t.members != null && t.members.length > 0
-            ? t.members
-            : makeSeedTeamMembers(t.id),
-      })
-    )
-  );
   return {
-    state: { ...current, teams, teamRosterSeeded: SEEDED_TEAM_ROSTER_V1 },
+    state: { ...current, teamRosterSeeded: SEEDED_TEAM_ROSTER_V1 },
     applied: true,
   };
 }
@@ -1230,18 +1216,22 @@ export function migrateLegacyCatalogRoles(current: AppState): {
 } {
   let applied = false;
   const teams = current.teams.map((team) => {
-    const members = (team.members ?? []).map((m) => {
+    const members = team.members?.map((m) => {
       const role = migrateStoredRoleLabel(m.role);
       if (role !== m.role) applied = true;
       return role === m.role ? m : { ...m, role };
     });
     const roles = uniqueRoleNames(
-      members.length ? members.map((m) => m.role) : team.roles
+      members?.length ? members.map((m) => m.role) : team.roles
     );
     if ((team.roles ?? []).some((r, i) => r !== roles[i]) || roles.length !== (team.roles ?? []).length) {
       applied = true;
     }
-    return syncTeamRoster({ ...team, members, roles });
+    return syncTeamRoster({
+      ...team,
+      ...(members ? { members } : {}),
+      roles,
+    });
   });
   const items = current.items.map((item) => ({
     ...item,
@@ -1261,43 +1251,27 @@ export function migrateLegacyCatalogRoles(current: AppState): {
 }
 
 /**
- * Restore seed PROJECT groups the user never had. Does not resurrect
- * user-deleted functionalities (`deletedItemIds`) or deleted project chips
- * (`deletedProjectKeys`). Never copies seed team assignments onto rows.
+ * Seed items only when the live portfolio is empty. Never rewrite type,
+ * rank, title, or assignments on rows the user already has.
  */
 export function mergeMissingSeedItems(
   current: AppState,
   seedItems: WorkItem[]
 ): { state: AppState; applied: boolean } {
-  const seedById = new Map(seedItems.map((item) => [item.id, item]));
-  const have = new Set(current.items.map((item) => item.id));
+  if (current.items.length > 0) {
+    return { state: current, applied: false };
+  }
   const deletedIds = new Set(current.deletedItemIds ?? []);
   const deletedProjects = new Set(
     (current.deletedProjectKeys ?? [])
       .map((k) => catalogKey(k))
       .filter(Boolean)
   );
-  const liveProjectKeys = new Set(
-    current.items
-      .map((item) => catalogKey(containerNameFromBacklog(item.backlog)))
-      .filter(Boolean)
-  );
-
-  let typeFixed = 0;
-  const kept = current.items.map((item) => {
-    const src = seedById.get(item.id);
-    if (!src || item.type === src.type) return item;
-    typeFixed += 1;
-    return { ...item, type: src.type };
-  });
-
   const missing = seedItems
     .filter((item) => {
-      if (have.has(item.id) || deletedIds.has(item.id)) return false;
+      if (deletedIds.has(item.id)) return false;
       const key = catalogKey(containerNameFromBacklog(item.backlog));
       if (!key || deletedProjects.has(key)) return false;
-      // User already has this project — do not fill in deleted siblings.
-      if (liveProjectKeys.has(key)) return false;
       return true;
     })
     .map((item) => {
@@ -1305,26 +1279,15 @@ export function mergeMissingSeedItems(
       clone.assignments = [];
       return clone;
     });
-
-  if (!missing.length && !typeFixed) {
+  if (!missing.length) {
     return { state: current, applied: false };
   }
-
-  const items = ensureUniquePriorities(
-    [...kept, ...missing],
-    current.sizeRanges
-  );
-  const message = missing.length
-    ? `Восстановлены ${missing.length} проектов из таблицы приоритезации`
-    : `Тип ${typeFixed} записей возвращён к проектному портфелю`;
-
   const keepCatalog = (names: string[]) =>
     names.filter((n) => !deletedProjects.has(catalogKey(n)));
-
   return {
     state: {
       ...current,
-      items,
+      items: missing,
       projects: uniqCatalogNames([
         ...keepCatalog(current.projects),
         ...missing
@@ -1337,13 +1300,12 @@ export function mergeMissingSeedItems(
           .filter((item) => item.type === "product")
           .map((item) => containerNameFromBacklog(item.backlog)),
       ]),
-      changeLog: prependChangeLog(current.changeLog, message, "system"),
     },
     applied: true,
   };
 }
 
-/** Wipe item.assignments once; Команды role—ФИО catalog is untouched. */
+/** Stamp the one-shot flag. Never clear live demand assignments again. */
 export function applyClearedDemandTeams(current: AppState): {
   state: AppState;
   applied: boolean;
@@ -1351,28 +1313,149 @@ export function applyClearedDemandTeams(current: AppState): {
   if (current.clearedDemandTeams === CLEARED_DEMAND_TEAMS_V1) {
     return { state: current, applied: false };
   }
-  const hadTeams = current.items.some((item) => item.assignments.length > 0);
   return {
-    state: {
-      ...current,
-      items: hadTeams
-        ? current.items.map((item) =>
-            item.assignments.length ? { ...item, assignments: [] } : item
-          )
-        : current.items,
-      clearedDemandTeams: CLEARED_DEMAND_TEAMS_V1,
-      ...(hadTeams
-        ? {
-            changeLog: prependChangeLog(
-              current.changeLog,
-              "Сняты назначения команд со всех функциональностей — назначьте заново на вкладке «Потребность»",
-              "system"
-            ),
-          }
-        : {}),
-    },
+    state: { ...current, clearedDemandTeams: CLEARED_DEMAND_TEAMS_V1 },
     applied: true,
   };
+}
+
+export interface V2StateFootprint {
+  assignments: number;
+  members: number;
+  teams: number;
+  items: number;
+  savedAt: number;
+}
+
+export function v2StateFootprint(state: AppState): V2StateFootprint {
+  return {
+    assignments: state.items.reduce((n, item) => n + item.assignments.length, 0),
+    members: state.teams.reduce((n, team) => n + (team.members?.length ?? 0), 0),
+    teams: state.teams.length,
+    items: state.items.length,
+    savedAt: Date.parse(state.savedAt ?? "") || 0,
+  };
+}
+
+/** True when writing `next` would drop teams, members, items, or assignments. */
+export function v2StateWouldShrink(next: AppState, prev: AppState | null): boolean {
+  if (!prev) return false;
+  const n = v2StateFootprint(next);
+  const p = v2StateFootprint(prev);
+  return (
+    n.assignments < p.assignments ||
+    n.members < p.members ||
+    n.teams < p.teams ||
+    n.items < p.items
+  );
+}
+
+/** Prefer local when it is newer or holds more user data than remote. */
+export function localV2BeatsRemote(local: AppState, remote: AppState): boolean {
+  const L = v2StateFootprint(local);
+  const R = v2StateFootprint(remote);
+  if (L.assignments > R.assignments) return true;
+  if (L.members > R.members) return true;
+  if (L.savedAt && !R.savedAt) return true;
+  if (L.savedAt && R.savedAt && L.savedAt > R.savedAt) return true;
+  // Seed-sized empty catalogs must not replace a smaller live v2 workspace.
+  if (
+    (L.teams > 0 || L.items > 0 || L.members > 0) &&
+    R.assignments <= L.assignments &&
+    !(R.savedAt > L.savedAt && R.assignments > L.assignments)
+  ) {
+    return true;
+  }
+  if (
+    R.savedAt > L.savedAt &&
+    R.assignments >= L.assignments &&
+    R.members >= L.members
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Merge two v2 blobs by id. Never drop the richer side's teams, ranks,
+ * role—ФИО, or demand assignments. A richer local does not pick up seed extras.
+ */
+export function mergeLiveV2States(local: AppState, remote: AppState): AppState {
+  if (localV2BeatsRemote(local, remote)) {
+    const remoteItems = new Map(remote.items.map((item) => [item.id, item]));
+    const items = local.items.map((item) => {
+      const other = remoteItems.get(item.id);
+      if (!other || item.assignments.length >= other.assignments.length) {
+        return item;
+      }
+      return { ...item, assignments: other.assignments };
+    });
+    // Keep the live catalog as-is. A larger seed/cloud roster must not
+    // replace the user's role—ФИО seats just because it has more rows.
+    return {
+      ...local,
+      items,
+      deletedItemIds: rememberDeletedIds(
+        local.deletedItemIds,
+        remote.deletedItemIds ?? []
+      ),
+      deletedProjectKeys: rememberDeletedIds(
+        local.deletedProjectKeys,
+        remote.deletedProjectKeys ?? []
+      ),
+      clearedDemandTeams: local.clearedDemandTeams ?? remote.clearedDemandTeams,
+      teamRosterSeeded: local.teamRosterSeeded ?? remote.teamRosterSeeded,
+      portfolioPack: local.portfolioPack ?? remote.portfolioPack,
+      savedAt: pickLaterSavedAt(local.savedAt, remote.savedAt),
+    };
+  }
+
+  const localItems = new Map(local.items.map((item) => [item.id, item]));
+  const items = remote.items.map((item) => {
+    const mine = localItems.get(item.id);
+    if (!mine) return item;
+    return {
+      ...item,
+      assignments:
+        mine.assignments.length >= item.assignments.length
+          ? mine.assignments
+          : item.assignments,
+      manualRank: mine.manualRank ?? item.manualRank,
+    };
+  });
+  const remoteIds = new Set(remote.items.map((item) => item.id));
+  const extras = local.items.filter((item) => !remoteIds.has(item.id));
+  const localTeams = new Map(local.teams.map((team) => [team.id, team]));
+  const teams = remote.teams.map((team) => {
+    const mine = localTeams.get(team.id);
+    if (!mine) return team;
+    if ((mine.members?.length ?? 0) >= (team.members?.length ?? 0)) return mine;
+    return team;
+  });
+  const remoteTeamIds = new Set(remote.teams.map((team) => team.id));
+  const extraTeams = local.teams.filter((team) => !remoteTeamIds.has(team.id));
+  return {
+    ...remote,
+    items: [...items, ...extras],
+    teams: [...teams, ...extraTeams],
+    deletedItemIds: rememberDeletedIds(
+      remote.deletedItemIds,
+      local.deletedItemIds ?? []
+    ),
+    deletedProjectKeys: rememberDeletedIds(
+      remote.deletedProjectKeys,
+      local.deletedProjectKeys ?? []
+    ),
+    clearedDemandTeams: remote.clearedDemandTeams ?? local.clearedDemandTeams,
+    teamRosterSeeded: remote.teamRosterSeeded ?? local.teamRosterSeeded,
+    portfolioPack: remote.portfolioPack ?? local.portfolioPack,
+    savedAt: pickLaterSavedAt(local.savedAt, remote.savedAt),
+  };
+}
+
+function pickLaterSavedAt(a?: string, b?: string): string | undefined {
+  if (a && b) return a >= b ? a : b;
+  return a ?? b;
 }
 
 /** Persist flags for demo monitoring (A shown by default; B retired / hidden). */
@@ -2522,7 +2605,10 @@ export function normalizeState(raw: unknown): AppState | null {
     const teamId = String(t.id ?? uid("team"));
     const fallbackRoles = parseTeamRoles(t.roles);
     const members = parseTeamMembers(t.members, teamId, fallbackRoles);
-    const roles = uniqueRolesFromMembers(members);
+    const roles =
+      members != null
+        ? uniqueRolesFromMembers(members)
+        : uniqueRoleNames(fallbackRoles);
     return syncTeamRoster({
       id: teamId,
       name: String(t.name ?? "Команда"),
@@ -2623,11 +2709,12 @@ export function normalizeState(raw: unknown): AppState | null {
     ...item,
     assignments: item.assignments.map((a) => {
       const team = teams.find((t) => t.id === a.teamId);
+      const teamRoles = team ? resolveTeamRoleNames(team) : undefined;
       return fillAssignmentRoles(
         a,
         parsedRanges,
         team?.name ?? "",
-        team ? resolveTeamRoleNames(team) : undefined
+        teamRoles?.length ? teamRoles : undefined
       );
     }),
   }));
@@ -2692,6 +2779,25 @@ export function normalizeState(raw: unknown): AppState | null {
         : undefined,
     deletedItemIds: parseIdList(data.deletedItemIds),
     deletedProjectKeys: parseIdList(data.deletedProjectKeys),
-    items: ensureUniquePriorities(filledItems, parsedRanges),
+    savedAt:
+      data.savedAt != null && String(data.savedAt).trim()
+        ? String(data.savedAt).trim()
+        : undefined,
+    items: itemRanksAlreadyUnique(filledItems)
+      ? filledItems
+      : ensureUniquePriorities(filledItems, parsedRanges),
   };
+}
+
+function itemRanksAlreadyUnique(items: WorkItem[]): boolean {
+  if (!items.length) return true;
+  const used = new Set<number>();
+  for (const item of items) {
+    const rank = item.manualRank;
+    if (rank == null || !Number.isFinite(rank) || rank < 1 || used.has(rank)) {
+      return false;
+    }
+    used.add(rank);
+  }
+  return used.size === items.length;
 }

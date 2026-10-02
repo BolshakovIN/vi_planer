@@ -176,14 +176,18 @@ def _seed_state() -> dict[str, Any]:
     return deepcopy(SEED)
 
 
-async def get_state(edition: StateEdition = "v1") -> dict[str, Any]:
+async def get_state(edition: StateEdition = "v1") -> Optional[dict[str, Any]]:
     stored = await _read_stored(edition)
     if not stored:
+        if edition == "v2":
+            return None
         seed = _seed_state()
         await set_state(seed, edition)
         return seed
     normalized = normalize_state(stored.get("state"))
     if not normalized:
+        if edition == "v2":
+            return None
         seed = _seed_state()
         await set_state(seed, edition)
         return seed

@@ -3,11 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { SEED } from "../src/seed.ts";
-import {
-  applyClearedDemandTeams,
-  normalizeState,
-  type AppState,
-} from "../src/model.ts";
+import { normalizeState, type AppState } from "../src/model.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -156,22 +152,22 @@ function seedState(): AppState {
 
 export async function getState(
   edition: StateEdition = "v1",
-): Promise<AppState> {
+): Promise<AppState | null> {
   const stored = await readStored(edition);
   if (!stored) {
+    if (edition === "v2") return null;
     const seed = seedState();
     await setState(seed, edition);
     return seed;
   }
   const normalized = normalizeState(stored.state);
   if (!normalized) {
+    if (edition === "v2") return null;
     const seed = seedState();
     await setState(seed, edition);
     return seed;
   }
-  const { state, applied } = applyClearedDemandTeams(normalized);
-  if (applied) await setState(state, edition);
-  return state;
+  return normalized;
 }
 
 export async function setState(

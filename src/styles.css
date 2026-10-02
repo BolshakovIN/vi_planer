@@ -471,6 +471,9 @@ textarea {
 }
 
 .tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--muted);
@@ -479,6 +482,31 @@ textarea {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.tab-ico {
+  display: block;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: inherit;
+  line-height: 0;
+}
+
+.tab-ico svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.tab-ico-quiet {
+  width: 13px;
+  height: 13px;
+  opacity: 0.72;
+}
+
+.tab.active .tab-ico-quiet {
+  opacity: 1;
 }
 
 .tab.active {
@@ -3042,10 +3070,7 @@ a.req-dl-btn {
 
 .gantt-page .need-page-head {
   align-items: flex-end;
-}
-
-.gantt-stats {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  flex-wrap: nowrap;
 }
 
 .need-project-chip .prio-mini,
@@ -3508,7 +3533,7 @@ body.pdf-capturing .table-scroll-top {
 .tab-demo {
   display: inline-flex;
   flex-direction: row;
-  align-items: baseline;
+  align-items: center;
   gap: 4px;
   line-height: 1.2;
   padding: 5px 10px;
@@ -3896,6 +3921,22 @@ body.pdf-capturing .table-scroll-top {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+}
+
+.need-stats.gantt-stats {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.need-stats.gantt-stats .need-stat {
+  min-width: 0;
+  padding: 5px 8px;
+}
+
+.need-stats.gantt-stats .need-stat .label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .need-stat {
@@ -4313,6 +4354,10 @@ body.pdf-capturing .table-scroll-top {
   .need-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .need-stats.gantt-stats {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
 }
 
 .plan-page {
@@ -4415,7 +4460,7 @@ body.pdf-capturing .table-scroll-top {
   display: grid;
   grid-template-columns: minmax(240px, 34%) 1fr;
   align-items: stretch;
-  min-height: 28px;
+  min-height: 24px;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
 }
 
@@ -4430,7 +4475,7 @@ body.pdf-capturing .table-scroll-top {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  padding: 4px 10px;
+  padding: 2px 8px;
 }
 
 .plan-head-label {
@@ -4493,11 +4538,29 @@ body.pdf-capturing .table-scroll-top {
   transform: rotate(90deg);
 }
 
+.plan-project-sum .plan-cell {
+  padding-left: 8px;
+}
+
+.plan-fn-sum .plan-cell {
+  padding-left: 20px;
+}
+
+.plan-team-row .plan-cell {
+  padding-left: 32px;
+}
+
+.plan-role-row .plan-cell {
+  padding-left: 46px;
+}
+
+/* v2 gantt tree: 13 / 12 / 11 / 10 */
 .plan-project-title {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4505,7 +4568,8 @@ body.pdf-capturing .table-scroll-top {
 
 .plan-project-meta,
 .plan-fn-days {
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 400;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -4516,17 +4580,10 @@ body.pdf-capturing .table-scroll-top {
   min-width: 0;
   font-size: 12px;
   font-weight: 400;
+  line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.plan-fn .plan-cell {
-  padding-left: 22px;
-}
-
-.plan-exec-row .plan-cell {
-  padding-left: 36px;
 }
 
 .plan-exec-name {
@@ -4538,6 +4595,24 @@ body.pdf-capturing .table-scroll-top {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.plan-role-row .plan-exec-name,
+.plan-fio-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.25;
 }
 
 .plan-add-btn {
@@ -4561,7 +4636,7 @@ body.pdf-capturing .table-scroll-top {
 
 .plan-track {
   position: relative;
-  min-height: 28px;
+  min-height: 24px;
 }
 
 .plan-bar,
@@ -4611,13 +4686,9 @@ body.plan-dragging {
   cursor: pointer;
 }
 
-.plan-role-row .plan-cell {
-  padding-left: 48px;
-}
-
 .plan-task-form {
   grid-column: 1 / -1;
-  padding: 10px 12px 12px 36px;
+  padding: 10px 12px 12px 46px;
   background: var(--surface);
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);

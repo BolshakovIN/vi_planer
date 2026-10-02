@@ -10,12 +10,14 @@ import {
   CLEARED_DEMAND_TEAMS_V1,
   ensureUniquePriorities,
   ensureStateAssignmentRoles,
+  mergeLiveV2States,
   normalizeState,
   prependChangeLog,
-  rememberDeletedIds,
   SEEDED_TEAM_ROSTER_V1,
   syncTeamRoster,
   teamCatalogHasRoster,
+  localV2BeatsRemote,
+  v2StateWouldShrink,
   type Team,
 } from "./model";
 import {
@@ -68,12 +70,7 @@ function setSyncStatus(status: SyncStatus) {
 function parseStoredState(raw: string | null): AppState | null {
   if (!raw) return null;
   try {
-    const normalized = normalizeState(JSON.parse(raw));
-    if (!normalized) return null;
-    return {
-      ...normalized,
-      items: ensureUniquePriorities(normalized.items, normalized.sizeRanges),
-    };
+    return normalizeState(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -126,6 +123,9 @@ function loadTeamsBackup(): Team[] | null {
 }
 
 function saveLocal(state: AppState) {
+  if (STORAGE_KEY === V1_STORAGE_KEY) {
+    throw new Error("v2 refused to write the v1 store");
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   writeTeamsBackup(state);
 }
@@ -153,10 +153,7 @@ async function loadFromApi(): Promise<AppState | null> {
     const json = (await res.json()) as { state?: unknown };
     const normalized = normalizeState(json.state);
     if (!normalized) return null;
-    return {
-      ...normalized,
-      items: ensureUniquePriorities(normalized.items, normalized.sizeRanges),
-    };
+    return normalized;
   } catch {
     return null;
   }
@@ -188,10 +185,7 @@ async function loadFromSupabase(): Promise<AppState | null> {
     if (error || !data?.payload) return null;
     const normalized = normalizeState(data.payload);
     if (!normalized) return null;
-    return {
-      ...normalized,
-      items: ensureUniquePriorities(normalized.items, normalized.sizeRanges),
-    };
+    return normalized;
   } catch {
     return null;
   }
@@ -229,7 +223,10 @@ function writePortfolioBackup(state: AppState) {
   }
 }
 
-/** Replace live portfolio with the Oct-2026 xlsx pack (once, unless re-applied). */
+/**
+ * Auto-load never replaces a live portfolio. Missing pack id is stamped only.
+ * Explicit force still keeps Команды, demand assignments, and user ranks.
+ */
 export function applyCurrentPortfolioPack(
   current: AppState,
   opts: { force?: boolean } = {}
@@ -241,7 +238,17 @@ export function applyCurrentPortfolioPack(
   if (!opts.force && pack === PORTFOLIO_PACK_ROLLED_BACK) {
     return { state: current, applied: false };
   }
-  // Older packs (v1, PREV/v2, …) fully replace with current seed so team assignments stay correct.
+  const hasUserPortfolio = current.items.length > 0 || current.teams.length > 0;
+  if (!opts.force && hasUserPortfolio) {
+    if (pack === PORTFOLIO_PACK_ID) {
+      return { state: current, applied: false };
+    }
+    return {
+      state: { ...current, portfolioPack: PORTFOLIO_PACK_ID },
+      applied: pack !== PORTFOLIO_PACK_ID,
+    };
+  }
+
   writePortfolioBackup(current);
   try {
     localStorage.setItem("vi-planer-schedule-mode", "manual");
@@ -257,8 +264,8 @@ export function applyCurrentPortfolioPack(
     "system"
   );
   next.portfolioPack = PORTFOLIO_PACK_ID;
-  // Pack replaces portfolio items, not the Команды role—ФИО catalog.
-  // Do not coerce missing members to [] — that blocks one-shot FIO re-seed.
+  next.clearedDemandTeams =
+    current.clearedDemandTeams ?? next.clearedDemandTeams;
   if (current.teams.length) {
     next.teams = applyComputedTeamCapacities(
       current.teams.map((t) => syncTeamRoster({ ...t }))
@@ -266,6 +273,23 @@ export function applyCurrentPortfolioPack(
     if (current.teamRosterSeeded) {
       next.teamRosterSeeded = current.teamRosterSeeded;
     }
+  }
+  if (current.items.length) {
+    const live = new Map(current.items.map((item) => [item.id, item]));
+    next.items = next.items.map((item) => {
+      const mine = live.get(item.id);
+      if (!mine) return item;
+      return {
+        ...item,
+        assignments: mine.assignments.length ? mine.assignments : item.assignments,
+        manualRank: mine.manualRank ?? item.manualRank,
+      };
+    });
+    const seedIds = new Set(next.items.map((item) => item.id));
+    next.items = [
+      ...next.items,
+      ...current.items.filter((item) => !seedIds.has(item.id)),
+    ];
   }
   return { state: next, applied: true };
 }
@@ -293,31 +317,26 @@ export function rollbackPortfolioPack(): AppState | null {
 
 /**
  * First v2 load after the store split: never read the live v1 cloud row.
- * Adopt the old shared local blob only when it still has a v2 role—ФИО catalog.
- * Otherwise re-seed default teams and keep deletion / demand-clear flags.
+ * Empty v2 restores the v2 teams backup only — never copies v1 items.
  */
 function bootstrapV2State(local: AppState | null, remote: AppState | null): {
   base: AppState;
   tombstoneSource: AppState | null;
   isolated: boolean;
 } {
-  if (remote || local) {
+  if (local && remote) {
     return {
-      base: (remote ?? local) as AppState,
+      base: mergeLiveV2States(local, remote),
       tombstoneSource: local,
       isolated: false,
     };
   }
-
-  let legacy: AppState | null = null;
-  try {
-    legacy = parseStoredState(localStorage.getItem(V1_STORAGE_KEY));
-  } catch {
-    legacy = null;
-  }
-
-  if (legacy && teamCatalogHasRoster(legacy.teams)) {
-    return { base: legacy, tombstoneSource: legacy, isolated: true };
+  if (local || remote) {
+    return {
+      base: (local ?? remote) as AppState,
+      tombstoneSource: local,
+      isolated: false,
+    };
   }
 
   const seed = ensureStateAssignmentRoles(structuredClone(SEED));
@@ -330,26 +349,41 @@ function bootstrapV2State(local: AppState | null, remote: AppState | null): {
       "Восстановлен каталог команд роль—ФИО из резервной копии v2",
       "team"
     );
-  } else if (legacy) {
-    seed.changeLog = prependChangeLog(
-      seed.changeLog,
-      "Восстановлен каталог команд роль—ФИО; хранилища v1 и v2 разделены",
-      "team"
-    );
   }
-  if (legacy) {
-    seed.deletedItemIds = rememberDeletedIds(
-      seed.deletedItemIds,
-      legacy.deletedItemIds ?? []
-    );
-    seed.deletedProjectKeys = rememberDeletedIds(
-      seed.deletedProjectKeys,
-      legacy.deletedProjectKeys ?? []
-    );
-    seed.clearedDemandTeams = CLEARED_DEMAND_TEAMS_V1;
-    seed.demoVariantA = legacy.demoVariantA;
+  seed.clearedDemandTeams = CLEARED_DEMAND_TEAMS_V1;
+  return { base: seed, tombstoneSource: null, isolated: true };
+}
+
+function restoreTeamsBackupIfEmpty(state: AppState): AppState {
+  if (teamCatalogHasRoster(state.teams) || state.teams.length > 0) {
+    return state;
   }
-  return { base: seed, tombstoneSource: legacy, isolated: true };
+  const backed = loadTeamsBackup();
+  if (!backed) return state;
+  return {
+    ...state,
+    teams: backed,
+    teamRosterSeeded: SEEDED_TEAM_ROSTER_V1,
+  };
+}
+
+/** Load pipeline used by the app and the persist regression. */
+export function hydrateV2State(
+  local: AppState | null,
+  remote: AppState | null
+): AppState {
+  const { base, tombstoneSource } = bootstrapV2State(local, remote);
+  const packed = applyCurrentPortfolioPack(base);
+  const tombstoned = applyLocalDeletionTombstones(packed.state, tombstoneSource);
+  const cleared = applyClearedDemandTeams(tombstoned.state);
+  const roster = applySeededTeamRoster(cleared.state);
+  const merged = mergeMissingSeedItems(roster.state, SEED.items);
+  const roles = migrateLegacyCatalogRoles(merged.state);
+  const restored = restoreTeamsBackupIfEmpty(roles.state);
+  if (local && v2StateWouldShrink(restored, local)) {
+    return mergeLiveV2States(local, restored);
+  }
+  return restored;
 }
 
 export async function loadState(): Promise<AppState> {
@@ -357,24 +391,22 @@ export async function loadState(): Promise<AppState> {
 
   const local = loadLocal();
   const remote = (await loadFromApi()) ?? (await loadFromSupabase());
-  const { base, tombstoneSource, isolated } = bootstrapV2State(local, remote);
-
-  const packed = applyCurrentPortfolioPack(base);
-  const tombstoned = applyLocalDeletionTombstones(packed.state, tombstoneSource);
-  const cleared = applyClearedDemandTeams(tombstoned.state);
-  const roster = applySeededTeamRoster(cleared.state);
-  const merged = mergeMissingSeedItems(roster.state, SEED.items);
-  const roles = migrateLegacyCatalogRoles(merged.state);
-  const state = roles.state;
-  if (
+  const state = hydrateV2State(local, remote);
+  if (v2StateWouldShrink(state, local)) {
+    const kept = local ? mergeLiveV2States(local, state) : state;
+    saveLocal(kept);
+    setSyncStatus(getSupabase() || usesRemoteApi() ? "saved" : "idle");
+    return kept;
+  }
+  const isolated = !local && !remote;
+  const healRemote = Boolean(local && remote && localV2BeatsRemote(local, remote));
+  const stampFlags =
     isolated ||
-    packed.applied ||
-    tombstoned.applied ||
-    cleared.applied ||
-    roster.applied ||
-    merged.applied ||
-    roles.applied
-  ) {
+    !local ||
+    local.clearedDemandTeams !== state.clearedDemandTeams ||
+    local.teamRosterSeeded !== state.teamRosterSeeded ||
+    local.portfolioPack !== state.portfolioPack;
+  if (healRemote || stampFlags) {
     saveState(state);
   } else {
     saveLocal(state);
@@ -421,7 +453,10 @@ async function flushPendingSave() {
 }
 
 export function saveState(state: AppState) {
-  const payload = ensureStateAssignmentRoles(state);
+  const payload = ensureStateAssignmentRoles({
+    ...state,
+    savedAt: new Date().toISOString(),
+  });
   saveLocal(payload);
   pendingState = payload;
   scheduleRemoteSave();
