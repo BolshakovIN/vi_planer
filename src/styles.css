@@ -1235,6 +1235,24 @@ th.sortable.sorted {
   width: min(1233px, 96vw);
 }
 
+.modal-compact {
+  width: min(380px, 100%);
+}
+
+.modal-compact .modal-head,
+.modal-compact .modal-body {
+  padding: 12px 14px;
+}
+
+.modal-compact .modal-head h3 {
+  font-size: 14px;
+}
+
+.need-fn-modal-foot {
+  justify-content: flex-end;
+  padding: 0 14px 14px;
+}
+
 @media (max-width: 640px) {
   .team-assign-head {
     display: none;
@@ -4002,6 +4020,14 @@ body.pdf-capturing .table-scroll-top {
   white-space: nowrap;
 }
 
+.need-project-actions,
+.need-fn-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .need-project-body {
   display: flex;
   flex-direction: column;
@@ -4215,7 +4241,8 @@ body.pdf-capturing .table-scroll-top {
 }
 
 .need-team-x,
-.need-role-del {
+.need-role-del,
+.need-fn-x {
   flex-shrink: 0;
   width: 18px;
   height: 18px;
@@ -4230,7 +4257,8 @@ body.pdf-capturing .table-scroll-top {
 }
 
 .need-team-x:hover,
-.need-role-del:hover {
+.need-role-del:hover,
+.need-fn-x:hover {
   background: var(--row-hover);
   color: var(--ink);
 }

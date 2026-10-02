@@ -239,6 +239,8 @@ interface UiState {
   needProjectKey: string | null;
   /** Functionality whose «+ Добавить команду» picker is open (Потребность) */
   needAddItemId: string | null;
+  /** Name prompt for «+ Функциональность» on the selected project */
+  needCreatingFn: boolean;
   /** `${itemId}:${teamId}` whose «+ Роль» picker is open */
   needAddRoleKey: string | null;
   /** `${itemId}:${teamId}:${roleId}` while days input is shown */
@@ -299,6 +301,7 @@ const ui: UiState = {
   needItemId: null,
   needProjectKey: null,
   needAddItemId: null,
+  needCreatingFn: false,
   needAddRoleKey: null,
   needDaysEdit: null,
   needCollapsedProjects: {},
@@ -3054,21 +3057,48 @@ function demandFnHtml(item: WorkItem): string {
         <span class="need-fn-title">${escapeHtml(item.title)}</span>
         <span class="need-fn-req">запрошено ${days} дн.</span>
       </span>
-      ${addBtn}
+      <span class="need-fn-actions">
+        ${addBtn}
+        <button type="button" class="need-fn-x" data-need-del-fn="${item.id}" title="Удалить функциональность" aria-label="Удалить функциональность ${escapeAttr(item.title)}">×</button>
+      </span>
     </summary>
     <div class="need-fn-body">${body}</div>
   </details>`;
 }
 
+function demandSelectedGroup():
+  | { key: string; title: string; items: WorkItem[] }
+  | undefined {
+  const selectedKey = ui.needProjectKey;
+  if (!selectedKey) return undefined;
+  return (
+    demandGroupedItems().find((g) => g.key === selectedKey) ?? {
+      key: selectedKey,
+      title: selectedKey,
+      items: [],
+    }
+  );
+}
+
+function demandProjectBacklog(
+  group: { key: string; items: WorkItem[] }
+): string {
+  const existing = group.items.find((it) => it.backlog.trim())?.backlog;
+  if (existing) return existing;
+  return group.key === "Без проекта" ? "" : group.key;
+}
+
 function demandHtml(): string {
   const allGroups = demandGroupedItems();
   const selectedKey = ui.needProjectKey;
-  const selectedGroup = selectedKey
-    ? allGroups.find((g) => g.key === selectedKey)
-    : undefined;
+  const selectedGroup = demandSelectedGroup();
+  const chipGroups =
+    selectedGroup && !allGroups.some((g) => g.key === selectedGroup.key)
+      ? [...allGroups, selectedGroup]
+      : allGroups;
 
   const prioMap = projectPrioMap();
-  const projectChips = allGroups
+  const projectChips = chipGroups
     .map((g) => {
       const on = selectedKey === g.key;
       const prio = prioMap.get(g.key);
@@ -3108,6 +3138,9 @@ function demandHtml(): string {
       <summary class="need-project-sum">
         <span class="need-project-title">${prioBadgeHtml(prioMap.get(selectedGroup.key))}${escapeHtml(selectedGroup.title)}</span>
         <span class="need-project-meta">${items.length} функц. · ${totalDays} дн.</span>
+        <span class="need-project-actions">
+          <button type="button" class="btn need-add-btn" data-need-add-fn title="Добавить функциональность">+ Функциональность</button>
+        </span>
       </summary>
       <div class="need-project-body">${fns || `<p class="meta">Нет функциональностей</p>`}</div>
     </details>`;
@@ -3133,6 +3166,31 @@ function demandHtml(): string {
       </div>
       <div class="need-projects" aria-label="Проекты">${projectChips || `<span class="meta">Нет проектов</span>`}</div>
       ${body}
+      ${ui.needCreatingFn ? needFnCreateModalHtml() : ""}
+    </div>
+  `;
+}
+
+function needFnCreateModalHtml(): string {
+  const project = demandSelectedGroup()?.title ?? "";
+  return `
+    <div class="modal-backdrop" id="needFnModal">
+      <div class="modal modal-compact" role="dialog" aria-modal="true" aria-labelledby="needFnModalTitle">
+        <div class="modal-head">
+          <h3 id="needFnModalTitle">Новая функциональность</h3>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label for="need_fn_title">Название</label>
+            <input id="need_fn_title" type="text" autocomplete="off" placeholder="Название функциональности" />
+            ${project ? `<div class="meta">Проект: ${escapeHtml(project)}</div>` : ""}
+          </div>
+        </div>
+        <div class="modal-foot need-fn-modal-foot">
+          <button type="button" class="btn" id="needFnCancel">Отмена</button>
+          <button type="button" class="btn btn-primary" id="needFnCreate">Создать</button>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -5022,6 +5080,64 @@ function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
 }
 
+function createDemandFunctionality(rawTitle: string) {
+  const title = titleRu(rawTitle.trim());
+  const group = demandSelectedGroup();
+  if (!title || !group) return false;
+  const item: WorkItem = {
+    id: uid("item"),
+    title,
+    type: "project",
+    backlog: demandProjectBacklog(group),
+    assignments: [],
+    status: "ready",
+    owner: "",
+    assignee: "",
+    reach: 100,
+    impact: 1,
+    confidence: 0.8,
+    notes: "",
+    manualRank: nextPriority(state.items),
+    cashFlow12m: null,
+    roi12m: null,
+  };
+  state.items.push(item);
+  state.items = ensureUniquePriorities(state.items, szRanges());
+  delete ui.needCollapsedProjects[group.key];
+  delete ui.needCollapsedItems[item.id];
+  ui.needCreatingFn = false;
+  logChange(`Создана функциональность «${title}»`, "item");
+  persist();
+  return true;
+}
+
+function deleteDemandFunctionality(itemId: string) {
+  const prev = state.items.find((i) => i.id === itemId);
+  if (!prev) return;
+  state.items = state.items.filter((i) => i.id !== itemId);
+  delete ui.needCollapsedItems[itemId];
+  if (ui.needItemId === itemId) ui.needItemId = null;
+  if (ui.needAddItemId === itemId) ui.needAddItemId = null;
+  if (ui.needAddRoleKey?.startsWith(`${itemId}:`)) ui.needAddRoleKey = null;
+  logChange(
+    `Удалена функциональность «${prev.title}» (#${prev.manualRank ?? "—"})`,
+    "item"
+  );
+  persist();
+}
+
+function confirmDeleteDemandFunctionality(itemId: string, anchor: HTMLElement) {
+  const item = state.items.find((i) => i.id === itemId);
+  if (!item) return;
+  askAppConfirm(
+    anchor,
+    `Удалить функциональность «<strong>${escapeHtml(item.title)}</strong>» и все назначения команд?`,
+    () => deleteDemandFunctionality(itemId),
+    () => undefined,
+    { wide: true, yesLabel: "Удалить", noLabel: "Отмена" }
+  );
+}
+
 function addDemandTeam(itemId: string, teamId: string) {
   const item = state.items.find((i) => i.id === itemId);
   const team = teamById(teamId);
@@ -5191,16 +5307,59 @@ function bindDemandTab() {
       ui.needProjectKey = ui.needProjectKey === key ? null : key;
       ui.needAddItemId = null;
       ui.needAddRoleKey = null;
+      ui.needCreatingFn = false;
       render();
     });
   });
 
-  root.querySelectorAll(".need-add-wrap").forEach((el) => {
+  root.querySelectorAll(".need-add-wrap, .need-fn-actions, .need-project-actions").forEach((el) => {
     el.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
     });
   });
+
+  root.querySelector<HTMLButtonElement>("[data-need-add-fn]")?.addEventListener(
+    "click",
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      ui.needCreatingFn = true;
+      ui.needAddItemId = null;
+      ui.needAddRoleKey = null;
+      render();
+    }
+  );
+
+  const fnTitleInput = root.querySelector<HTMLInputElement>("#need_fn_title");
+  const closeNeedFnModal = () => {
+    ui.needCreatingFn = false;
+    render();
+  };
+  const submitNeedFnModal = () => {
+    const name = fnTitleInput?.value ?? "";
+    if (!name.trim()) {
+      fnTitleInput?.focus();
+      return;
+    }
+    createDemandFunctionality(name);
+  };
+  root.querySelector("#needFnCancel")?.addEventListener("click", closeNeedFnModal);
+  root.querySelector("#needFnCreate")?.addEventListener("click", submitNeedFnModal);
+  root.querySelector("#needFnModal")?.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).id === "needFnModal") closeNeedFnModal();
+  });
+  fnTitleInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      submitNeedFnModal();
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeNeedFnModal();
+    }
+  });
+  fnTitleInput?.focus();
 
   root.querySelectorAll<HTMLButtonElement>("[data-need-add-open]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
@@ -5425,6 +5584,16 @@ function bindDemandTab() {
       const teamId = btn.dataset.team;
       if (!itemId || !teamId) return;
       confirmRemoveDemandTeam(itemId, teamId, btn);
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-need-del-fn]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const itemId = btn.dataset.needDelFn;
+      if (!itemId) return;
+      confirmDeleteDemandFunctionality(itemId, btn);
     });
   });
 }
@@ -5735,6 +5904,7 @@ function bindUiRest() {
       if (next !== "demand") {
         ui.needAddItemId = null;
         ui.needAddRoleKey = null;
+        ui.needCreatingFn = false;
       }
       if (next !== "planning") {
         ui.planTaskForm = null;
