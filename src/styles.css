@@ -489,7 +489,7 @@ textarea {
   width: 15px;
   height: 15px;
   flex: 0 0 auto;
-  color: inherit;
+  color: color-mix(in srgb, var(--accent) 38%, var(--muted));
   line-height: 0;
 }
 
@@ -497,12 +497,22 @@ textarea {
   display: block;
   width: 100%;
   height: 100%;
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+.tab-ico svg [fill="none"] {
+  fill: none;
 }
 
 .tab-ico-quiet {
   width: 13px;
   height: 13px;
   opacity: 0.72;
+}
+
+.tab.active .tab-ico {
+  color: var(--accent);
 }
 
 .tab.active .tab-ico-quiet {
@@ -4389,6 +4399,32 @@ body.pdf-capturing .table-scroll-top {
   gap: 2px 4px;
 }
 
+.plan-team-filter-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-left: 2px;
+}
+
+.plan-team-filter-btn {
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+  cursor: pointer;
+}
+
+.plan-team-filter-btn:hover {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+
 .plan-team-chip {
   display: inline-flex;
   align-items: center;
@@ -4613,6 +4649,12 @@ body.pdf-capturing .table-scroll-top {
   font-size: 10px;
   font-weight: 400;
   line-height: 1.25;
+}
+
+.plan-fio-label,
+.plan-role-paren {
+  font-style: italic;
+  color: var(--muted);
 }
 
 .plan-add-btn {

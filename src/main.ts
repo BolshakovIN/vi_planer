@@ -166,7 +166,7 @@ const TAB_ICON_SVG: Record<Tab, string> = {
 };
 
 function tabIconHtml(tab: Tab, quiet = false): string {
-  return `<span class="tab-ico${quiet ? " tab-ico-quiet" : ""}" aria-hidden="true"><svg viewBox="0 0 16 16" fill="currentColor" focusable="false">${TAB_ICON_SVG[tab]}</svg></span>`;
+  return `<span class="tab-ico${quiet ? " tab-ico-quiet" : ""}" aria-hidden="true"><svg viewBox="0 0 16 16" fill="currentColor" stroke="currentColor" focusable="false">${TAB_ICON_SVG[tab]}</svg></span>`;
 }
 
 function tabButtonHtml(id: Tab, extraClass = ""): string {
@@ -291,6 +291,8 @@ interface UiState {
   needCollapsedItems: Record<string, true>;
   /** Selected catalog teams on Планирование (Моя команда) */
   planTeamIds: string[];
+  /** True when the user cleared the team filter (empty ≠ default first team). */
+  planTeamFilterCleared: boolean;
   /** Last-clicked team chip (stronger highlight) */
   planFocusTeamId: string | null;
   planCollapsedProjects: Record<string, true>;
@@ -351,6 +353,7 @@ const ui: UiState = {
   needCollapsedProjects: {},
   needCollapsedItems: {},
   planTeamIds: [],
+  planTeamFilterCleared: false,
   planFocusTeamId: null,
   planCollapsedProjects: {},
   planCollapsedItems: {},
@@ -369,6 +372,8 @@ let overloadPinned = false;
 /** Ignore [data-edit] row clicks after inline status change (native <select> fires click after change). */
 let suppressPortfolioRowEditUntil = 0;
 let suppressPortfolioRowEditCleanup: (() => void) | null = null;
+/** Removes confirm-dialog listeners; cleared in closeAppPop so they never leak. */
+let activeConfirmTeardown: (() => void) | null = null;
 
 function isPortfolioStatusChrome(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
@@ -389,11 +394,15 @@ function armSuppressPortfolioRowEdit() {
     }
     const t = e.target;
     if (!(t instanceof Element)) return;
+    // Let inline controls and the confirm pop keep working; only block row opens.
     if (
       t.closest(
-        "[data-edit], [data-project-card], .portfolio-table, .prio-input, .status-select, .status-cell"
+        ".prio-input, .status-select, #appConfirmPop, [data-stop-edit]"
       )
     ) {
+      return;
+    }
+    if (t.closest("[data-project-card], [data-edit]")) {
       e.stopPropagation();
       e.stopImmediatePropagation();
     }
@@ -3187,6 +3196,7 @@ function planSelectedTeamIds(): string[] {
   const known = new Set(state.teams.map((t) => t.id));
   const picked = ui.planTeamIds.filter((id) => known.has(id));
   if (picked.length) return picked;
+  if (ui.planTeamFilterCleared) return [];
   return state.teams[0] ? [state.teams[0].id] : [];
 }
 
@@ -3618,12 +3628,12 @@ function planningHtml(
                             }
                           )
                         : `<button type="button" class="plan-bar-empty" data-plan-task-open="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" title="Поставить на таймлайн"></button>`;
-                      const leftName = member
-                        ? shortFio(member.name)
-                        : role.name;
+                      const leftLabel = member
+                        ? `<span class="plan-fio-label">${escapeHtml(shortFio(member.name))} <em class="plan-role-paren">(${escapeHtml(role.name)})</em></span>`
+                        : escapeHtml(role.name);
                       return `${planTaskFormHtml(item, a.teamId, role.id)}<div class="plan-row plan-role-row">
                         <div class="plan-cell">
-          <span class="plan-exec-name plan-fio-name">${escapeHtml(leftName)}${conflict && member ? " △" : ""}</span>
+          <span class="plan-exec-name plan-fio-name">${leftLabel}${conflict && member ? " △" : ""}</span>
                           <button type="button" class="plan-add-btn" data-plan-task-open="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" title="Поставить на таймлайн">+</button>
                         </div>
                         ${planTrackHtml(bar, weeks)}
@@ -3661,7 +3671,9 @@ function planningHtml(
           </details>`;
         })
         .join("")
-    : `<div class="plan-empty meta">Нет проектов у выбранных команд. Отметьте команду сверху или назначьте её на вкладке «Потребность».</div>`;
+    : selected.length === 0
+      ? `<div class="plan-empty meta">Команды не выбраны. Отметьте команду сверху или нажмите «Выбрать все».</div>`
+      : `<div class="plan-empty meta">Нет проектов у выбранных команд. Отметьте команду сверху или назначьте её на вкладке «Потребность».</div>`;
 
   return `
     <div class="plan-page">
@@ -3674,6 +3686,10 @@ function planningHtml(
       <div class="plan-teams">
         <span class="plan-teams-label">Моя команда</span>
         <div class="plan-team-chips" aria-label="Команды">${chips || `<span class="meta">Нет команд</span>`}</div>
+        <div class="plan-team-filter-actions">
+          <button type="button" class="plan-team-filter-btn" data-plan-teams-clear>Сбросить фильтр</button>
+          <button type="button" class="plan-team-filter-btn" data-plan-teams-all>Выбрать все</button>
+        </div>
       </div>
       <div class="need-stats plan-stats">
         <div class="need-stat"><div class="label">Проектов команды</div><div class="value">${groups.length}</div></div>
@@ -4295,6 +4311,9 @@ function escapeAttr(s: string): string {
 }
 
 function closeAppPop() {
+  const teardown = activeConfirmTeardown;
+  activeConfirmTeardown = null;
+  teardown?.();
   document
     .querySelectorAll(".prio-input.prio-ask, #f_rank.prio-ask")
     .forEach((el) => {
@@ -4593,32 +4612,52 @@ function askAppConfirm(
   };
   place();
 
+  let settled = false;
   const onScroll = () => place();
-  window.addEventListener("scroll", onScroll, true);
-  window.addEventListener("resize", onScroll);
-
-  const cleanup = () => {
-    window.removeEventListener("scroll", onScroll, true);
-    window.removeEventListener("resize", onScroll);
-    document.removeEventListener("mousedown", onDoc, true);
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key !== "Escape") return;
+    finishNo();
   };
-
-  const finishNo = () => {
-    cleanup();
-    closeAppPop();
-    onNo();
-  };
-  const finishYes = () => {
-    cleanup();
-    closeAppPop();
-    onYes();
-  };
-
   const onDoc = (e: MouseEvent) => {
     const t = e.target as Node;
     if (pop.contains(t) || anchor.contains(t)) return;
     finishNo();
   };
+
+  const removeConfirmListeners = () => {
+    window.removeEventListener("scroll", onScroll, true);
+    window.removeEventListener("resize", onScroll);
+    window.removeEventListener("keydown", onKey, true);
+    document.removeEventListener("mousedown", onDoc, true);
+  };
+  /** Drop listeners; if dialog was replaced/closed unsettled, run onNo (clears confirming). */
+  activeConfirmTeardown = () => {
+    removeConfirmListeners();
+    if (settled) return;
+    settled = true;
+    onNo();
+  };
+
+  const finishNo = () => {
+    if (settled) return;
+    settled = true;
+    activeConfirmTeardown = null;
+    removeConfirmListeners();
+    closeAppPop();
+    onNo();
+  };
+  const finishYes = () => {
+    if (settled) return;
+    settled = true;
+    activeConfirmTeardown = null;
+    removeConfirmListeners();
+    closeAppPop();
+    onYes();
+  };
+
+  window.addEventListener("scroll", onScroll, true);
+  window.addEventListener("resize", onScroll);
+  window.addEventListener("keydown", onKey, true);
   document.addEventListener("mousedown", onDoc, true);
 
   pop.querySelector("[data-confirm-yes]")?.addEventListener("click", (e) => {
@@ -5333,11 +5372,9 @@ function confirmRemoveDemandRole(
   const teamName = teamById(teamId)?.name ?? teamId;
   if (!role) return;
   const roleTitle = isArchitectureRole(role)
-    ? "Архитектура"
+    ? "Архитектор"
     : titleRu(role.name);
-  const text = isArchitectureRole(role)
-    ? `Удалить роль «<strong>${escapeHtml(roleTitle)}</strong>» у команды «${escapeHtml(teamName)}»?`
-    : `Удалить роль «<strong>${escapeHtml(roleTitle)}</strong>» у команды «${escapeHtml(teamName)}»?`;
+  const text = `Удалить роль «<strong>${escapeHtml(roleTitle)}</strong>» у команды «${escapeHtml(teamName)}»?`;
   askAppConfirm(
     anchor,
     text,
@@ -5702,10 +5739,24 @@ function bindPlanningTab() {
       const next = has
         ? current.filter((x) => x !== id)
         : [...current, id];
-      ui.planTeamIds = next.length ? next : [id];
-      ui.planFocusTeamId = id;
+      ui.planTeamIds = next;
+      ui.planTeamFilterCleared = next.length === 0;
+      ui.planFocusTeamId = next.length ? id : null;
       render();
     });
+  });
+
+  root.querySelector("[data-plan-teams-clear]")?.addEventListener("click", () => {
+    ui.planTeamIds = [];
+    ui.planTeamFilterCleared = true;
+    ui.planFocusTeamId = null;
+    render();
+  });
+  root.querySelector("[data-plan-teams-all]")?.addEventListener("click", () => {
+    ui.planTeamIds = state.teams.map((t) => t.id);
+    ui.planTeamFilterCleared = false;
+    ui.planFocusTeamId = ui.planTeamIds[0] ?? null;
+    render();
   });
 
   const openTaskForm = (itemId: string, teamId: string, roleId: string) => {
@@ -5804,6 +5855,7 @@ function bindPlanningTab() {
     patchDemandRole(form.itemId, form.teamId, form.roleId, (r) => ({
       ...r,
       assigneeId: form.memberId || undefined,
+      demandStatus: form.memberId ? "approved" : r.demandStatus,
       workStartDate: snapToMonday(start),
       days: form.days,
       size,
@@ -6334,11 +6386,13 @@ function bindUiRest() {
   document.querySelectorAll<HTMLInputElement>(".prio-input").forEach((input) => {
     const itemId = input.dataset.prioId;
     if (!itemId) return;
+    let confirming = false;
     const revert = () => {
       const item = state.items.find((i) => i.id === itemId);
       input.value = String(item?.manualRank ?? 1);
     };
     const commit = () => {
+      if (confirming) return;
       const item = state.items.find((i) => i.id === itemId);
       if (!item) return;
       const raw = Number(input.value);
@@ -6355,10 +6409,12 @@ function bindUiRest() {
         ? `Сменить на <span class="accent">${priority}</span>?<br/>«${escapeHtml(conflict.title)}» сдвинется вверх.`
         : `Сменить приоритет на <span class="accent">${priority}</span>?`;
 
+      confirming = true;
       askPrioConfirm(
         input,
         text,
         () => {
+          confirming = false;
           state.items = moveItemToPriority(state.items, itemId, priority, szRanges());
           logChange(
             `Приоритет «${item.title}»: #${item.manualRank ?? "—"} → #${priority}`,
@@ -6366,7 +6422,10 @@ function bindUiRest() {
           );
           persist();
         },
-        revert
+        () => {
+          confirming = false;
+          revert();
+        }
       );
     };
     input.addEventListener("click", (e) => e.stopPropagation());
@@ -6377,6 +6436,7 @@ function bindUiRest() {
         commit();
       }
       if (e.key === "Escape") {
+        confirming = false;
         closePrioPop();
         revert();
         input.blur();
@@ -6387,10 +6447,12 @@ function bindUiRest() {
 
   document.querySelectorAll<HTMLInputElement>("[data-project-prio]").forEach((input) => {
     const key = input.dataset.projectPrio ?? "";
+    let confirming = false;
     const revert = () => {
       input.value = input.dataset.projectPrioNow ?? "1";
     };
     const commit = () => {
+      if (confirming) return;
       const raw = Number(input.value);
       const now = Number(input.dataset.projectPrioNow);
       if (!Number.isFinite(raw) || raw < 1) {
@@ -6403,10 +6465,12 @@ function bindUiRest() {
       armSuppressPortfolioRowEdit();
       const group = groupByProjectKey(state.items).find((g) => g.key === key);
       const title = group?.title ?? key;
+      confirming = true;
       askPrioConfirm(
         input,
         `Сменить приоритет проекта «${escapeHtml(title)}» на <span class="accent">${priority}</span>?`,
         () => {
+          confirming = false;
           state.items = moveProjectGroupToPriority(
             state.items,
             key,
@@ -6419,7 +6483,10 @@ function bindUiRest() {
           );
           persist();
         },
-        revert
+        () => {
+          confirming = false;
+          revert();
+        }
       );
     };
     input.addEventListener("click", (e) => e.stopPropagation());
@@ -6430,6 +6497,7 @@ function bindUiRest() {
         commit();
       }
       if (e.key === "Escape") {
+        confirming = false;
         closePrioPop();
         revert();
         input.blur();

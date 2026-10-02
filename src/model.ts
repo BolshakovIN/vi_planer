@@ -380,8 +380,8 @@ export function shortFio(name: string): string {
 function preferredSeedRoles(teamId: string): string[] {
   const catalog = [...ASSIGNMENT_ROLE_CATALOG];
   const n = teamId.toLowerCase();
-  const needle = /архитектур/.test(n)
-    ? "архитектур"
+  const needle = /архитект/.test(n)
+    ? "архитект"
     : /бизнес/.test(n)
       ? "бизнес"
       : /тестир|\bqa\b/.test(n)
@@ -521,7 +521,7 @@ export function syncTeamRoster<T extends Team>(team: T): T {
 /** Catalog of Потребность roles the user can add to a team. */
 export const ASSIGNMENT_ROLE_CATALOG = [
   "бизнес аналитик",
-  "архитектура",
+  "архитектор",
   "аналитик",
   "разработчик",
   "тестировщик",
@@ -535,6 +535,7 @@ export const DEFAULT_ASSIGNMENT_ROLE_NAMES = [
 
 /** Exact old catalog labels → person titles. «бизнес аналитик» is not «аналитика». */
 const LEGACY_ROLE_RENAMES: Record<string, string> = {
+  архитектура: "архитектор",
   аналитика: "аналитик",
   разработка: "разработчик",
   тестирование: "тестировщик",
@@ -794,7 +795,7 @@ export function submittedAssignmentRoles(
 
 export function roleJobLabel(roleName: string): string {
   const n = roleName.toLowerCase();
-  if (n.includes("архитектур")) return "Архитектор";
+  if (n.includes("архитект")) return "Архитектор";
   if (n.includes("бизнес")) return "Бизнес-аналитик";
   if (n.includes("тестир")) return "Тестировщик";
   if (n.includes("разраб")) return "Разработчик";
@@ -805,7 +806,7 @@ export function roleJobLabel(roleName: string): string {
 }
 
 export function isArchitectureRole(role: AssignmentRole): boolean {
-  return /архитектур/i.test(role.name) || role.id === "architecture";
+  return /архитект/i.test(role.name) || role.id === "architecture";
 }
 
 export function rolePlanDays(
@@ -833,8 +834,8 @@ function preferRoleIndexByTeamName(
   teamName: string
 ): number {
   const n = teamName.toLowerCase();
-  const needle = /архитектур/.test(n)
-    ? "архитектур"
+  const needle = /архитект/.test(n)
+    ? "архитект"
     : /бизнес/.test(n)
       ? "бизнес"
       : /тестир|\bqa\b/.test(n)
@@ -1209,7 +1210,7 @@ export function applySeededTeamRoster(current: AppState): {
   };
 }
 
-/** Rewrite persisted «аналитика/разработка/тестирование» to person titles. */
+/** Rewrite persisted «архитектура/аналитика/разработка/тестирование» to person titles. */
 export function migrateLegacyCatalogRoles(current: AppState): {
   state: AppState;
   applied: boolean;
