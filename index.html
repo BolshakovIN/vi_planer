@@ -1,7 +1,18 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="portal">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("vi-planer-theme");
+          if (t !== "vi" && t !== "portal") t = "portal";
+          document.documentElement.setAttribute("data-theme", t);
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "portal");
+        }
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VI Planer — сквозной приоритет и дата завершения</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />

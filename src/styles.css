@@ -32,10 +32,59 @@
   --gantt-col-gap: 12px;
   --gantt-row-gap: 8px;
   --radius: 6px;
+  --control-radius: 10px;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --link: var(--accent);
+  --link-hover: var(--accent-hover);
   font-family: "IBM Plex Sans", system-ui, sans-serif;
   color: var(--ink);
   background: var(--bg);
+}
+
+/* Tokens from portal.vseinstrumenti.ru (`:root --vi-*` in Nuxt CSS). Layout stays ours. */
+html[data-theme="portal"] {
+  --bg: #f4f5f6;
+  --surface: #ffffff;
+  --surface-2: #fbfbfb;
+  --ink: #1c2126;
+  --muted: #93999e;
+  --line: #e5e7e8;
+  --accent: #d60000;
+  --accent-hover: #c50000;
+  --accent-soft: #fae0e0;
+  --accent-border: #f5c2c2;
+  --good: #3caa3c;
+  --good-soft: #ebfaeb;
+  --warn: #fa6607;
+  --warn-soft: #ffebde;
+  --bad: #e03d3d;
+  --bad-soft: #ffeeee;
+  --product: #d60000;
+  --product-soft: #fae0e0;
+  --project: #484f55;
+  --project-soft: #eeeff1;
+  --neutral: #484f55;
+  --neutral-soft: #eeeff1;
+  --neutral-border: #dadcde;
+  --neutral-ink: #1c2126;
+  --callout-ink: var(--neutral-ink);
+  --row-hover: #f4f5f6;
+  --gantt-bg: #f4f5f6;
+  --gantt-line: #e5e7e8;
+  --radius: 8px;
+  --control-radius: 8px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+  --link: #118aed;
+  --link-hover: #d60000;
+  font-family: ViSans, Arial, sans-serif;
+}
+
+html[data-theme="portal"] .tab {
+  border-radius: 8px;
+}
+
+html[data-theme="portal"] .topbar {
+  border-bottom-width: 2px;
 }
 
 * {
@@ -193,7 +242,7 @@ textarea {
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink);
-  border-radius: 10px;
+  border-radius: var(--control-radius, 10px);
   padding: 8px 12px;
   font-size: 13px;
   font-weight: 600;
@@ -2942,12 +2991,13 @@ a.req-dl-btn {
 }
 
 .callout a {
-  color: var(--accent);
+  color: var(--link);
   font-weight: 600;
   text-decoration: none;
 }
 
 .callout a:hover {
+  color: var(--link-hover);
   text-decoration: underline;
 }
 
@@ -3719,4 +3769,36 @@ body.pdf-capturing .table-scroll-top {
 
 .settings-check input {
   margin: 0;
+}
+
+.settings-theme-body {
+  padding: 0 16px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.settings-theme-body > .meta {
+  margin: 0;
+  max-width: 42rem;
+  line-height: 1.4;
+}
+
+.top-actions .theme-seg {
+  flex: 0 1 auto;
+}
+
+.top-actions .theme-seg .schedule-mode-btn {
+  padding: clamp(4px, 0.55vw, 8px) clamp(6px, 0.85vw, 12px);
+  font-size: clamp(10px, 1.05vw, 13px);
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+@media (max-width: 640px) {
+  .top-actions .theme-seg .schedule-mode-btn {
+    font-size: 9px;
+    padding: 3px 5px;
+  }
 }
