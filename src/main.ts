@@ -84,6 +84,7 @@ const RELEASE_UPDATED = "02.10.2026";
 type Tab =
   | "portfolio"
   | "demand"
+  | "planning"
   | "timeline"
   | "queuesTest"
   | "demoA"
@@ -100,6 +101,7 @@ type GanttBarDragMode = "move" | "resize-left" | "resize-right";
 const TAB_LABELS: Record<Tab, string> = {
   portfolio: "Реестр",
   demand: "Потребность",
+  planning: "Планирование",
   timeline: "Gantt/Сроки",
   queuesTest: "Очередь команд",
   demoA: "Мониторинг",
@@ -117,6 +119,7 @@ function normalizeTab(tab: string | undefined | null): Tab {
   if (
     tab === "portfolio" ||
     tab === "demand" ||
+    tab === "planning" ||
     tab === "timeline" ||
     tab === "queuesTest" ||
     tab === "demoA" ||
@@ -213,6 +216,14 @@ interface UiState {
   needDaysEdit: string | null;
   needCollapsedProjects: Record<string, true>;
   needCollapsedItems: Record<string, true>;
+  /** Selected catalog teams on Планирование (Моя команда) */
+  planTeamIds: string[];
+  /** Last-clicked team chip (stronger highlight) */
+  planFocusTeamId: string | null;
+  /** Functionality whose «+» team picker is open */
+  planAddItemId: string | null;
+  planCollapsedProjects: Record<string, true>;
+  planCollapsedItems: Record<string, true>;
 }
 
 const SCHEDULE_MODE_META: Record<
@@ -253,6 +264,11 @@ const ui: UiState = {
   needDaysEdit: null,
   needCollapsedProjects: {},
   needCollapsedItems: {},
+  planTeamIds: [],
+  planFocusTeamId: null,
+  planAddItemId: null,
+  planCollapsedProjects: {},
+  planCollapsedItems: {},
 };
 
 let state: AppState = structuredClone(SEED);
@@ -547,7 +563,6 @@ const GANTT_LABEL_COL_MAX = 480;
 
 type PortfolioCol =
   | "priority"
-  | "type"
   | "title"
   | "teams"
   | "status"
@@ -560,7 +575,6 @@ type PortfolioCol =
 type HideablePortfolioCol = Exclude<PortfolioCol, "priority" | "title">;
 
 const HIDEABLE_PORTFOLIO_COLS: HideablePortfolioCol[] = [
-  "type",
   "teams",
   "status",
   "rice",
@@ -572,7 +586,6 @@ const HIDEABLE_PORTFOLIO_COLS: HideablePortfolioCol[] = [
 
 const ALL_PORTFOLIO_COLS: PortfolioCol[] = [
   "priority",
-  "type",
   "title",
   "teams",
   "status",
@@ -585,7 +598,6 @@ const ALL_PORTFOLIO_COLS: PortfolioCol[] = [
 
 const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
   priority: "Приоритет",
-  type: "Тип",
   title: "Проект",
   teams: "Команды (оценка · старт)",
   status: "Статус",
@@ -599,8 +611,7 @@ const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
 /** Narrow metric cols; keep finance compact so the table does not explode horizontally. */
 const PORTFOLIO_COL_DEFAULTS: Record<PortfolioCol, number> = {
   priority: 96,
-  type: 118,
-  title: 260,
+  title: 280,
   teams: 220,
   status: 130,
   rice: 72,
@@ -901,7 +912,6 @@ function portfolioColgroupHtml(): string {
 function portfolioTheadCellsHtml(): string {
   return `
     ${sortHeader("Приоритет", "priority", "prio-cell")}
-    ${resizableTh("Тип", "type", "type-cell")}
     ${resizableTh("Проект", "title", "title-cell")}
     ${resizableTh("Команды (оценка · старт)", "teams")}
     ${resizableTh("Статус", "status", "status-cell")}
@@ -1027,7 +1037,7 @@ function metricsHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string 
 }
 
 /**
- * Product/project name stored in `backlog` (shown under Тип).
+ * Product/project name stored in `backlog` (Реестр column «Проект»).
  * Uses the full trimmed field; legacy «… backlog · Name» keeps the last segment.
  */
 function productProjectName(backlog: string): string {
@@ -1040,7 +1050,6 @@ function columnsHelpHtml(): string {
       <summary class="agenda-summary">Адженда</summary>
       <div class="cols-help">
         <div><span class="cols-help-k">Приоритет</span> — сквозной ранг проекта (1 = выше; минимум по работам проекта)</div>
-        <div><span class="cols-help-k">Тип</span> — проект</div>
         <div><span class="cols-help-k">Проект</span> — контейнер плана; функциональности смотрите на вкладке «Потребность»</div>
         <div><span class="cols-help-k">Команды</span> — кто задействован в проекте, маечная оценка (XS–XXL) и план старта</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
@@ -1147,9 +1156,6 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
         <tr class="clickable" data-need-open-project="${escapeAttr(g.key)}" title="Открыть потребность проекта">
           <td${tdAttrs("priority", "prio-cell")}>
             <span class="prio-num">${prio}</span>
-          </td>
-          <td${tdAttrs("type", "type-cell")}>
-            <span class="badge badge-project">Проект</span>
           </td>
           <td${tdAttrs("title", "title-cell")}>
             <div class="name">${escapeHtml(g.title)}</div>
@@ -3293,6 +3299,255 @@ function demandHtml(): string {
   `;
 }
 
+const PLAN_WEEKS = 12;
+
+function planSelectedTeamIds(): string[] {
+  const known = new Set(state.teams.map((t) => t.id));
+  const picked = ui.planTeamIds.filter((id) => known.has(id));
+  if (picked.length) return picked;
+  return state.teams[0] ? [state.teams[0].id] : [];
+}
+
+function planFocusTeamId(selected: string[]): string | null {
+  if (ui.planFocusTeamId && selected.includes(ui.planFocusTeamId)) {
+    return ui.planFocusTeamId;
+  }
+  return selected[0] ?? null;
+}
+
+function planExecutorLabel(item: WorkItem, teamId: string): string {
+  const person = item.assignee.trim();
+  if (person && person !== "—") return person;
+  return teamById(teamId)?.name ?? teamId;
+}
+
+function planSliceDays(slice: ScheduledSlice): number {
+  return Math.max(1, slice.endWeek - slice.startWeek + 1) * 5;
+}
+
+function planConflictWeeks(
+  teamId: string,
+  overflowByTeam: Record<string, Set<number>>,
+  weeks: number
+): number {
+  const set = overflowByTeam[teamId];
+  if (!set) return 0;
+  let n = 0;
+  for (const w of set) {
+    if (w >= 0 && w < weeks) n++;
+  }
+  return n;
+}
+
+function planTrackBg(weeks: number): string {
+  const weekPct = 100 / weeks;
+  return `repeating-linear-gradient(90deg, transparent 0, transparent calc(${weekPct}% - 1px), var(--line) calc(${weekPct}% - 1px), var(--line) ${weekPct}%)`;
+}
+
+function planAxisHtml(weeks: number): string {
+  const weekPct = 100 / weeks;
+  return Array.from({ length: weeks }, (_, w) => {
+    const monday = addWeeks(state.startDate, w);
+    const [, m, d] = monday.split("-");
+    return `<div class="plan-axis-tick" style="width:${weekPct}%"><span>Н${w + 1}</span><span>${d}.${m}</span></div>`;
+  }).join("");
+}
+
+function planBarHtml(
+  startWeek: number,
+  endWeek: number,
+  weeks: number,
+  color: string,
+  label: string,
+  conflict: boolean
+): string {
+  const left = (Math.max(0, startWeek) / weeks) * 100;
+  const span = Math.max(1, endWeek - startWeek + 1);
+  const width = (span / weeks) * 100;
+  return `<div class="plan-bar${conflict ? " is-conflict" : ""}" style="left:${left}%;width:${Math.max(width, 3)}%;background:${color}" title="${escapeAttr(label)}">${escapeHtml(label)}</div>`;
+}
+
+function planTrackHtml(inner: string, weeks: number): string {
+  return `<div class="plan-track" style="background:${planTrackBg(weeks)}">${inner}</div>`;
+}
+
+function planningHtml(
+  rollups: ItemSchedule[],
+  slices: ScheduledSlice[],
+  overflowByTeam: Record<string, Set<number>>
+): string {
+  const weeks = PLAN_WEEKS;
+  const selected = planSelectedTeamIds();
+  const selectedSet = new Set(selected);
+  const focusId = planFocusTeamId(selected);
+  const ranges = szRanges();
+  const byItem = new Map(rollups.map((r) => [r.item.id, r]));
+
+  const chips = state.teams
+    .map((t) => {
+      const on = selectedSet.has(t.id);
+      const focus = t.id === focusId;
+      return `<button type="button" class="plan-team-chip${on ? " is-on" : ""}${focus ? " is-focus" : ""}" data-plan-team="${escapeAttr(t.id)}" title="${escapeAttr(on ? "Снять команду" : "Добавить команду")}">
+        <span class="team-dot${on ? "" : " is-hollow"}" style="${on ? `background:${t.color}` : `border-color:${t.color}`}"></span>${escapeHtml(t.name)}
+      </button>`;
+    })
+    .join("");
+
+  const items = sortByPriority(
+    demandProjectItems().filter((it) =>
+      it.assignments.some((a) => selectedSet.has(a.teamId))
+    ),
+    ranges
+  );
+  const groups = groupByProjectKey(items);
+  const selectedAssigns = items.flatMap((it) =>
+    it.assignments
+      .filter((a) => selectedSet.has(a.teamId))
+      .map((a) => ({ item: it, a }))
+  );
+  const requestedDays = selectedAssigns.reduce(
+    (s, x) => s + assignmentPlanDays(x.a, ranges),
+    0
+  );
+  const plannedDays = slices
+    .filter((s) => selectedSet.has(s.teamId) && items.some((it) => it.id === s.item.id))
+    .reduce((s, sl) => s + planSliceDays(sl), 0);
+  const conflictCount = selected.reduce(
+    (n, id) => n + planConflictWeeks(id, overflowByTeam, weeks),
+    0
+  );
+
+  const body = groups.length
+    ? groups
+        .map((g) => {
+          const open = !ui.planCollapsedProjects[g.key];
+          const fnRows = g.items
+            .map((item) => {
+              const assigns = item.assignments.filter((a) =>
+                selectedSet.has(a.teamId)
+              );
+              const req = assigns.reduce(
+                (s, a) => s + assignmentPlanDays(a, ranges),
+                0
+              );
+              const roll = byItem.get(item.id);
+              const itemSlices = (roll?.slices ?? []).filter((s) =>
+                selectedSet.has(s.teamId)
+              );
+              const plan = itemSlices.reduce((s, sl) => s + planSliceDays(sl), 0);
+              const fnOpen = !ui.planCollapsedItems[item.id];
+              const used = new Set(item.assignments.map((a) => a.teamId));
+              const unused = state.teams.filter((t) => !used.has(t.id));
+              const pickerOpen = ui.planAddItemId === item.id;
+              const addBtn = unused.length
+                ? `<div class="need-add-wrap">
+                    <button type="button" class="plan-add-btn" data-plan-add-open="${item.id}" title="Добавить исполнителя">+</button>
+                    ${
+                      pickerOpen
+                        ? `<div class="need-add-menu" role="menu">
+                            ${unused
+                              .map(
+                                (t) =>
+                                  `<button type="button" class="need-add-option" data-plan-add="${item.id}" data-team="${t.id}"><span class="team-dot" style="background:${t.color}"></span>${escapeHtml(t.name)}</button>`
+                              )
+                              .join("")}
+                          </div>`
+                        : ""
+                    }
+                  </div>`
+                : "";
+              const execRows = assigns
+                .map((a) => {
+                  const team = teamById(a.teamId);
+                  const name = planExecutorLabel(item, a.teamId);
+                  const slice = itemSlices.find((s) => s.teamId === a.teamId);
+                  const days = slice
+                    ? planSliceDays(slice)
+                    : assignmentPlanDays(a, ranges);
+                  const conflict = planConflictWeeks(
+                    a.teamId,
+                    overflowByTeam,
+                    weeks
+                  ) > 0;
+                  const bar = slice
+                    ? planBarHtml(
+                        slice.startWeek,
+                        slice.endWeek,
+                        weeks,
+                        team?.color ?? "#484f55",
+                        `${name} · ${days} дн.`,
+                        conflict
+                      )
+                    : `<div class="plan-bar-empty"></div>`;
+                  return `<div class="plan-row plan-exec-row">
+                    <div class="plan-cell">
+                      <span class="plan-exec-name"><span class="team-dot" style="background:${team?.color ?? "#93999e"}"></span>${escapeHtml(name)}</span>
+                      <button type="button" class="plan-x" data-plan-remove="${item.id}" data-team="${a.teamId}" title="Убрать назначение" aria-label="Убрать">×</button>
+                    </div>
+                    ${planTrackHtml(bar, weeks)}
+                  </div>`;
+                })
+                .join("");
+              const fnBar =
+                itemSlices.length === 0
+                  ? `<div class="plan-bar-empty"></div>`
+                  : "";
+              return `<details class="plan-fn" data-plan-fn="${item.id}"${fnOpen ? " open" : ""}>
+                <summary class="plan-row plan-fn-sum">
+                  <div class="plan-cell">
+                    <span class="plan-fn-title">${escapeHtml(item.title)}</span>
+                    <span class="plan-fn-days">${req}/${plan || "—"}</span>
+                    ${addBtn}
+                  </div>
+                  ${planTrackHtml(fnBar, weeks)}
+                </summary>
+                ${execRows}
+              </details>`;
+            })
+            .join("");
+          return `<details class="plan-project" data-plan-project="${escapeAttr(g.key)}"${open ? " open" : ""}>
+            <summary class="plan-row plan-project-sum">
+              <div class="plan-cell">
+                <span class="plan-project-title">${escapeHtml(g.title)}</span>
+                <span class="plan-project-meta">${g.items.length} функц.</span>
+              </div>
+              ${planTrackHtml("", weeks)}
+            </summary>
+            ${fnRows}
+          </details>`;
+        })
+        .join("")
+    : `<div class="plan-empty meta">Нет проектов у выбранных команд. Отметьте команду сверху или назначьте её на вкладке «Потребность».</div>`;
+
+  return `
+    <div class="plan-page">
+      <div class="panel-header need-page-head">
+        <div>
+          <h2>Планирование потребности</h2>
+          <p class="meta">У тимлида несколько проектов с запросом на ресурс. Слева — проекты по функциональностям, справа — шкала назначений.</p>
+        </div>
+      </div>
+      <div class="plan-teams">
+        <span class="plan-teams-label">Моя команда</span>
+        <div class="plan-team-chips" aria-label="Команды">${chips || `<span class="meta">Нет команд</span>`}</div>
+      </div>
+      <div class="need-stats plan-stats">
+        <div class="need-stat"><div class="label">Проектов команды</div><div class="value">${groups.length}</div></div>
+        <div class="need-stat"><div class="label">Функциональностей</div><div class="value">${items.length}</div></div>
+        <div class="need-stat"><div class="label">Запрошено / запланировано дней</div><div class="value">${requestedDays} <span class="plan-stat-sep">/</span> ${plannedDays}</div></div>
+        <div class="need-stat"><div class="label">Конфликтов ресурса</div><div class="value${conflictCount ? " is-pending" : ""}">${conflictCount}</div></div>
+      </div>
+      <div class="plan-board">
+        <div class="plan-row plan-board-head">
+          <div class="plan-cell plan-head-label">Проекты и функциональности</div>
+          <div class="plan-axis">${planAxisHtml(weeks)}</div>
+        </div>
+        ${body}
+      </div>
+    </div>
+  `;
+}
+
 function tabContentHtml(
   rollups: ItemSchedule[],
   slices: ScheduledSlice[],
@@ -3304,6 +3559,8 @@ function tabContentHtml(
       return portfolioHtml(rollups, slices);
     case "demand":
       return demandHtml();
+    case "planning":
+      return planningHtml(rollups, slices, overflowByTeam);
     case "queuesTest":
       return queuesTestHtml(slices, load, overflowByTeam);
     case "timeline":
@@ -4455,6 +4712,7 @@ function render() {
       <div class="tabs no-print">
         <button class="tab ${ui.tab === "portfolio" ? "active" : ""}" data-tab="portfolio">Реестр</button>
         <button class="tab ${ui.tab === "demand" ? "active" : ""}" data-tab="demand">Потребность</button>
+        <button class="tab ${ui.tab === "planning" ? "active" : ""}" data-tab="planning">Планирование</button>
         <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Gantt/Сроки</button>
         <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очередь команд</button>
         ${isDemoVariantVisible("A") ? demoTabButtonHtml("demoA", "Мониторинг") : ""}
@@ -4669,8 +4927,26 @@ function addDemandTeam(itemId: string, teamId: string) {
     withDemandTeams(it, [...it.assignments, newDemandAssignment(teamId)])
   );
   ui.needAddItemId = null;
+  ui.planAddItemId = null;
   logChange(
     `Потребность «${item.title}»: добавлена команда «${team.name}»`,
+    "team"
+  );
+  persist();
+}
+
+function removeDemandTeam(itemId: string, teamId: string) {
+  const item = state.items.find((i) => i.id === itemId);
+  const team = teamById(teamId);
+  if (!item || !item.assignments.some((a) => a.teamId === teamId)) return;
+  patchDemandItem(itemId, (it) =>
+    withDemandTeams(
+      it,
+      it.assignments.filter((a) => a.teamId !== teamId)
+    )
+  );
+  logChange(
+    `Планирование «${item.title}»: снята команда «${team?.name ?? teamId}»`,
     "team"
   );
   persist();
@@ -4845,6 +5121,88 @@ function bindDemandTab() {
   });
 }
 
+function bindPlanningTab() {
+  const root = document.querySelector(".plan-page");
+  if (!root) return;
+
+  root.querySelectorAll<HTMLButtonElement>("[data-plan-team]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.planTeam;
+      if (!id) return;
+      const current = planSelectedTeamIds();
+      const has = current.includes(id);
+      const next = has
+        ? current.filter((x) => x !== id)
+        : [...current, id];
+      ui.planTeamIds = next.length ? next : [id];
+      ui.planFocusTeamId = id;
+      ui.planAddItemId = null;
+      render();
+    });
+  });
+
+  root.querySelectorAll(".need-add-wrap").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-plan-add-open]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const itemId = btn.dataset.planAddOpen ?? null;
+      ui.planAddItemId = ui.planAddItemId === itemId ? null : itemId;
+      render();
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-plan-add]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const itemId = btn.dataset.planAdd;
+      const teamId = btn.dataset.team;
+      if (!itemId || !teamId) return;
+      if (!ui.planTeamIds.includes(teamId)) {
+        ui.planTeamIds = [...planSelectedTeamIds(), teamId];
+      }
+      ui.planFocusTeamId = teamId;
+      addDemandTeam(itemId, teamId);
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-plan-remove]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const itemId = btn.dataset.planRemove;
+      const teamId = btn.dataset.team;
+      if (!itemId || !teamId) return;
+      removeDemandTeam(itemId, teamId);
+    });
+  });
+
+  root.querySelectorAll<HTMLDetailsElement>("[data-plan-project]").forEach((el) => {
+    el.addEventListener("toggle", () => {
+      const key = el.dataset.planProject;
+      if (!key) return;
+      if (el.open) delete ui.planCollapsedProjects[key];
+      else ui.planCollapsedProjects[key] = true;
+    });
+  });
+
+  root.querySelectorAll<HTMLDetailsElement>("[data-plan-fn]").forEach((el) => {
+    el.addEventListener("toggle", () => {
+      const id = el.dataset.planFn;
+      if (!id) return;
+      if (el.open) delete ui.planCollapsedItems[id];
+      else ui.planCollapsedItems[id] = true;
+    });
+  });
+}
+
 function persist() {
   saveState(state);
   render();
@@ -4878,12 +5236,14 @@ function bindUiRest() {
     btn.addEventListener("click", () => {
       const next = normalizeTab(btn.dataset.tab);
       if (next !== "demand") ui.needAddItemId = null;
+      if (next !== "planning") ui.planAddItemId = null;
       ui.tab = next;
       render();
     });
   });
 
   bindDemandTab();
+  bindPlanningTab();
 
   document.querySelector<HTMLInputElement>("#showDemoA")?.addEventListener(
     "change",
