@@ -474,21 +474,32 @@ export function parseTeamMembers(
   return out;
 }
 
+/** Distinct role names, in first-seen order. */
+export function uniqueRoleNames(
+  names: readonly string[] | undefined
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of names ?? []) {
+    const name = raw.trim();
+    if (!name) continue;
+    const key = normalizeAssignmentRoleName(name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
+}
+
 /** Distinct catalog roles present in роль—ФИО rows, in first-seen order. */
 export function uniqueRolesFromMembers(
   members: readonly TeamMember[] | undefined
 ): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const m of members ?? []) {
-    const canonical = canonicalizeCatalogRole(m.role) ?? m.role.trim();
-    if (!canonical) continue;
-    const key = normalizeAssignmentRoleName(canonical);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(canonical);
-  }
-  return out;
+  return uniqueRoleNames(
+    (members ?? []).map(
+      (m) => canonicalizeCatalogRole(m.role) ?? m.role.trim()
+    )
+  );
 }
 
 export function syncTeamRoster<T extends Team>(team: T): T {
@@ -572,7 +583,34 @@ export function availableAssignmentRolesForTeam(
   teamRoles: readonly string[] | undefined,
   used: AssignmentRole[] | undefined
 ): string[] {
-  return (teamRoles ?? []).filter((name) => !assignmentHasRoleName(used, name));
+  return uniqueRoleNames(teamRoles).filter(
+    (name) => !assignmentHasRoleName(used, name)
+  );
+}
+
+/**
+ * Keep demand roles that still exist on the team (Команды роль—ФИО).
+ * Drops leftover seeded catalogs (e.g. the old five-role list).
+ */
+export function filterAssignmentRolesToTeam(
+  roles: AssignmentRole[] | undefined,
+  teamRoleNames: readonly string[] | undefined
+): AssignmentRole[] {
+  if (!roles?.length) return [];
+  if (teamRoleNames === undefined) return roles;
+  const allowed = uniqueRoleNames(teamRoleNames);
+  const seen = new Set<string>();
+  const out: AssignmentRole[] = [];
+  for (const role of roles) {
+    if (!teamHasRoleName(allowed, role.name)) continue;
+    const key = normalizeAssignmentRoleName(role.name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const catalogName =
+      allowed.find((n) => normalizeAssignmentRoleName(n) === key) ?? role.name;
+    out.push(catalogName === role.name ? role : { ...role, name: catalogName });
+  }
+  return out;
 }
 
 export function availableAssignmentCatalogRoles(
@@ -581,12 +619,13 @@ export function availableAssignmentCatalogRoles(
   return availableAssignmentRolesForTeam(ASSIGNMENT_ROLE_CATALOG, roles);
 }
 
+/** Unique roles from Команды роль—ФИО rows; empty if the roster has no rows. */
 export function resolveTeamRoleNames(
   team: Pick<Team, "members" | "roles"> | undefined
 ): string[] {
-  const fromRows = uniqueRolesFromMembers(team?.members);
-  if (fromRows.length) return fromRows;
-  return team?.roles ?? [];
+  if (!team) return [];
+  if (team.members != null) return uniqueRolesFromMembers(team.members);
+  return uniqueRoleNames(team.roles);
 }
 
 /**
@@ -648,7 +687,7 @@ export function makeAssignmentRolesForTeam(
   teamRoleNames: readonly string[] | undefined,
   ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): AssignmentRole[] {
-  return [...(teamRoleNames ?? DEFAULT_ASSIGNMENT_ROLE_NAMES)].map((name) =>
+  return uniqueRoleNames(teamRoleNames).map((name) =>
     makeAssignmentRole(name, ranges)
   );
 }
@@ -800,11 +839,12 @@ export function fillAssignmentRoles(
 ): TeamAssignment {
   let roles = a.roles;
   if (roles == null) {
-    const names = teamRoleNames ?? DEFAULT_ASSIGNMENT_ROLE_NAMES;
-    roles = [...names].map((name) => ({
+    roles = uniqueRoleNames(teamRoleNames).map((name) => ({
       id: uid("role"),
       name,
     }));
+  } else if (teamRoleNames !== undefined) {
+    roles = filterAssignmentRolesToTeam(roles, teamRoleNames);
   }
   if (!roles.length) return { ...a, roles };
   const defaultDays = Math.round(sizePlanDays("M", ranges));
@@ -1391,7 +1431,7 @@ export function assignmentPlanDays(
   a: TeamAssignment,
   ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): number {
-  if (a.roles && a.roles.length > 0) {
+  if (Array.isArray(a.roles)) {
     return a.roles.reduce((sum, role) => sum + rolePlanDays(role, ranges), 0);
   }
   const days = parseOptionalDays(a.days);
@@ -2194,14 +2234,15 @@ export function normalizeState(raw: unknown): AppState | null {
   const parsedRanges = normalizeSizeRanges(data.sizeRanges);
   const filledItems = items.map((item) => ({
     ...item,
-    assignments: item.assignments.map((a) =>
-      fillAssignmentRoles(
+    assignments: item.assignments.map((a) => {
+      const team = teams.find((t) => t.id === a.teamId);
+      return fillAssignmentRoles(
         a,
         parsedRanges,
-        teams.find((t) => t.id === a.teamId)?.name ?? "",
-        teams.find((t) => t.id === a.teamId)?.roles
-      )
-    ),
+        team?.name ?? "",
+        team ? resolveTeamRoleNames(team) : undefined
+      );
+    }),
   }));
 
   let customers = parseCatalogNameList(data.customers);

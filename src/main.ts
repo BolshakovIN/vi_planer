@@ -65,6 +65,7 @@ import {
   makeAssignmentRole,
   makeAssignmentRolesForTeam,
   availableAssignmentRolesForTeam,
+  filterAssignmentRolesToTeam,
   resolveTeamRoleNames,
   ASSIGNMENT_ROLE_CATALOG,
   canonicalizeCatalogRole,
@@ -461,6 +462,31 @@ function teamById(id: string) {
 
 function teamAssignmentRoles(team: Team | undefined): AssignmentRole[] {
   return makeAssignmentRolesForTeam(resolveTeamRoleNames(team), szRanges());
+}
+
+function fillTeamDemandRoles(
+  a: TeamAssignment,
+  team: Team | undefined
+): TeamAssignment {
+  return fillAssignmentRoles(
+    a,
+    szRanges(),
+    team?.name ?? "",
+    resolveTeamRoleNames(team)
+  );
+}
+
+/** Drop demand roles that are no longer in this team's Команды rows. */
+function syncDemandRolesToTeam(team: Team) {
+  const names = resolveTeamRoleNames(team);
+  state.items = state.items.map((item) => ({
+    ...item,
+    assignments: item.assignments.map((a) =>
+      a.teamId === team.id
+        ? fillAssignmentRoles(a, szRanges(), team.name, names)
+        : a
+    ),
+  }));
 }
 
 function teamCapacityStripHtml(
@@ -2877,8 +2903,7 @@ function demandStatusClass(status: AssignmentDemandStatus): string {
 
 function newDemandAssignment(teamId: string): TeamAssignment {
   const team = teamById(teamId);
-  const roleNames = resolveTeamRoleNames(team);
-  return fillAssignmentRoles(
+  return fillTeamDemandRoles(
     {
       teamId,
       size: "M",
@@ -2886,9 +2911,7 @@ function newDemandAssignment(teamId: string): TeamAssignment {
       demandStatus: "draft",
       roles: teamAssignmentRoles(team),
     },
-    szRanges(),
-    team?.name ?? "",
-    roleNames
+    team
   );
 }
 
@@ -2934,8 +2957,8 @@ function demandRoleRowHtml(
 
 function demandAssignRowHtml(item: WorkItem, a: TeamAssignment): string {
   const t = teamById(a.teamId);
-  const roles = a.roles ?? [];
   const teamRoles = resolveTeamRoleNames(t);
+  const roles = filterAssignmentRolesToTeam(a.roles, teamRoles);
   const available = availableAssignmentRolesForTeam(teamRoles, roles);
   const roleKey = `${item.id}:${a.teamId}`;
   const pickerOpen = ui.needAddRoleKey === roleKey;
@@ -3063,9 +3086,11 @@ function demandHtml(): string {
       0
     );
     const roleEntries = items.flatMap((it) =>
-      it.assignments.flatMap((a) =>
-        (a.roles?.length ? a.roles : [null]).map((role) => ({ it, a, role }))
-      )
+      it.assignments.flatMap((a) => {
+        const teamRoles = resolveTeamRoleNames(teamById(a.teamId));
+        const roles = filterAssignmentRolesToTeam(a.roles, teamRoles);
+        return (roles.length ? roles : [null]).map((role) => ({ it, a, role }));
+      })
     );
     const pendingCount = roleEntries.filter((x) =>
       x.role
@@ -4798,8 +4823,8 @@ function render() {
         <button class="tab ${ui.tab === "demand" ? "active" : ""}" data-tab="demand">Потребность</button>
         <button class="tab ${ui.tab === "planning" ? "active" : ""}" data-tab="planning">Планирование</button>
         <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Гант</button>
-        <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очередь команд</button>
         ${isDemoVariantVisible("A") ? demoTabButtonHtml("demoA", "Мониторинг") : ""}
+        <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очередь команд</button>
         <button class="tab tab-end ${ui.tab === "capacity" ? "active" : ""}" data-tab="capacity">Команды</button>
         <button class="tab ${ui.tab === "projects" ? "active" : ""}" data-tab="projects">Проекты</button>
         <button class="tab ${ui.tab === "changelog" ? "active" : ""}" data-tab="changelog">Журнал</button>
@@ -4852,9 +4877,7 @@ function readAssignments(): TeamAssignment[] {
     if (existing?.demandStatus) next.demandStatus = existing.demandStatus;
     const team = teamById(teamId);
     next.roles = existing?.roles ?? teamAssignmentRoles(team);
-    assignments.push(
-      fillAssignmentRoles(next, szRanges(), team?.name ?? "", resolveTeamRoleNames(team))
-    );
+    assignments.push(fillTeamDemandRoles(next, team));
   }
   return assignments;
 }
@@ -5036,12 +5059,7 @@ function addDemandRole(itemId: string, teamId: string, roleName: string) {
     workStartDate: assign.workStartDate,
   });
   patchDemandAssignment(itemId, teamId, (a) =>
-    fillAssignmentRoles(
-      { ...a, roles: [...(a.roles ?? []), role] },
-      szRanges(),
-      team?.name ?? "",
-      teamRoles
-    )
+    fillTeamDemandRoles({ ...a, roles: [...(a.roles ?? []), role] }, team)
   );
   ui.needAddRoleKey = null;
   logChange(
@@ -5074,15 +5092,14 @@ function patchDemandRole(
   roleId: string,
   fn: (role: AssignmentRole) => AssignmentRole
 ) {
-  const teamName = teamById(teamId)?.name ?? "";
+  const team = teamById(teamId);
   patchDemandAssignment(itemId, teamId, (a) =>
-    fillAssignmentRoles(
+    fillTeamDemandRoles(
       {
         ...a,
         roles: (a.roles ?? []).map((r) => (r.id === roleId ? fn(r) : r)),
       },
-      szRanges(),
-      teamName
+      team
     )
   );
 }
@@ -5108,7 +5125,7 @@ function removeDemandRole(itemId: string, teamId: string, roleId: string) {
     );
   } else {
     patchDemandAssignment(itemId, teamId, (a) =>
-      fillAssignmentRoles({ ...a, roles: nextRoles }, szRanges(), team?.name ?? "")
+      fillTeamDemandRoles({ ...a, roles: nextRoles }, team)
     );
     logChange(
       `Потребность «${item.title}»: ${team?.name ?? teamId} — удалена роль «${role.name}»`,
@@ -5690,6 +5707,7 @@ function bindPlanBarDrag(root: Element) {
 
 function persist() {
   applyComputedTeamCapacities(state.teams);
+  state = ensureStateAssignmentRoles(state);
   saveState(state);
   render();
 }
@@ -6311,6 +6329,7 @@ function bindUiRest() {
       if (person.role === role) return;
       person.role = role;
       syncTeamRoster(team);
+      syncDemandRolesToTeam(team);
       logChange(`Команда «${team.name}»: роль «${role}»`, "team");
       persist();
     });
@@ -6352,6 +6371,7 @@ function bindUiRest() {
         () => {
           team.members = (team.members ?? []).filter((m) => m.id !== personId);
           syncTeamRoster(team);
+          syncDemandRolesToTeam(team);
           logChange(
             `Команда «${team.name}»: удалена строка ${person.role} — ${person.name}`,
             "team"
@@ -6388,6 +6408,7 @@ function bindUiRest() {
       { id: uid("p"), name, role },
     ];
     syncTeamRoster(team);
+    syncDemandRolesToTeam(team);
     logChange(`Команда «${team.name}»: ${role} — ${name}`, "team");
     persist();
   };
@@ -7060,14 +7081,12 @@ async function exportPortfolioReportPdf() {
 }
 
 async function bootstrap() {
-  state = await loadState();
+  state = ensureStateAssignmentRoles(await loadState());
   ui.hiddenCols = loadHiddenCols();
   ui.scheduleMode = loadScheduleMode();
   saveScheduleMode(ui.scheduleMode);
-  const before = state.items.map((i) => i.manualRank).join(",");
   state = { ...state, items: ensureUniquePriorities(state.items, szRanges()) };
-  const after = state.items.map((i) => i.manualRank).join(",");
-  if (before !== after) saveState(state);
+  saveState(state);
   onSyncStatusChange((status) => {
     const el = document.querySelector<HTMLElement>("#syncStatus");
     if (!el) return;
