@@ -4579,6 +4579,23 @@ body.plan-dragging {
   font-size: 12px;
   color: var(--muted);
   list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.team-people-sum::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 5px solid var(--muted);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
+}
+
+.team-people-details[open] > .team-people-sum::before {
+  transform: rotate(90deg);
 }
 
 .team-people-sum::-webkit-details-marker {

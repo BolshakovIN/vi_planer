@@ -1124,14 +1124,20 @@ function uniqueAssignments(items: WorkItem[]): TeamAssignment[] {
 function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): string {
   const byId = rollupById(rollups);
   const visible = filteredItems(rollups);
-  const groups = orderedProjectGroups(visible, szRanges()).map((g) => ({
-    ...g,
-    title: g.key,
-  }));
+  const order = new Map(visible.map((it, i) => [it.id, i]));
+  const groups = groupByProjectKey(visible).sort((a, b) => {
+    const ia = Math.min(...a.items.map((it) => order.get(it.id) ?? 9999));
+    const ib = Math.min(...b.items.map((it) => order.get(it.id) ?? 9999));
+    return ia - ib;
+  });
+  const prioByKey = new Map(
+    orderedProjectGroups(state.items, szRanges()).map((g, i) => [g.key, i + 1])
+  );
+  const projectCount = Math.max(1, prioByKey.size);
 
   const rows = groups
-    .map((g, gi) => {
-      const prio = gi + 1;
+    .map((g) => {
+      const prio = prioByKey.get(g.key) ?? 1;
       const assigns = uniqueAssignments(g.items);
       const teamItem: WorkItem = { ...g.items[0], assignments: assigns };
       const score = g.items.reduce((s, it) => s + rice(it, szRanges()), 0);
@@ -2497,6 +2503,9 @@ function openTeamColorPicker(
 }
 
 function teamsManageHtml(): string {
+  for (const t of state.teams) {
+    if (t.members == null) t.members = makeSeedTeamMembers(t.id);
+  }
   const rows = state.teams
     .map((t) => {
       const members = t.members ?? [];
@@ -2544,7 +2553,7 @@ function teamsManageHtml(): string {
           >Удалить</button>
         </div>
         <details class="team-people-details"${peopleOpen ? " open" : ""} data-team-people="${t.id}">
-          <summary class="team-people-sum">Люди · ${members.length} ФИО</summary>
+          <summary class="team-people-sum">ФИО · ${members.length}</summary>
           <div class="team-people-list">
             ${peopleRows || `<div class="meta">Нет людей — добавьте ниже</div>`}
             <div class="team-person-add">
@@ -3661,7 +3670,7 @@ function planningHtml(
                         : role.name;
                       return `${planTaskFormHtml(item, a.teamId, role.id)}<div class="plan-row plan-role-row">
                         <div class="plan-cell">
-                          <span class="plan-exec-name">${escapeHtml(leftName)}</span>
+          <span class="plan-exec-name">${escapeHtml(leftName)}${conflict && member ? " △" : ""}</span>
                           <button type="button" class="plan-add-btn" data-plan-task-open="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" title="Поставить на таймлайн">+</button>
                         </div>
                         ${planTrackHtml(bar, weeks)}
@@ -4852,6 +4861,9 @@ function render() {
   closeColPickerOutside();
   closeOverloadPop();
   ensureVisibleTab();
+  for (const t of state.teams) {
+    if (t.members == null) t.members = makeSeedTeamMembers(t.id);
+  }
   const { slices, rollups, load } = scheduleState();
   const overflowByTeam = scheduledOverloadWeeks(load);
   lastScheduledLoad = load;
@@ -5589,6 +5601,10 @@ function bindPlanningTab() {
       render();
     });
   });
+  root.querySelector(".plan-task-form")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
   root.querySelector("[data-plan-form-cancel]")?.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -5599,7 +5615,7 @@ function bindPlanningTab() {
     e.preventDefault();
     e.stopPropagation();
     const form = ui.planTaskForm;
-    if (!form) return;
+    if (!form?.memberId) return;
     const start = addWeeks(state.startDate, form.startWeek);
     const size = nearestSizeFromDays(form.days, szRanges());
     patchDemandRole(form.itemId, form.teamId, form.roleId, (r) => ({
@@ -6034,7 +6050,9 @@ function bindUiRest() {
         `Сменить статус проекта «${escapeHtml(title)}» на «<strong>${escapeHtml(statusLabel(next))}</strong>»?`,
         () => {
           state.items = state.items.map((it) =>
-            demandProjectKey(it) === key ? { ...it, status: next } : it
+            it.type === "project" && demandProjectKey(it) === key
+              ? { ...it, status: next }
+              : it
           );
           logChange(
             `Статус проекта «${title}»: ${was ? statusLabel(was as ItemStatus) : "несколько"} → ${statusLabel(next)}`,
