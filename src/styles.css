@@ -2943,7 +2943,7 @@ a.req-dl-btn {
 
 .capacity-row {
   display: grid;
-  grid-template-columns: 28px minmax(140px, 1fr) minmax(150px, 200px) auto;
+  grid-template-columns: 28px minmax(140px, 1fr) minmax(180px, 1.1fr) auto;
   gap: 10px;
   align-items: end;
   font-size: 13px;
@@ -2961,6 +2961,32 @@ a.req-dl-btn {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+}
+
+.team-capacity-fact {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.team-role-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.gantt-page .need-page-head {
+  align-items: flex-end;
+}
+
+.gantt-stats {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.need-project-chip .prio-mini,
+.need-project-title .prio-mini,
+.plan-project-title .prio-mini {
+  margin-right: 4px;
 }
 
 .team-capacity-slider {
@@ -4142,6 +4168,18 @@ body.pdf-capturing .table-scroll-top {
   font-weight: 500;
 }
 
+.need-team-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.need-team-head .need-add-menu {
+  right: 0;
+  left: auto;
+}
+
 .need-team-x,
 .need-role-del {
   flex-shrink: 0;
@@ -4426,7 +4464,6 @@ body.pdf-capturing .table-scroll-top {
   white-space: nowrap;
 }
 
-.plan-x,
 .plan-add-btn {
   flex-shrink: 0;
   width: 18px;
@@ -4441,7 +4478,6 @@ body.pdf-capturing .table-scroll-top {
   cursor: pointer;
 }
 
-.plan-x:hover,
 .plan-add-btn:hover {
   background: var(--row-hover);
   color: var(--ink);

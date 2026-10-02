@@ -280,6 +280,11 @@ export interface Team {
   color: string;
   /** People on the team (Команды tab / Планирование исполнители). */
   members?: TeamMember[];
+  /**
+   * Role names this team can use on Потребность (from ASSIGNMENT_ROLE_CATALOG).
+   * Empty array = none configured. Missing → seed defaults on load.
+   */
+  roles?: string[];
 }
 
 const FIO_LAST_M = [
@@ -416,13 +421,19 @@ export function parseTeamMembers(raw: unknown, teamId: string): TeamMember[] {
   return out;
 }
 
-/** Default Потребность roles seeded on each team assignment. */
-export const DEFAULT_ASSIGNMENT_ROLE_NAMES = [
-  "бизнес-аналитик",
+/** Catalog of Потребность roles the user can add to a team. */
+export const ASSIGNMENT_ROLE_CATALOG = [
+  "бизнес аналитик",
   "архитектура",
   "аналитика",
   "разработка",
   "тестирование",
+] as const;
+
+/** Default Потребность roles seeded on each new team assignment. */
+export const DEFAULT_ASSIGNMENT_ROLE_NAMES = [
+  "аналитика",
+  "разработка",
 ] as const;
 
 /** One role row nested under a team assignment (Потребность). */
@@ -437,18 +448,142 @@ export interface AssignmentRole {
   assigneeId?: string;
 }
 
-export function makeDefaultAssignmentRoles(
-  ranges: SizeRanges = DEFAULT_SIZE_RANGES
-): AssignmentRole[] {
+export function normalizeAssignmentRoleName(name: string): string {
+  return name.trim().toLowerCase().replace(/-/g, " ").replace(/\s+/g, " ");
+}
+
+export function assignmentHasRoleName(
+  roles: AssignmentRole[] | undefined,
+  name: string
+): boolean {
+  const key = normalizeAssignmentRoleName(name);
+  return (roles ?? []).some(
+    (r) => normalizeAssignmentRoleName(r.name) === key
+  );
+}
+
+export function canonicalizeCatalogRole(name: string): string | null {
+  const key = normalizeAssignmentRoleName(name);
+  if (!key) return null;
+  return (
+    ASSIGNMENT_ROLE_CATALOG.find(
+      (n) => normalizeAssignmentRoleName(n) === key
+    ) ?? null
+  );
+}
+
+export function teamHasRoleName(
+  teamRoles: readonly string[] | undefined,
+  name: string
+): boolean {
+  const key = normalizeAssignmentRoleName(name);
+  return (teamRoles ?? []).some(
+    (r) => normalizeAssignmentRoleName(r) === key
+  );
+}
+
+/** Remaining catalog roles not yet on the team (Команды settings). */
+export function availableTeamSettingsRoles(
+  teamRoles: readonly string[] | undefined
+): string[] {
+  return ASSIGNMENT_ROLE_CATALOG.filter(
+    (name) => !teamHasRoleName(teamRoles, name)
+  );
+}
+
+/** Remaining team-configured roles not yet on a demand assignment. */
+export function availableAssignmentRolesForTeam(
+  teamRoles: readonly string[] | undefined,
+  used: AssignmentRole[] | undefined
+): string[] {
+  return (teamRoles ?? []).filter((name) => !assignmentHasRoleName(used, name));
+}
+
+export function availableAssignmentCatalogRoles(
+  roles: AssignmentRole[] | undefined
+): string[] {
+  return availableAssignmentRolesForTeam(ASSIGNMENT_ROLE_CATALOG, roles);
+}
+
+export function resolveTeamRoleNames(
+  team: Pick<Team, "roles"> | undefined
+): string[] {
+  if (team?.roles != null) return team.roles;
+  return [...DEFAULT_ASSIGNMENT_ROLE_NAMES];
+}
+
+/**
+ * Ёмкость is a fact: 1 чел·нед per person per week.
+ * Empty roster falls back to configured role seats.
+ */
+export function computedTeamCapacityPw(
+  team: Pick<Team, "members" | "roles">
+): number {
+  const people = team.members?.length ?? 0;
+  if (people > 0) return people;
+  return resolveTeamRoleNames(team).length;
+}
+
+export function applyComputedTeamCapacities<T extends Team>(teams: T[]): T[] {
+  for (const team of teams) {
+    team.capacityPw = computedTeamCapacityPw(team);
+  }
+  return teams;
+}
+
+export function parseTeamRoles(raw: unknown): string[] {
+  if (raw == null || !Array.isArray(raw)) {
+    return [...DEFAULT_ASSIGNMENT_ROLE_NAMES];
+  }
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const row of raw) {
+    let name = "";
+    if (typeof row === "string") name = row;
+    else if (row && typeof row === "object") {
+      const rec = row as Record<string, unknown>;
+      name = String(rec.name ?? rec.title ?? rec.role ?? "");
+    }
+    const canonical = canonicalizeCatalogRole(name);
+    if (!canonical) continue;
+    const key = normalizeAssignmentRoleName(canonical);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(canonical);
+  }
+  return out;
+}
+
+export function makeAssignmentRole(
+  name: string,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES,
+  extras: Partial<Pick<AssignmentRole, "workStartDate" | "assigneeId">> = {}
+): AssignmentRole {
   const size: TShirtSize = "M";
-  const days = Math.round(sizePlanDays(size, ranges));
-  return DEFAULT_ASSIGNMENT_ROLE_NAMES.map((name) => ({
+  return {
     id: uid("role"),
     name,
     size,
-    days,
+    days: Math.round(sizePlanDays(size, ranges)),
     demandStatus: "draft" as const,
-  }));
+    ...(extras.workStartDate ? { workStartDate: extras.workStartDate } : {}),
+    ...(extras.assigneeId ? { assigneeId: extras.assigneeId } : {}),
+  };
+}
+
+export function makeAssignmentRolesForTeam(
+  teamRoleNames: readonly string[] | undefined,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): AssignmentRole[] {
+  return [...(teamRoleNames ?? DEFAULT_ASSIGNMENT_ROLE_NAMES)].map((name) =>
+    makeAssignmentRole(name, ranges)
+  );
+}
+
+export function makeDefaultAssignmentRoles(
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): AssignmentRole[] {
+  return makeAssignmentRolesForTeam(DEFAULT_ASSIGNMENT_ROLE_NAMES, ranges);
 }
 
 function parseAssignmentRoleRow(row: unknown): AssignmentRole | null {
@@ -587,11 +722,13 @@ export function syncAssignmentFromRoles(
 export function fillAssignmentRoles(
   a: TeamAssignment,
   ranges: SizeRanges = DEFAULT_SIZE_RANGES,
-  teamName = ""
+  teamName = "",
+  teamRoleNames?: readonly string[]
 ): TeamAssignment {
   let roles = a.roles;
   if (roles == null) {
-    roles = DEFAULT_ASSIGNMENT_ROLE_NAMES.map((name) => ({
+    const names = teamRoleNames ?? DEFAULT_ASSIGNMENT_ROLE_NAMES;
+    roles = [...names].map((name) => ({
       id: uid("role"),
       name,
     }));
@@ -700,10 +837,16 @@ export function ensureItemAssignmentRoles(
   teams: Team[] = []
 ): WorkItem[] {
   const names = new Map(teams.map((t) => [t.id, t.name]));
+  const roleNames = new Map(teams.map((t) => [t.id, resolveTeamRoleNames(t)]));
   return items.map((item) => ({
     ...item,
     assignments: item.assignments.map((a) =>
-      fillAssignmentRoles(a, DEFAULT_SIZE_RANGES, names.get(a.teamId) ?? "")
+      fillAssignmentRoles(
+        a,
+        DEFAULT_SIZE_RANGES,
+        names.get(a.teamId) ?? "",
+        roleNames.get(a.teamId)
+      )
     ),
   }));
 }
@@ -711,10 +854,13 @@ export function ensureItemAssignmentRoles(
 export function ensureStateAssignmentRoles<T extends { items: WorkItem[]; teams?: Team[] }>(
   state: T
 ): T {
-  const teams = (state.teams ?? []).map((t) => ({
-    ...t,
-    members: t.members != null ? t.members : makeSeedTeamMembers(t.id),
-  }));
+  const teams = applyComputedTeamCapacities(
+    (state.teams ?? []).map((t) => ({
+      ...t,
+      members: t.members != null ? t.members : makeSeedTeamMembers(t.id),
+      roles: t.roles != null ? t.roles : [...DEFAULT_ASSIGNMENT_ROLE_NAMES],
+    }))
+  );
   return {
     ...state,
     ...(state.teams ? { teams } : {}),
@@ -1863,26 +2009,16 @@ export function normalizeState(raw: unknown): AppState | null {
   const planStart = snapToMonday(String(data.startDate ?? mondayOf()));
   const teams: Team[] = (data.teams as unknown[]).map((row) => {
     const t = row as Record<string, unknown>;
-    const legacyCap = Number(t.capacityPw);
-    const fromPw = Number.isFinite(legacyCap) && legacyCap > 0 ? legacyCap : null;
-    const fromShirt =
-      t.capacity != null
-        ? ({
-            XS: 1.5,
-            S: 2,
-            M: 3.5,
-            L: 5,
-            XL: 7,
-            XXL: 10,
-          } as Record<TShirtSize, number>)[parseSize(t.capacity)]
-        : null;
     const teamId = String(t.id ?? uid("team"));
+    const members = parseTeamMembers(t.members, teamId);
+    const roles = parseTeamRoles(t.roles);
     return {
       id: teamId,
       name: String(t.name ?? "Команда"),
       color: String(t.color ?? "#737373"),
-      capacityPw: fromPw ?? fromShirt ?? 3,
-      members: parseTeamMembers(t.members, teamId),
+      members,
+      roles,
+      capacityPw: computedTeamCapacityPw({ members, roles }),
     };
   });
   const teamCap = new Map(teams.map((t) => [t.id, t.capacityPw]));
@@ -1929,7 +2065,9 @@ export function normalizeState(raw: unknown): AppState | null {
           teamId: r.teamId,
           size: pwToSize(Number(r.estimatePw) || 1, teamCap.get(r.teamId) ?? 3),
           workStartDate: planStart,
-          roles: makeDefaultAssignmentRoles(),
+          roles: makeAssignmentRolesForTeam(
+            teams.find((t) => t.id === r.teamId)?.roles
+          ),
         },
       ];
     }
@@ -1939,7 +2077,7 @@ export function normalizeState(raw: unknown): AppState | null {
           teamId: teams[0].id,
           size: "M",
           workStartDate: planStart,
-          roles: makeDefaultAssignmentRoles(),
+          roles: makeAssignmentRolesForTeam(teams[0].roles),
         },
       ];
     }
@@ -1986,7 +2124,8 @@ export function normalizeState(raw: unknown): AppState | null {
       fillAssignmentRoles(
         a,
         parsedRanges,
-        teams.find((t) => t.id === a.teamId)?.name ?? ""
+        teams.find((t) => t.id === a.teamId)?.name ?? "",
+        teams.find((t) => t.id === a.teamId)?.roles
       )
     ),
   }));

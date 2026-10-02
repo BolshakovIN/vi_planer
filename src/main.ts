@@ -62,7 +62,17 @@ import {
   ASSIGNMENT_DEMAND_STATUSES,
   ASSIGNMENT_DEMAND_LABELS,
   resolveAssignmentDemandStatus,
-  makeDefaultAssignmentRoles,
+  makeAssignmentRole,
+  makeAssignmentRolesForTeam,
+  availableAssignmentRolesForTeam,
+  availableTeamSettingsRoles,
+  resolveTeamRoleNames,
+  DEFAULT_ASSIGNMENT_ROLE_NAMES,
+  canonicalizeCatalogRole,
+  teamHasRoleName,
+  assignmentHasRoleName,
+  computedTeamCapacityPw,
+  applyComputedTeamCapacities,
   AssignmentRole,
   fillAssignmentRoles,
   rolePlanDays,
@@ -118,7 +128,7 @@ const TAB_LABELS: Record<Tab, string> = {
   portfolio: "Реестр",
   demand: "Потребность",
   planning: "Планирование",
-  timeline: "Gantt/Сроки",
+  timeline: "Гант",
   queuesTest: "Очередь команд",
   demoA: "Мониторинг",
   demoB: "Мониторинг",
@@ -228,6 +238,8 @@ interface UiState {
   needProjectKey: string | null;
   /** Functionality whose «+ Добавить команду» picker is open */
   needAddItemId: string | null;
+  /** `${itemId}:${teamId}` whose «+ Роль» picker is open */
+  needAddRoleKey: string | null;
   /** `${itemId}:${teamId}:${roleId}` while days input is shown */
   needDaysEdit: string | null;
   needCollapsedProjects: Record<string, true>;
@@ -242,6 +254,12 @@ interface UiState {
   planCollapsedItems: Record<string, true>;
   /** Expanded people lists on Команды */
   teamPeopleOpen: Record<string, true>;
+  /** Role lists on Команды; missing/true = open so defaults are visible */
+  teamRolesOpen: Record<string, boolean>;
+  /** Team id whose «+ Роль» picker is open on Команды */
+  teamAddRoleId: string | null;
+  ganttCollapsedProjects: Record<string, true>;
+  ganttCollapsedItems: Record<string, true>;
   /** Inline «Новая задача на таймлайн» */
   planTaskForm: {
     itemId: string;
@@ -282,12 +300,13 @@ const ui: UiState = {
   editingId: null,
   creating: false,
   ganttWeeks: 16,
-  scheduleMode: "maxUtilization",
+  scheduleMode: "teamQueue",
   hiddenCols: [],
   colPickerOpen: false,
   needItemId: null,
   needProjectKey: null,
   needAddItemId: null,
+  needAddRoleKey: null,
   needDaysEdit: null,
   needCollapsedProjects: {},
   needCollapsedItems: {},
@@ -297,6 +316,10 @@ const ui: UiState = {
   planCollapsedProjects: {},
   planCollapsedItems: {},
   teamPeopleOpen: {},
+  teamRolesOpen: {},
+  teamAddRoleId: null,
+  ganttCollapsedProjects: {},
+  ganttCollapsedItems: {},
   planTaskForm: null,
 };
 
@@ -446,6 +469,10 @@ function szRanges(): SizeRanges {
 
 function teamById(id: string) {
   return state.teams.find((t) => t.id === id);
+}
+
+function teamAssignmentRoles(team: Team | undefined): AssignmentRole[] {
+  return makeAssignmentRolesForTeam(resolveTeamRoleNames(team), szRanges());
 }
 
 function teamCapacityStripHtml(
@@ -763,7 +790,8 @@ function loadScheduleMode(): ScheduleMode {
       if (legacy === "1") mode = "teamQueue";
       else if (legacy === "0") mode = "manual";
     }
-    if (mode == null) mode = "maxUtilization";
+    if (mode == null) mode = "teamQueue";
+    if (mode === "maxUtilization") mode = "teamQueue";
 
     // Former Gantt checkbox: off forced «Как задано» regardless of Settings mode.
     const enabledRaw = localStorage.getItem(SCHEDULE_MODE_ENABLED_KEY);
@@ -772,7 +800,7 @@ function loadScheduleMode(): ScheduleMode {
   } catch {
     /* ignore */
   }
-  return "maxUtilization";
+  return "teamQueue";
 }
 
 function saveScheduleMode(mode: ScheduleMode) {
@@ -809,7 +837,8 @@ function setScheduleMode(mode: ScheduleMode) {
 
 /** Effective mode for scheduling (Gantt / Очередь / ETA). */
 function activeScheduleMode(): ScheduleMode {
-  return normalizeScheduleMode(ui.scheduleMode);
+  const mode = normalizeScheduleMode(ui.scheduleMode);
+  return mode === "maxUtilization" ? "teamQueue" : mode;
 }
 
 function scheduleState(stateOverride?: AppState) {
@@ -818,30 +847,6 @@ function scheduleState(stateOverride?: AppState) {
   });
 }
 
-function scheduleTogglesHtml(): string {
-  const mode = activeScheduleMode();
-  const queueActive = mode === "teamQueue";
-  const maxActive = mode === "maxUtilization";
-  const hint = SCHEDULE_MODE_META[mode].hint;
-  return `
-    <div class="schedule-toggles">
-      <div class="schedule-mode-seg" role="group" aria-label="Режим расписания">
-        <button
-          type="button"
-          class="schedule-mode-btn${queueActive ? " is-active" : ""}"
-          data-schedule-mode="teamQueue"
-          aria-pressed="${queueActive}"
-        >Последовательная утилизация ресурса</button>
-        <button
-          type="button"
-          class="schedule-mode-btn${maxActive ? " is-active" : ""}"
-          data-schedule-mode="maxUtilization"
-          aria-pressed="${maxActive}"
-        >Максимальная утилизация ресурса</button>
-      </div>
-      <p class="meta schedule-mode-hint">${hint} Повторный клик — «Как задано».</p>
-    </div>`;
-}
 
 function isColVisible(col: PortfolioCol): boolean {
   if (col === "priority" || col === "title") return true;
@@ -1108,6 +1113,23 @@ function groupByProjectKey(
   }));
 }
 
+function projectPrioMap(): Map<string, number> {
+  return new Map(
+    orderedProjectGroups(state.items, szRanges()).map((g, i) => [g.key, i + 1])
+  );
+}
+
+function prioBadgeHtml(prio: number | string | undefined): string {
+  return `<span class="prio-mini" title="Приоритет проекта">${prio ?? "—"}</span>`;
+}
+
+function teamCapacityFactLabel(team: Team): string {
+  const people = team.members?.length ?? 0;
+  const roles = resolveTeamRoleNames(team).length;
+  const cap = computedTeamCapacityPw(team);
+  return `${cap} чел·нед/нед · ${people} чел. · ${roles} рол.`;
+}
+
 function uniqueAssignments(items: WorkItem[]): TeamAssignment[] {
   const seen = new Set<string>();
   const out: TeamAssignment[] = [];
@@ -1274,6 +1296,7 @@ function queuesTestHtml(
   const horizon = 12;
   const mode = activeScheduleMode();
   const packing = isCapacityScheduleMode(mode);
+  const prioMap = projectPrioMap();
   const cards = state.teams
     .map((team) => {
       const queue = slices
@@ -1293,7 +1316,8 @@ function queuesTestHtml(
       const items =
         queue
           .map((s, idx) => {
-            const prio = s.item.manualRank ?? "—";
+            const prio =
+              prioMap.get(demandProjectKey(s.item)) ?? s.item.manualRank ?? "—";
             const blockedBy =
               idx > 0
                 ? queue[idx - 1]
@@ -1304,9 +1328,7 @@ function queuesTestHtml(
               takeReason =
                 mode === "teamQueue" && blockedBy
                   ? `ждёт очередь: после #${blockedBy.item.manualRank ?? "?"} «${blockedBy.item.title}»`
-                  : mode === "maxUtilization"
-                    ? "сдвиг: ждёт общий старт всех команд функциональности (ёмкость)"
-                    : "сдвиг из‑за загрузки очереди";
+                  : "сдвиг из‑за загрузки очереди";
               takeClass = "take-queue";
             } else if (s.startDate > planStart) {
               takeReason = packing
@@ -1356,7 +1378,7 @@ function queuesTestHtml(
           <div class="team-card-head">
             <div>
               <h3><span class="team-dot" style="background:${team.color}"></span>${escapeHtml(team.name)}</h3>
-              <div class="meta">Ёмкость ${team.capacityPw} чел·нед/нед · спрос ${demand.toFixed(1)} · ~${weeksToClear.toFixed(1)} нед. до очистки</div>
+              <div class="meta">Ёмкость ${escapeHtml(teamCapacityFactLabel(team))} · спрос ${demand.toFixed(1)} · ~${weeksToClear.toFixed(1)} нед. до очистки</div>
               <div class="take-free">Очередь закрывается / слот после всего: <strong>${formatDate(freeFrom)}</strong></div>
             </div>
             <div class="mono" style="font-weight:600;text-align:right;font-size:12px;color:var(--muted)">
@@ -1384,9 +1406,7 @@ function queuesTestHtml(
       ${
         mode === "teamQueue"
           ? "Режим «Последовательная утилизация ресурса»: «Может взять с …» — после FS-предшественника и не раньше планового старта."
-          : mode === "maxUtilization"
-            ? "Режим «Максимальная утилизация ресурса»: все команды одной функциональности стартуют в одну неделю (параллельно ≥ плановый старт); приоритет портфеля при распределении ёмкости."
-            : "Режим «Как задано»: даты = заданные старты; параллельная работа может перегрузить ёмкость."
+          : "Режим «Как задано»: даты = заданные старты; параллельная работа может перегрузить ёмкость."
       }
       Полоска — окно работы в ближайшие 12 недель.
     </div>
@@ -1394,9 +1414,6 @@ function queuesTestHtml(
       <div class="panel-sticky">
         <div class="panel-header">
           <h2>Очередь команд — когда команда может взять задачу</h2>
-          <div class="schedule-toolbar">
-            ${scheduleTogglesHtml()}
-          </div>
         </div>
       </div>
       ${cards}
@@ -2011,341 +2028,6 @@ ${sizeLine}${autoNote}`;
   });
 }
 
-function timelineHtml(
-  rollups: ItemSchedule[],
-  slices: ScheduledSlice[],
-  load: Record<string, TeamLoadWeek[]>,
-  overflowByTeam: Record<string, Set<number>>
-): string {
-  const needed = Math.max(4, ...rollups.map((s) => s.endWeek + 2), 4);
-  const weeks = Math.max(4, Math.min(52, Math.round(ui.ganttWeeks) || 16));
-  ui.ganttWeeks = weeks;
-  const ordered = sortByPriority(state.items.filter((i) => i.status !== "done"));
-  const visible = ordered
-    .map((item) => {
-      const r = rollups.find((x) => x.item.id === item.id);
-      return r ? { item, r } : null;
-    })
-    .filter((x): x is { item: (typeof ordered)[number]; r: ItemSchedule } => !!x);
-  const rowIndex = new Map(visible.map(({ item }, i) => [item.id, i]));
-  const n = Math.max(1, visible.length);
-  const weekPct = 100 / weeks;
-  const trackBg = `repeating-linear-gradient(90deg, #f5f5f5 0, #f5f5f5 calc(${weekPct}% - 1px), #e0e0e0 calc(${weekPct}% - 1px), #e0e0e0 ${weekPct}%)`;
-
-  const BAR_H = 20;
-  const BAR_GAP = 3;
-  const TRACK_PAD = 6;
-  /** Must match `.gantt-rows { gap }` — SVG Y must include flex gaps */
-  const ROW_GAP = 8;
-
-  /** Pack overlapping team bars into vertical lanes within one item row */
-  const packBarLanes = (itemSlices: ScheduledSlice[]) => {
-    const sorted = [...itemSlices].sort(
-      (a, b) => a.startWeek - b.startWeek || a.endWeek - b.endWeek
-    );
-    const laneEnds: number[] = [];
-    return sorted.map((slice) => {
-      let lane = laneEnds.findIndex((end) => end < slice.startWeek);
-      if (lane < 0) {
-        lane = laneEnds.length;
-        laneEnds.push(slice.endWeek);
-      } else {
-        laneEnds[lane] = slice.endWeek;
-      }
-      return { slice, lane };
-    });
-  };
-
-  const packedByItem = new Map(
-    visible.map(({ item, r }) => [item.id, packBarLanes(r.slices)] as const)
-  );
-  /** Label: prio + 2 meta lines + gaps + pad/border ≈ 68px */
-  const LABEL_MIN_H = 68;
-  const trackHForLanes = (lanes: number) =>
-    TRACK_PAD * 2 + lanes * BAR_H + Math.max(0, lanes - 1) * BAR_GAP;
-  // Per-row height from concurrent stacked team lanes (not global max)
-  const rowMetrics = visible.map(({ item }) => {
-    const packed = packedByItem.get(item.id) ?? [];
-    const lanes = packed.length
-      ? Math.max(...packed.map((p) => p.lane)) + 1
-      : 1;
-    const trackH = trackHForLanes(lanes);
-    const rowH = Math.max(LABEL_MIN_H, trackH);
-    return { lanes, trackH, rowH, trackOffsetY: (rowH - trackH) / 2 };
-  });
-  const rowTopPx: number[] = [];
-  {
-    let y = 0;
-    for (let i = 0; i < n; i++) {
-      rowTopPx.push(y);
-      y += rowMetrics[i].rowH + (i < n - 1 ? ROW_GAP : 0);
-    }
-  }
-  const totalRowsPx =
-    rowMetrics.reduce((sum, m) => sum + m.rowH, 0) +
-    Math.max(0, n - 1) * ROW_GAP;
-
-  /** Bar vertical center in SVG viewBox Y (0..n), matching DOM incl. row gaps + lane */
-  const sliceCenterY = (slice: ScheduledSlice): number => {
-    const rowIdx = rowIndex.get(slice.item.id) ?? 0;
-    const packed = packedByItem.get(slice.item.id) ?? [];
-    const found = packed.find(
-      (p) =>
-        p.slice.teamId === slice.teamId &&
-        p.slice.startWeek === slice.startWeek &&
-        p.slice.endWeek === slice.endWeek
-    );
-    const lane = found?.lane ?? 0;
-    const { trackOffsetY } = rowMetrics[rowIdx] ?? {
-      trackOffsetY: 0,
-    };
-    const barCenterInTrack =
-      TRACK_PAD + lane * (BAR_H + BAR_GAP) + BAR_H / 2;
-    const yPx =
-      (rowTopPx[rowIdx] ?? 0) + trackOffsetY + barCenterInTrack;
-    return (yPx / Math.max(1, totalRowsPx)) * n;
-  };
-
-  // Same-team queue deps: FS arrows only for teamQueue mode.
-  // Endpoints are approximate here; layoutGanttDepArrows() snaps to real bar rects.
-  const depPaths: string[] = [];
-  const schedMode = activeScheduleMode();
-  if (schedMode === "teamQueue") {
-    state.teams.forEach((team) => {
-      const queue = slices
-        .filter((s) => s.teamId === team.id)
-        .sort((a, b) => a.effectiveRank - b.effectiveRank);
-      if (queue.length < 2) return;
-
-      const linkCount = queue.length - 1;
-      for (let i = 1; i < queue.length; i++) {
-        const prev = queue[i - 1];
-        const curr = queue[i];
-        if (!rowIndex.has(prev.item.id) || !rowIndex.has(curr.item.id)) continue;
-        // Inclusive week bars: right edge at endWeek+1, left at startWeek
-        const x1 = prev.endWeek + 1;
-        const x2 = curr.startWeek;
-        const y1 = sliceCenterY(prev);
-        const y2 = sliceCenterY(curr);
-        // Centered fan so consecutive queue links don't merge into one corridor
-        const routeBias =
-          linkCount <= 1 ? 0 : i - 1 - (linkCount - 1) / 2;
-        const d = ganttDepPathD(x1, y1, x2, y2, routeBias, weeks);
-
-        depPaths.push(
-          `<path class="gantt-dep-link" data-from-item="${escapeAttr(prev.item.id)}" data-from-team="${escapeAttr(prev.teamId)}" data-to-item="${escapeAttr(curr.item.id)}" data-to-team="${escapeAttr(curr.teamId)}" data-bias="${routeBias}" d="${d}" fill="none" stroke="${team.color}" stroke-width="0.0425" stroke-opacity="0.78" stroke-linecap="round" stroke-linejoin="round" />`
-        );
-      }
-    });
-  }
-
-  const rowsHtml = visible
-    .map(({ item, r }, rowIdx) => {
-      const scheduleNote =
-        schedMode === "teamQueue"
-          ? (() => {
-              const preds = r.slices
-                .map((s) => {
-                  const teamQueue = slices
-                    .filter((x) => x.teamId === s.teamId)
-                    .sort((a, b) => a.effectiveRank - b.effectiveRank);
-                  const idx = teamQueue.findIndex((x) => x.item.id === item.id);
-                  if (idx <= 0) return null;
-                  const pred = teamQueue[idx - 1];
-                  const t = teamById(s.teamId);
-                  return `#${pred.item.manualRank} (${t?.name ?? s.teamId})`;
-                })
-                .filter(Boolean);
-              const uniqPreds = [...new Set(preds)];
-              return uniqPreds.length
-                ? `после ${uniqPreds.join(", ")}`
-                : "старт очереди";
-            })()
-          : schedMode === "maxUtilization"
-            ? "макс. утилизация · дата завершения = max команд"
-            : "как задано · без сдвига очереди";
-      const depHint =
-        schedMode === "teamQueue"
-          ? scheduleNote.startsWith("после")
-            ? `<div class="meta gantt-dep-meta" title="Очередь той же команды по приоритету (Finish-to-Start)">${escapeHtml(scheduleNote)}</div>`
-            : `<div class="meta gantt-dep-meta">${escapeHtml(scheduleNote)}</div>`
-          : schedMode === "maxUtilization"
-            ? `<div class="meta gantt-dep-meta" title="Параллельный старт команд функциональности по приоритету">${escapeHtml(scheduleNote)}</div>`
-            : `<div class="meta gantt-dep-meta">${escapeHtml(scheduleNote)}</div>`;
-
-      const packed = packedByItem.get(item.id) ?? [];
-      const { trackH, rowH } = rowMetrics[rowIdx];
-      const containerName = productProjectName(item.backlog);
-      const etaMetaLine = containerName
-        ? `${escapeHtml(containerName)} · Дата завершения ${formatDate(r.endDate)}`
-        : `Дата завершения ${formatDate(r.endDate)}`;
-      const ownerRaw = item.owner.trim();
-      const ownerTip =
-        ownerRaw && ownerRaw !== "—" ? ownerRaw : "";
-      const assigneeTip = item.assignee.trim();
-      const bars = packed
-        .map(({ slice: s, lane: barLane }) => {
-          const team = teamById(s.teamId);
-          const left = (s.startWeek / weeks) * 100;
-          const width =
-            (Math.max(1, s.endWeek - s.startWeek + 1) / weeks) * 100;
-          const isBot = s.teamId === r.bottleneckTeamId;
-          const top = TRACK_PAD + barLane * (BAR_H + BAR_GAP);
-          const teamOverflow = overflowByTeam[s.teamId] ?? new Set();
-          const barOverload = Array.from(
-            { length: Math.max(1, s.endWeek - s.startWeek + 1) },
-            (_, i) => s.startWeek + i
-          ).some((w) => teamOverflow.has(w));
-          const overloadCls = barOverload ? " gantt-bar-overload" : "";
-          const title = `${team?.name ?? ""}: ${formatDate(s.startDate)} → ${formatDate(s.endDate)}${barOverload ? " · перегруз ёмкости" : ""} · тяните полоску или края`;
-          return `<div class="gantt-bar ${isBot ? "gantt-bot" : ""}${overloadCls}" data-item-id="${escapeAttr(item.id)}" data-team-id="${escapeAttr(s.teamId)}" data-start-week="${s.startWeek}" data-end-week="${s.endWeek}" style="left:${left}%;width:${Math.max(width, 2.5)}%;top:${top}px;height:${BAR_H}px;background:${team?.color ?? "#64748b"}" title="${escapeAttr(title)}"><span class="gantt-bar-handle gantt-bar-handle-l" data-gantt-handle="left" title="Изменить начало"></span><span class="gantt-bar-label">${escapeHtml(team?.name ?? "")}</span><span class="gantt-bar-handle gantt-bar-handle-r" data-gantt-handle="right" title="Изменить конец"></span></div>`;
-        })
-        .join("");
-
-      return `
-      <div class="gantt-row" style="--gantt-row-h:${rowH}px;--gantt-track-h:${trackH}px">
-        <div
-          class="gantt-label"
-          data-gantt-label-tip
-          data-tip-title="${escapeAttr(item.title)}"
-          data-tip-product="${escapeAttr(containerName)}"
-          data-tip-eta="${escapeAttr(formatDate(r.endDate))}"
-          data-tip-owner="${escapeAttr(ownerTip)}"
-          data-tip-assignee="${escapeAttr(assigneeTip)}"
-          data-tip-note="${escapeAttr(scheduleNote)}"
-        >
-          <div class="name"><span class="prio-mini">${item.manualRank ?? "—"}</span> ${escapeHtml(item.title)}</div>
-          <div class="meta">${etaMetaLine}</div>
-          ${depHint}
-        </div>
-        <div class="gantt-track gantt-track-multi" style="background:${trackBg}">${bars}</div>
-      </div>`;
-    })
-    .join("");
-
-  const tickStep =
-    weeks <= 12 ? 1 : weeks <= 24 ? 2 : weeks <= 36 ? 3 : 4;
-  const anyOverflowWeek = (w: number) =>
-    state.teams.some((t) => overflowByTeam[t.id]?.has(w));
-
-  const axisTicks = Array.from({ length: weeks }, (_, w) => {
-    const show = w % tickStep === 0 || w === weeks - 1;
-    const isOverflow = anyOverflowWeek(w);
-    const overflowCls = isOverflow ? " gantt-axis-tick-overflow" : "";
-    const overloadAttrs = isOverflow
-      ? ` data-overload-week="${w}" role="button" tabindex="0" aria-label="Перегруз Н${w + 1}: расшифровка"`
-      : "";
-    if (!show) {
-      return `<div class="gantt-axis-tick gantt-axis-tick-empty${overflowCls}" style="width:${weekPct}%"${overloadAttrs}></div>`;
-    }
-    const monday = addWeeks(state.startDate, w);
-    const [, m, d] = monday.split("-");
-    return `<div class="gantt-axis-tick${overflowCls}" style="width:${weekPct}%"${overloadAttrs}>
-      <span class="gantt-axis-w">Н${w + 1}</span>
-      <span class="gantt-axis-d">${d}.${m}</span>
-    </div>`;
-  }).join("");
-
-  const capacityRows = state.teams
-    .map((team) => {
-      const teamOverflow = overflowByTeam[team.id] ?? new Set();
-      const hasOverflow = [...teamOverflow].some((w) => w < weeks);
-      return `
-        <div class="gantt-cap-row">
-          <div class="gantt-cap-label">
-            <span class="team-dot" style="background:${team.color}"></span>
-            ${escapeHtml(team.name)}
-            ${hasOverflow ? '<span class="cap-overflow-badge">перегруз</span>' : ""}
-          </div>
-          ${teamCapacityStripHtml(team, load[team.id] ?? [], teamOverflow, weeks)}
-        </div>`;
-    })
-    .join("");
-
-  return `
-    <div class="panel panel-sticky-host">
-      <div class="panel-sticky">
-        <div class="panel-header">
-          <h2>Сроки и зависимости по приоритету</h2>
-          <p class="meta gantt-dep-legend" style="margin:0;flex-basis:100%">
-            ${
-              schedMode === "teamQueue"
-                ? "Стрелки: очередь одной команды (цвет = команда), от конца полоски к началу следующей — не кросс-командные зависимости функциональности."
-                : schedMode === "maxUtilization"
-                  ? "Максимальная утилизация ресурса: полоски одной функциональности стартуют вместе (параллельно ≥ даты старта). Стрелки FS скрыты; дата завершения = max по командам."
-                  : "Режим «Как задано»: даты полосок = старты из карточек. Выберите режим утилизации выше, чтобы сдвигать работы под ёмкость (и увидеть стрелки FS в последовательном режиме)."
-            }
-          </p>
-          <div class="schedule-toolbar">
-            ${scheduleTogglesHtml()}
-            <div class="gantt-weeks-ctrl-right">
-              <label for="ganttWeeks">Горизонт</label>
-              <input id="ganttWeeks" type="range" min="4" max="52" step="1" value="${weeks}" />
-              <span class="mono" id="ganttWeeksLabel">${weeks} нед.</span>
-              ${
-                needed > weeks
-                  ? `<span class="meta">часть работ за горизонтом (нужно ~${needed})</span>`
-                  : ""
-              }
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="timeline">
-        ${
-          visible.length
-            ? `<div class="gantt-layout" style="--gantt-label-col:${loadGanttLabelColWidth()}px">
-          <div
-            class="gantt-label-resize"
-            data-gantt-label-resize
-            title="Изменить ширину подписей"
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Изменить ширину колонки подписей"
-          ></div>
-          <div class="gantt-axis-row">
-            <div class="gantt-axis-spacer">
-              <label
-                class="gantt-start-date plan-start-anchor"
-                title="Изменить старт планирования"
-              >
-                <span>нед. с ${formatDate(state.startDate)}</span>
-                <input
-                  type="date"
-                  class="gantt-start-date-input plan-start-date-input"
-                  value="${state.startDate}"
-                  aria-label="Старт планирования"
-                />
-              </label>
-            </div>
-            <div class="gantt-axis">${axisTicks}</div>
-          </div>
-          <div class="gantt-rows" style="--gantt-row-gap:${ROW_GAP}px">
-            <svg class="gantt-dep-layer" viewBox="0 0 ${weeks} ${n}" preserveAspectRatio="none" aria-hidden="true">
-              ${depPaths.join("")}
-              <g class="gantt-dep-heads"></g>
-            </svg>
-            ${rowsHtml}
-          </div>
-          <div class="gantt-capacity-block">
-            <div class="gantt-capacity-head meta">Загрузка команд по расписанию (эксперимент) — те же недели, что полоски Gantt; красный = перегруз ёмкости</div>
-            <div class="gantt-capacity-rows">${capacityRows}</div>
-          </div>
-        </div>`
-            : `<div class="empty">Нет активных функциональностей</div>`
-        }
-      </div>
-      <p class="footer-note" style="padding:0 16px 16px;margin:0">${
-        schedMode === "teamQueue"
-          ? "Шкала — недели от старта планирования (понедельник). Стрелки FS одной команды: правый край полоски → левый край следующей работы этой же команды в очереди по приоритету (цвет = команда; не связи между разными командами одной функциональности). Подпись «после #N (команда)» — кто стоит перед этой полоской в очереди. Дата завершения = конец bottleneck-полоски."
-          : schedMode === "maxUtilization"
-            ? "Шкала — недели от старта планирования (понедельник). Режим «Максимальная утилизация ресурса»: функциональности по приоритету; все команды одной функциональности делят общий старт и идут параллельно (дата завершения = max по командам), без FS-очереди, которая раздвигает сроки. Ниже по приоритету ждут свободной ёмкости, но при старте тоже параллельны."
-            : "Шкала — недели от старта планирования (понедельник). Даты полосок = заданные старты (без сдвига по ёмкости); стрелки очереди скрыты. Дата завершения = конец bottleneck-полоски; параллельная работа может перегрузить команду."
-      } Красная подсветка — загрузка команды по расписанию (как на Gantt) выше ёмкости в эту неделю.</p>
-    </div>
-  `;
-}
-
 const TEAM_COLORS = [
   "#d60000",
   "#455a64",
@@ -2505,11 +2187,16 @@ function openTeamColorPicker(
 function teamsManageHtml(): string {
   for (const t of state.teams) {
     if (t.members == null) t.members = makeSeedTeamMembers(t.id);
+    if (t.roles == null) t.roles = [...DEFAULT_ASSIGNMENT_ROLE_NAMES];
   }
   const rows = state.teams
     .map((t) => {
       const members = t.members ?? [];
+      const teamRoles = t.roles ?? [];
       const peopleOpen = Boolean(ui.teamPeopleOpen[t.id]);
+      const rolesOpen = ui.teamRolesOpen[t.id] !== false;
+      const remainingRoles = availableTeamSettingsRoles(teamRoles);
+      const rolePickerOpen = ui.teamAddRoleId === t.id;
       const peopleRows = members
         .map(
           (m) => `
@@ -2526,6 +2213,32 @@ function teamsManageHtml(): string {
           </div>`
         )
         .join("");
+      const roleRows = teamRoles
+        .map(
+          (name) => `
+          <div class="team-person-row">
+            <span class="team-role-name">${escapeHtml(name)}</span>
+            <button type="button" class="need-role-del" data-team-role-del="${t.id}" data-role-name="${escapeAttr(name)}" title="Удалить роль" aria-label="Удалить роль ${escapeAttr(name)}">×</button>
+          </div>`
+        )
+        .join("");
+      const addRoleBtn = remainingRoles.length
+        ? `<div class="need-add-wrap team-role-add-wrap">
+            <button type="button" class="btn btn-primary" data-team-role-add-open="${t.id}">+ Роль</button>
+            ${
+              rolePickerOpen
+                ? `<div class="need-add-menu" role="menu">
+                    ${remainingRoles
+                      .map(
+                        (name) =>
+                          `<button type="button" class="need-add-option" data-team-role-add="${t.id}" data-role-name="${escapeAttr(name)}">${escapeHtml(name)}</button>`
+                      )
+                      .join("")}
+                  </div>`
+                : ""
+            }
+          </div>`
+        : "";
       return `
       <div class="team-manage-card" data-team-row="${t.id}">
         <div class="capacity-row">
@@ -2537,13 +2250,10 @@ function teamsManageHtml(): string {
             value="${escapeAttr(t.name)}"
             aria-label="Название команды"
           />
-          <label class="team-capacity-field">
-            <span class="meta">Ёмкость, чел·нед/нед</span>
-            <div class="team-capacity-slider">
-              <input type="range" min="1" max="8" step="0.5" value="${t.capacityPw}" data-cap="${t.id}" />
-              <span class="mono capacity-label" data-cap-label="${t.id}">${t.capacityPw}</span>
-            </div>
-          </label>
+          <div class="team-capacity-field">
+            <span class="meta">Ёмкость (факт)</span>
+            <strong class="mono team-capacity-fact">${escapeHtml(teamCapacityFactLabel(t))}</strong>
+          </div>
           <button
             type="button"
             class="btn btn-ghost team-delete-btn"
@@ -2562,14 +2272,21 @@ function teamsManageHtml(): string {
             </div>
           </div>
         </details>
+        <details class="team-people-details team-roles-details"${rolesOpen ? " open" : ""} data-team-roles="${t.id}">
+          <summary class="team-people-sum">Роли · ${teamRoles.length}</summary>
+          <div class="team-people-list">
+            ${roleRows || `<div class="meta">Нет ролей — добавьте из каталога</div>`}
+            ${addRoleBtn}
+          </div>
+        </details>
       </div>`;
     })
     .join("");
 
   return `
     <div class="callout">
-      <strong>Ёмкость</strong> — сколько человеко-недель команда может отдать за календарную неделю.
-      Оценки функциональностей задаются маечной оценкой (дни — в Настройках, для плана ÷5 в недели).
+      <strong>Ёмкость</strong> — факт: 1 чел·нед на человека в неделю; если людей нет — по числу ролей команды.
+      Новую команду добавляете сами ниже. В Потребности выбираете её через «+ Добавить команду».
     </div>
     <div class="panel panel-sticky-host">
       <div class="panel-sticky">
@@ -3001,9 +2718,6 @@ function demoVariantAHtml(
       ${demoPageHeadHtml(
         "Демо-макет мониторинга (как в похожих продуктах): загрузка слева, комплектация справа. Цифры из текущего портфеля и расписания; комплектация — доля функц. с командой, заказчиком и исполнителем."
       )}
-      <div class="schedule-toolbar demo-schedule-toolbar">
-        ${scheduleTogglesHtml()}
-      </div>
       <div class="demo-a-grid">
         <div class="panel demo-card">
           <div class="panel-header">
@@ -3060,7 +2774,7 @@ function demoVariantBHtml(
         <tr>
           <td>
             <strong>${escapeHtml(row.team.name)}</strong>
-            <div class="meta">${row.team.capacityPw} чел·нед/нед</div>
+            <div class="meta">${escapeHtml(teamCapacityFactLabel(row.team))}</div>
           </td>
           <td>
             <div class="demo-heat-cells" style="--demo-weeks:${data.horizon}">${cells}</div>
@@ -3187,15 +2901,19 @@ function demandStatusClass(status: AssignmentDemandStatus): string {
 }
 
 function newDemandAssignment(teamId: string): TeamAssignment {
+  const team = teamById(teamId);
+  const roleNames = resolveTeamRoleNames(team);
   return fillAssignmentRoles(
     {
       teamId,
       size: "M",
       workStartDate: state.startDate,
       demandStatus: "draft",
-      roles: makeDefaultAssignmentRoles(szRanges()),
+      roles: teamAssignmentRoles(team),
     },
-    szRanges()
+    szRanges(),
+    team?.name ?? "",
+    roleNames
   );
 }
 
@@ -3242,13 +2960,40 @@ function demandRoleRowHtml(
 function demandAssignRowHtml(item: WorkItem, a: TeamAssignment): string {
   const t = teamById(a.teamId);
   const roles = a.roles ?? [];
+  const teamRoles = resolveTeamRoleNames(t);
+  const available = availableAssignmentRolesForTeam(teamRoles, roles);
+  const roleKey = `${item.id}:${a.teamId}`;
+  const pickerOpen = ui.needAddRoleKey === roleKey;
+  const addRoleBtn = available.length
+    ? `<div class="need-add-wrap">
+        <button type="button" class="btn need-add-btn" data-need-add-role-open="${item.id}" data-team="${a.teamId}">+ Роль</button>
+        ${
+          pickerOpen
+            ? `<div class="need-add-menu" role="menu">
+                ${available
+                  .map(
+                    (name) =>
+                      `<button type="button" class="need-add-option" data-need-add-role="${item.id}" data-team="${a.teamId}" data-role-name="${escapeAttr(name)}">${escapeHtml(name)}</button>`
+                  )
+                  .join("")}
+              </div>`
+            : ""
+        }
+      </div>`
+    : "";
+  const emptyHint = teamRoles.length
+    ? `<p class="need-fn-empty meta">Ролей нет. Нажмите «+ Роль».</p>`
+    : `<p class="need-fn-empty meta">У команды нет ролей. Настройте их на вкладке «Команды».</p>`;
   const rolesHtml = roles.length
     ? `<div class="need-roles">${roles.map((role) => demandRoleRowHtml(item, a, role)).join("")}</div>`
-    : `<p class="need-fn-empty meta">Роли удалены. Добавьте команду заново.</p>`;
+    : emptyHint;
   return `<div class="need-assign">
     <div class="need-team-head">
       <span class="need-assign-name"><span class="team-dot" style="background:${t?.color ?? "#93999e"}"></span>${escapeHtml(t?.name ?? a.teamId)}</span>
-      <button type="button" class="need-team-x" data-need-remove-team="${item.id}" data-team="${a.teamId}" title="Удалить команду" aria-label="Удалить команду">×</button>
+      <span class="need-team-actions">
+        ${addRoleBtn}
+        <button type="button" class="need-team-x" data-need-remove-team="${item.id}" data-team="${a.teamId}" title="Удалить команду" aria-label="Удалить команду">×</button>
+      </span>
     </div>
     ${rolesHtml}
   </div>`;
@@ -3324,10 +3069,12 @@ function demandHtml(): string {
     ? allGroups.find((g) => g.key === selectedKey)
     : undefined;
 
+  const prioMap = projectPrioMap();
   const projectChips = allGroups
     .map((g) => {
       const on = selectedKey === g.key;
-      return `<button type="button" class="need-project-chip${on ? " is-on" : ""}" data-need-project-chip="${escapeAttr(g.key)}" title="${escapeAttr(on ? "Снять выбор" : "Показать проект")}">${escapeHtml(g.title)}</button>`;
+      const prio = prioMap.get(g.key);
+      return `<button type="button" class="need-project-chip${on ? " is-on" : ""}" data-need-project-chip="${escapeAttr(g.key)}" title="${escapeAttr(on ? "Снять выбор" : "Показать проект")}">${prioBadgeHtml(prio)}${escapeHtml(g.title)}</button>`;
     })
     .join("");
 
@@ -3359,7 +3106,7 @@ function demandHtml(): string {
     const fns = items.map((it) => demandFnHtml(it)).join("");
     const tree = `<details class="need-project" data-need-project="${escapeAttr(selectedGroup.key)}"${open ? " open" : ""}>
       <summary class="need-project-sum">
-        <span class="need-project-title">${escapeHtml(selectedGroup.title)}</span>
+        <span class="need-project-title">${prioBadgeHtml(prioMap.get(selectedGroup.key))}${escapeHtml(selectedGroup.title)}</span>
         <span class="need-project-meta">${items.length} функц. · ${totalDays} дн.</span>
       </summary>
       <div class="need-project-body">${fns || `<p class="meta">Нет функциональностей</p>`}</div>
@@ -3537,6 +3284,178 @@ function planTrackHtml(inner: string, weeks: number): string {
   return `<div class="plan-track" style="background:${planTrackBg(weeks)}">${inner}</div>`;
 }
 
+type GanttRoleBar = {
+  item: WorkItem;
+  teamId: string;
+  role: AssignmentRole;
+  memberName: string;
+  days: number;
+  startWeek: number;
+  endWeek: number;
+};
+
+function collectGanttRoleBars(ranges = szRanges()): GanttRoleBar[] {
+  const out: GanttRoleBar[] = [];
+  for (const item of demandProjectItems()) {
+    if (item.status === "done") continue;
+    for (const a of item.assignments) {
+      for (const role of submittedAssignmentRoles(a)) {
+        const member = teamMemberById(a.teamId, role.assigneeId);
+        if (!member) continue;
+        const days = rolePlanDays(role, ranges);
+        const startWeek = weekIndex(
+          state.startDate,
+          role.workStartDate || a.workStartDate
+        );
+        out.push({
+          item,
+          teamId: a.teamId,
+          role,
+          memberName: member.name,
+          days,
+          startWeek,
+          endWeek: startWeek + planDurationWeeks(days) - 1,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
+  const weeks = Math.max(4, Math.min(52, Math.round(ui.ganttWeeks) || 16));
+  ui.ganttWeeks = weeks;
+  const ranges = szRanges();
+  const bars = collectGanttRoleBars(ranges);
+  const prioMap = projectPrioMap();
+  const items = sortByPriority(
+    demandProjectItems().filter((it) => it.status !== "done"),
+    ranges
+  );
+  const groups = groupByProjectKey(items).sort((a, b) => {
+    const pa = prioMap.get(a.key) ?? 9999;
+    const pb = prioMap.get(b.key) ?? 9999;
+    return pa - pb;
+  });
+  const placedKeys = new Set(bars.map((b) => demandProjectKey(b.item)));
+  const assignees = new Set(bars.map((b) => `${b.teamId}:${b.role.assigneeId}`));
+  const conflictCount = state.teams.reduce(
+    (n, t) => n + planConflictWeeks(t.id, overflowByTeam, weeks),
+    0
+  );
+
+  const body = groups.length
+    ? groups
+        .map((g) => {
+          const open = !ui.ganttCollapsedProjects[g.key];
+          const fnRows = g.items
+            .map((item) => {
+              const fnOpen = !ui.ganttCollapsedItems[item.id];
+              const assigns = item.assignments;
+              const execRows = assigns
+                .map((a) => {
+                  const team = teamById(a.teamId);
+                  const roles = submittedAssignmentRoles(a);
+                  const conflict =
+                    planConflictWeeks(a.teamId, overflowByTeam, weeks) > 0;
+                  const head = `<div class="plan-row plan-exec-row plan-team-row">
+                    <div class="plan-cell">
+                      <span class="plan-exec-name"><span class="team-dot" style="background:${team?.color ?? "#93999e"}"></span>${escapeHtml(team?.name ?? a.teamId)}</span>
+                    </div>
+                    ${planTrackHtml("", weeks)}
+                  </div>`;
+                  if (!roles.length) {
+                    return `${head}<div class="plan-row plan-role-row"><div class="plan-cell"><span class="meta">Нет отправленных ролей</span></div>${planTrackHtml("", weeks)}</div>`;
+                  }
+                  const roleRows = roles
+                    .map((role) => {
+                      const member = teamMemberById(a.teamId, role.assigneeId);
+                      const days = rolePlanDays(role, ranges);
+                      const startWeek = weekIndex(
+                        state.startDate,
+                        role.workStartDate || a.workStartDate
+                      );
+                      const endWeek = startWeek + planDurationWeeks(days) - 1;
+                      const left = member
+                        ? `${shortFio(member.name)} · ${days} дн.`
+                        : `${role.name} · ${days} дн.`;
+                      const bar = member
+                        ? planBarHtml(
+                            startWeek,
+                            endWeek,
+                            weeks,
+                            team?.color ?? "#484f55",
+                            role.name,
+                            conflict
+                          )
+                        : `<div class="plan-bar-empty"></div>`;
+                      return `<div class="plan-row plan-role-row">
+                        <div class="plan-cell">
+                          <span class="plan-exec-name">${escapeHtml(left)}${conflict && member ? " △" : ""}</span>
+                        </div>
+                        ${planTrackHtml(bar, weeks)}
+                      </div>`;
+                    })
+                    .join("");
+                  return `${head}${roleRows}`;
+                })
+                .join("");
+              return `<details class="plan-fn" data-gantt-fn="${item.id}"${fnOpen ? " open" : ""}>
+                <summary class="plan-row plan-fn-sum">
+                  <div class="plan-cell">
+                    <span class="plan-fn-title">${escapeHtml(item.title)}</span>
+                  </div>
+                  ${planTrackHtml("", weeks)}
+                </summary>
+                ${execRows || `<div class="plan-row"><div class="plan-cell"><span class="meta">Команда не назначена</span></div>${planTrackHtml("", weeks)}</div>`}
+              </details>`;
+            })
+            .join("");
+          return `<details class="plan-project" data-gantt-project="${escapeAttr(g.key)}"${open ? " open" : ""}>
+            <summary class="plan-row plan-project-sum">
+              <div class="plan-cell">
+                <span class="plan-project-title">${prioBadgeHtml(prioMap.get(g.key))}${escapeHtml(g.title)}</span>
+                <span class="plan-project-meta">${g.items.length} функц.</span>
+              </div>
+              ${planTrackHtml("", weeks)}
+            </summary>
+            ${fnRows}
+          </details>`;
+        })
+        .join("")
+    : `<div class="plan-empty meta">Нет проектов. Добавьте их в Реестре и назначьте команды в Потребности.</div>`;
+
+  return `
+    <div class="gantt-page">
+      <div class="panel-header need-page-head">
+        <div>
+          <h2>Гант — итоговый ресурсный план</h2>
+          <p class="meta">Проект → функциональность → команда → роль. Полоски — назначения с вкладки «Планирование».</p>
+        </div>
+        <div class="gantt-weeks-ctrl-right">
+          <label for="ganttWeeks">Горизонт</label>
+          <input id="ganttWeeks" type="range" min="4" max="52" step="1" value="${weeks}" />
+          <span class="mono" id="ganttWeeksLabel">${weeks} нед.</span>
+        </div>
+      </div>
+      <div class="need-stats gantt-stats">
+        <div class="need-stat"><div class="label">Всего проектов</div><div class="value">${groups.length}</div></div>
+        <div class="need-stat"><div class="label">Расположено</div><div class="value">${placedKeys.size}</div></div>
+        <div class="need-stat"><div class="label">Задач</div><div class="value">${bars.length}</div></div>
+        <div class="need-stat"><div class="label">Исполнителей</div><div class="value">${assignees.size}</div></div>
+        <div class="need-stat"><div class="label">Конфликтов ресурса</div><div class="value${conflictCount ? " is-pending" : ""}">${conflictCount}</div></div>
+      </div>
+      <div class="plan-board gantt-board">
+        <div class="plan-row plan-board-head">
+          <div class="plan-cell plan-head-label">Проект / функциональность / команда / роль</div>
+          <div class="plan-axis">${planAxisHtml(weeks)}</div>
+        </div>
+        ${body}
+      </div>
+    </div>
+  `;
+}
+
 function planningHtml(
   rollups: ItemSchedule[],
   slices: ScheduledSlice[],
@@ -3631,7 +3550,6 @@ function planningHtml(
                   const head = `<div class="plan-row plan-exec-row plan-team-row">
                     <div class="plan-cell">
                       <span class="plan-exec-name"><span class="team-dot" style="background:${team?.color ?? "#93999e"}"></span>${escapeHtml(team?.name ?? a.teamId)}</span>
-                      <button type="button" class="plan-x" data-plan-remove="${item.id}" data-team="${a.teamId}" title="Удалить команду" aria-label="Удалить команду">×</button>
                     </div>
                     ${planTrackHtml("", weeks)}
                   </div>`;
@@ -3700,7 +3618,7 @@ function planningHtml(
           return `<details class="plan-project" data-plan-project="${escapeAttr(g.key)}"${open ? " open" : ""}>
             <summary class="plan-row plan-project-sum">
               <div class="plan-cell">
-                <span class="plan-project-title">${escapeHtml(g.title)}</span>
+                <span class="plan-project-title">${prioBadgeHtml(projectPrioMap().get(g.key))}${escapeHtml(g.title)}</span>
                 <span class="plan-project-meta">${g.items.length} функц.</span>
               </div>
               ${planTrackHtml("", weeks)}
@@ -3756,7 +3674,7 @@ function tabContentHtml(
     case "queuesTest":
       return queuesTestHtml(slices, load, overflowByTeam);
     case "timeline":
-      return timelineHtml(rollups, slices, load, overflowByTeam);
+      return ganttPlanHtml(overflowByTeam);
     case "demoA":
       return demoVariantAHtml(load, overflowByTeam);
     case "demoB":
@@ -3998,7 +3916,7 @@ function editorHtml(item: WorkItem | null): string {
           teamId: state.teams[0]?.id ?? "",
           size: "M",
           workStartDate: state.startDate,
-          roles: makeDefaultAssignmentRoles(),
+          roles: teamAssignmentRoles(state.teams[0]),
         },
       ],
       status: "ready",
@@ -4234,9 +4152,7 @@ function formatLiveEtaHtml(
   const modeNote =
     activeScheduleMode() === "manual"
       ? `Дата завершения по заданным стартам = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`
-      : activeScheduleMode() === "teamQueue"
-        ? `Дата завершения с учётом очереди команды = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`
-        : `Дата завершения (макс. утилизация) = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`;
+      : `Дата завершения с учётом очереди команды = <span class="eta-final mono">${formatDate(preview.endDate)}</span>`;
 
   return (
     lines +
@@ -4863,7 +4779,9 @@ function render() {
   ensureVisibleTab();
   for (const t of state.teams) {
     if (t.members == null) t.members = makeSeedTeamMembers(t.id);
+    if (t.roles == null) t.roles = [...DEFAULT_ASSIGNMENT_ROLE_NAMES];
   }
+  applyComputedTeamCapacities(state.teams);
   const { slices, rollups, load } = scheduleState();
   const overflowByTeam = scheduledOverloadWeeks(load);
   lastScheduledLoad = load;
@@ -4907,7 +4825,7 @@ function render() {
         <button class="tab ${ui.tab === "portfolio" ? "active" : ""}" data-tab="portfolio">Реестр</button>
         <button class="tab ${ui.tab === "demand" ? "active" : ""}" data-tab="demand">Потребность</button>
         <button class="tab ${ui.tab === "planning" ? "active" : ""}" data-tab="planning">Планирование</button>
-        <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Gantt/Сроки</button>
+        <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Гант</button>
         <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очередь команд</button>
         ${isDemoVariantVisible("A") ? demoTabButtonHtml("demoA", "Мониторинг") : ""}
         <button class="tab tab-end ${ui.tab === "capacity" ? "active" : ""}" data-tab="capacity">Команды</button>
@@ -4961,8 +4879,11 @@ function readAssignments(): TeamAssignment[] {
           : Math.round(sizePlanDays(size, szRanges()));
     }
     if (existing?.demandStatus) next.demandStatus = existing.demandStatus;
-    next.roles = existing?.roles ?? makeDefaultAssignmentRoles(szRanges());
-    assignments.push(fillAssignmentRoles(next, szRanges()));
+    const team = teamById(teamId);
+    next.roles = existing?.roles ?? teamAssignmentRoles(team);
+    assignments.push(
+      fillAssignmentRoles(next, szRanges(), team?.name ?? "", resolveTeamRoleNames(team))
+    );
   }
   return assignments;
 }
@@ -5122,9 +5043,39 @@ function addDemandTeam(itemId: string, teamId: string) {
     withDemandTeams(it, [...it.assignments, newDemandAssignment(teamId)])
   );
   ui.needAddItemId = null;
+  ui.needAddRoleKey = null;
   ui.planAddItemId = null;
   logChange(
     `Потребность «${item.title}»: добавлена команда «${team.name}»`,
+    "team"
+  );
+  persist();
+}
+
+function addDemandRole(itemId: string, teamId: string, roleName: string) {
+  const item = state.items.find((i) => i.id === itemId);
+  const team = teamById(teamId);
+  const assign = item?.assignments.find((a) => a.teamId === teamId);
+  const name = canonicalizeCatalogRole(roleName) ?? roleName.trim();
+  if (!item || !assign || !name) return;
+  const teamRoles = resolveTeamRoleNames(team);
+  if (!teamHasRoleName(teamRoles, name) || assignmentHasRoleName(assign.roles, name)) {
+    return;
+  }
+  const role = makeAssignmentRole(name, szRanges(), {
+    workStartDate: assign.workStartDate,
+  });
+  patchDemandAssignment(itemId, teamId, (a) =>
+    fillAssignmentRoles(
+      { ...a, roles: [...(a.roles ?? []), role] },
+      szRanges(),
+      team?.name ?? "",
+      teamRoles
+    )
+  );
+  ui.needAddRoleKey = null;
+  logChange(
+    `Потребность «${item.title}»: ${team?.name ?? teamId} — добавлена роль «${name}»`,
     "team"
   );
   persist();
@@ -5141,7 +5092,7 @@ function removeDemandTeam(itemId: string, teamId: string) {
     )
   );
   logChange(
-    `Планирование «${item.title}»: снята команда «${team?.name ?? teamId}»`,
+    `Потребность «${item.title}»: снята команда «${team?.name ?? teamId}»`,
     "team"
   );
   persist();
@@ -5259,6 +5210,7 @@ function bindDemandTab() {
       const key = btn.dataset.needProjectChip ?? "";
       ui.needProjectKey = ui.needProjectKey === key ? null : key;
       ui.needAddItemId = null;
+      ui.needAddRoleKey = null;
       render();
     });
   });
@@ -5276,6 +5228,7 @@ function bindDemandTab() {
       e.stopPropagation();
       const itemId = btn.dataset.needAddOpen ?? null;
       ui.needAddItemId = ui.needAddItemId === itemId ? null : itemId;
+      ui.needAddRoleKey = null;
       render();
     });
   });
@@ -5288,6 +5241,32 @@ function bindDemandTab() {
       const teamId = btn.dataset.team;
       if (!itemId || !teamId) return;
       addDemandTeam(itemId, teamId);
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-need-add-role-open]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const itemId = btn.dataset.needAddRoleOpen;
+      const teamId = btn.dataset.team;
+      if (!itemId || !teamId) return;
+      const key = `${itemId}:${teamId}`;
+      ui.needAddRoleKey = ui.needAddRoleKey === key ? null : key;
+      ui.needAddItemId = null;
+      render();
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-need-add-role]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const itemId = btn.dataset.needAddRole;
+      const teamId = btn.dataset.team;
+      const roleName = btn.dataset.roleName;
+      if (!itemId || !teamId || !roleName) return;
+      addDemandRole(itemId, teamId, roleName);
     });
   });
 
@@ -5522,17 +5501,6 @@ function bindPlanningTab() {
     });
   });
 
-  root.querySelectorAll<HTMLButtonElement>("[data-plan-remove]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const itemId = btn.dataset.planRemove;
-      const teamId = btn.dataset.team;
-      if (!itemId || !teamId) return;
-      confirmRemoveDemandTeam(itemId, teamId, btn);
-    });
-  });
-
   const openTaskForm = (itemId: string, teamId: string, roleId: string) => {
     const item = state.items.find((i) => i.id === itemId);
     const assign = item?.assignments.find((a) => a.teamId === teamId);
@@ -5656,6 +5624,27 @@ function bindPlanningTab() {
   });
 }
 
+function bindGanttTab() {
+  const root = document.querySelector(".gantt-page");
+  if (!root) return;
+  root.querySelectorAll<HTMLDetailsElement>("[data-gantt-project]").forEach((el) => {
+    el.addEventListener("toggle", () => {
+      const key = el.dataset.ganttProject;
+      if (!key) return;
+      if (el.open) delete ui.ganttCollapsedProjects[key];
+      else ui.ganttCollapsedProjects[key] = true;
+    });
+  });
+  root.querySelectorAll<HTMLDetailsElement>("[data-gantt-fn]").forEach((el) => {
+    el.addEventListener("toggle", () => {
+      const id = el.dataset.ganttFn;
+      if (!id) return;
+      if (el.open) delete ui.ganttCollapsedItems[id];
+      else ui.ganttCollapsedItems[id] = true;
+    });
+  });
+}
+
 function applyPlanBarPreview(
   bar: HTMLElement,
   startWeek: number,
@@ -5755,6 +5744,7 @@ function bindPlanBarDrag(root: Element) {
 }
 
 function persist() {
+  applyComputedTeamCapacities(state.teams);
   saveState(state);
   render();
 }
@@ -5786,11 +5776,15 @@ function bindUiRest() {
   document.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const next = normalizeTab(btn.dataset.tab);
-      if (next !== "demand") ui.needAddItemId = null;
+      if (next !== "demand") {
+        ui.needAddItemId = null;
+        ui.needAddRoleKey = null;
+      }
       if (next !== "planning") {
         ui.planAddItemId = null;
         ui.planTaskForm = null;
       }
+      if (next !== "capacity") ui.teamAddRoleId = null;
       ui.tab = next;
       render();
     });
@@ -5798,6 +5792,7 @@ function bindUiRest() {
 
   bindDemandTab();
   bindPlanningTab();
+  bindGanttTab();
 
   document.querySelector<HTMLInputElement>("#showDemoA")?.addEventListener(
     "change",
@@ -5906,6 +5901,7 @@ function bindUiRest() {
       if (projectRow) {
         ui.needProjectKey = projectRow.dataset.needOpenProject ?? null;
         ui.needAddItemId = null;
+        ui.needAddRoleKey = null;
         ui.tab = "demand";
         render();
         return;
@@ -6361,30 +6357,6 @@ function bindUiRest() {
     });
   });
 
-  document.querySelectorAll<HTMLInputElement>("[data-cap]").forEach((input) => {
-    input.addEventListener("input", () => {
-      const id = input.dataset.cap!;
-      const team = state.teams.find((t) => t.id === id);
-      if (!team) return;
-      team.capacityPw = Number(input.value);
-      saveState(state);
-      const label = document.querySelector(`[data-cap-label="${id}"]`);
-      if (label) label.textContent = String(team.capacityPw);
-    });
-    input.addEventListener("change", () => {
-      const id = input.dataset.cap!;
-      const team = state.teams.find((t) => t.id === id);
-      if (team) {
-        logChange(
-          `Ёмкость «${team.name}»: ${team.capacityPw} чел·нед/нед`,
-          "team"
-        );
-        saveState(state);
-      }
-      render();
-    });
-  });
-
   document.querySelectorAll<HTMLDetailsElement>("[data-team-people]").forEach((el) => {
     el.addEventListener("toggle", () => {
       const id = el.dataset.teamPeople;
@@ -6459,6 +6431,61 @@ function bindUiRest() {
       document
         .querySelector<HTMLButtonElement>(`[data-team-person-add="${CSS.escape(teamId ?? "")}"]`)
         ?.click();
+    });
+  });
+
+  document.querySelectorAll<HTMLDetailsElement>("[data-team-roles]").forEach((el) => {
+    el.addEventListener("toggle", () => {
+      const id = el.dataset.teamRoles;
+      if (!id) return;
+      ui.teamRolesOpen[id] = el.open;
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-team-role-add-open]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.teamRoleAddOpen ?? null;
+      ui.teamAddRoleId = ui.teamAddRoleId === id ? null : id;
+      render();
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-team-role-add]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const teamId = btn.dataset.teamRoleAdd;
+      const raw = btn.dataset.roleName ?? "";
+      const name = canonicalizeCatalogRole(raw);
+      const team = state.teams.find((t) => t.id === teamId);
+      if (!team || !name || teamHasRoleName(team.roles, name)) return;
+      team.roles = [...resolveTeamRoleNames(team), name];
+      ui.teamRolesOpen[team.id] = true;
+      ui.teamAddRoleId = null;
+      logChange(`Команда «${team.name}»: добавлена роль «${name}»`, "team");
+      persist();
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-team-role-del]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const teamId = btn.dataset.teamRoleDel;
+      const raw = btn.dataset.roleName ?? "";
+      const team = state.teams.find((t) => t.id === teamId);
+      if (!team || !raw) return;
+      askAppConfirm(
+        btn,
+        `Удалить роль «<strong>${escapeHtml(raw)}</strong>» у команды «${escapeHtml(team.name)}»?`,
+        () => {
+          team.roles = resolveTeamRoleNames(team).filter(
+            (name) => !teamHasRoleName([name], raw)
+          );
+          logChange(`Команда «${team.name}»: удалена роль «${raw}»`, "team");
+          persist();
+        },
+        () => undefined,
+        { wide: true, yesLabel: "Удалить", noLabel: "Отмена" }
+      );
     });
   });
 
@@ -6651,13 +6678,18 @@ function bindUiRest() {
       return;
     }
     const id = uid("team");
+    const members = makeSeedTeamMembers(id);
+    const roles = [...DEFAULT_ASSIGNMENT_ROLE_NAMES];
     state.teams.push({
       id,
       name,
-      capacityPw: 3,
       color: newTeamColor(),
-      members: makeSeedTeamMembers(id),
+      members,
+      roles,
+      capacityPw: computedTeamCapacityPw({ members, roles }),
     });
+    ui.teamPeopleOpen[id] = true;
+    ui.teamRolesOpen[id] = true;
     draftNewTeamColor = null;
     if (nameInput) nameInput.value = "";
     logChange(`Добавлена команда «${name}»`, "team");
