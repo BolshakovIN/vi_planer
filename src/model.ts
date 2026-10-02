@@ -182,6 +182,47 @@ export function nearestSizeForCalendarWeeks(
   return nearestSizeForEstimatePw(estimatePw, ranges);
 }
 
+/** Nearest t-shirt by planning midpoint in calendar days. */
+export function nearestSizeFromDays(
+  days: number,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): TShirtSize {
+  const target = Math.max(1, days);
+  let best: TShirtSize = "M";
+  let bestDist = Infinity;
+  for (const sz of TSHIRT_SIZES) {
+    const dist = Math.abs(sizePlanDays(sz, ranges) - target);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = sz;
+    }
+  }
+  return best;
+}
+
+export function parseOptionalDays(raw: unknown): number | undefined {
+  if (raw == null || raw === "") return undefined;
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n) || n < 1) return undefined;
+  return n;
+}
+
+/** Demand tab: submitted after «Отправить». Absent = черновик. */
+export type DemandStatus = "submitted";
+
+export function parseDemandStatus(raw: unknown): DemandStatus | undefined {
+  const s = String(raw ?? "").toLowerCase().trim();
+  if (
+    s === "submitted" ||
+    s === "sent" ||
+    s === "отправлено" ||
+    s === "на согласовании"
+  ) {
+    return "submitted";
+  }
+  return undefined;
+}
+
 export interface Team {
   id: string;
   name: string;
@@ -197,6 +238,11 @@ export interface TeamAssignment {
   size: TShirtSize;
   /** Planned earliest start for this team (ISO date, Monday) */
   workStartDate: string;
+  /**
+   * Editable duration in calendar days (Потребность).
+   * When set, this is the effort source of truth; `size` is kept in sync.
+   */
+  days?: number;
 }
 
 export interface WorkItem {
@@ -231,6 +277,8 @@ export interface WorkItem {
   cashFlow12m: number | null;
   /** ROI за 12 мес., % (15 = 15%); null = не задано */
   roi12m: number | null;
+  /** Потребность: «Отправлено» after submit. Absent = черновик. */
+  demandStatus?: DemandStatus;
 }
 
 /** Kind of activity-log entry (optional filter / icon hint). */
@@ -527,7 +575,7 @@ export function concurrentTeamLoad(
       if (item.status === "done") continue;
       for (const a of item.assignments) {
         if (a.teamId !== team.id) continue;
-        const pw = sizePlanWeeks(a.size, ranges);
+        const pw = assignmentPlanWeeks(a, ranges);
         let rem = pw;
         let w = weekIndex(state.startDate, a.workStartDate);
         while (rem > 0.001 && w < maxWeeks) {
@@ -678,23 +726,42 @@ export function migrateRoiToPercent(n: number): number | null {
   return n;
 }
 
+/** Calendar days for one assignment: explicit `days` or t-shirt midpoint. */
+export function assignmentPlanDays(
+  a: TeamAssignment,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): number {
+  const days = parseOptionalDays(a.days);
+  if (days != null) return days;
+  return sizePlanDays(a.size, ranges);
+}
+
+/** Planning effort weeks for one assignment (days / 5, at least 1 week). */
+export function assignmentPlanWeeks(
+  a: TeamAssignment,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): number {
+  const weeks = assignmentPlanDays(a, ranges) / WORKING_DAYS_PER_WEEK;
+  return Math.max(1, Math.round(weeks * 10) / 10);
+}
+
 export function totalEstimateWeeks(
   item: WorkItem,
   ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): number {
   return item.assignments.reduce(
-    (sum, a) => sum + sizePlanWeeks(a.size, ranges),
+    (sum, a) => sum + assignmentPlanWeeks(a, ranges),
     0
   );
 }
 
-/** Sum of assignment midpoints in calendar days. */
+/** Sum of assignment days (explicit or t-shirt midpoint). */
 export function totalEstimateDays(
   item: WorkItem,
   ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): number {
   return item.assignments.reduce(
-    (sum, a) => sum + sizePlanDays(a.size, ranges),
+    (sum, a) => sum + assignmentPlanDays(a, ranges),
     0
   );
 }
@@ -1076,7 +1143,7 @@ export function schedulePortfolio(
             team,
             size: a.size,
             workStartDate: snapToMonday(a.workStartDate || state.startDate),
-            estimatePw: sizePlanWeeks(a.size, ranges),
+            estimatePw: assignmentPlanWeeks(a, ranges),
           };
         })
         .filter((t): t is NonNullable<typeof t> => t != null);
@@ -1143,7 +1210,12 @@ export function schedulePortfolio(
   } else {
     const byTeam = new Map<
       string,
-      { item: WorkItem; size: TShirtSize; workStartDate: string }[]
+      {
+        item: WorkItem;
+        size: TShirtSize;
+        workStartDate: string;
+        estimatePw: number;
+      }[]
     >();
     for (const team of state.teams) byTeam.set(team.id, []);
     for (const item of ordered) {
@@ -1153,6 +1225,7 @@ export function schedulePortfolio(
           item,
           size: a.size,
           workStartDate: snapToMonday(a.workStartDate || state.startDate),
+          estimatePw: assignmentPlanWeeks(a, ranges),
         });
         byTeam.set(a.teamId, list);
       }
@@ -1164,7 +1237,7 @@ export function schedulePortfolio(
 
       let cursor = 0;
       queue.forEach((entry, idx) => {
-        const estimatePw = sizePlanWeeks(entry.size, ranges);
+        const estimatePw = entry.estimatePw;
         const plannedWeek = weekIndex(state.startDate, entry.workStartDate);
         let startWeek: number;
 
@@ -1313,10 +1386,13 @@ export function normalizeState(raw: unknown): AppState | null {
         .map((a) => {
           const teamId = String(a.teamId);
           const cap = teamCap.get(teamId) ?? 3;
+          const days = parseOptionalDays(a.days);
           const size =
             a.size != null
               ? parseSize(a.size)
-              : pwToSize(Number(a.estimatePw) || 1, cap);
+              : days != null
+                ? nearestSizeFromDays(days)
+                : pwToSize(Number(a.estimatePw) || 1, cap);
           return {
             teamId,
             size,
@@ -1327,6 +1403,7 @@ export function normalizeState(raw: unknown): AppState | null {
                   planStart
               )
             ),
+            ...(days != null ? { days } : {}),
           };
         });
     } else if (typeof r.teamId === "string") {
@@ -1373,6 +1450,9 @@ export function normalizeState(raw: unknown): AppState | null {
         const raw = optionalRubFromRaw(r.roi12m ?? r.roiRub ?? r.roi);
         return raw == null ? null : migrateRoiToPercent(raw);
       })(),
+      ...(parseDemandStatus(r.demandStatus) === "submitted"
+        ? { demandStatus: "submitted" as const }
+        : {}),
     };
   });
 

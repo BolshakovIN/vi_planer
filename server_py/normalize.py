@@ -131,6 +131,33 @@ def size_plan_weeks(size: str, ranges: dict[str, dict[str, int]] | None = None) 
     return max(1.0, round(weeks * 10) / 10)
 
 
+def nearest_size_from_days(
+    days: float, ranges: dict[str, dict[str, int]] | None = None
+) -> str:
+    ranges = ranges or DEFAULT_SIZE_RANGES
+    target = max(1.0, days)
+    best = "M"
+    best_dist = math.inf
+    for sz in TSHIRT_SIZES:
+        dist = abs(size_plan_days(sz, ranges) - target)
+        if dist < best_dist:
+            best_dist = dist
+            best = sz
+    return best
+
+
+def parse_optional_days(raw: Any) -> int | None:
+    if raw is None or raw == "":
+        return None
+    try:
+        n = int(round(float(raw)))
+    except (TypeError, ValueError):
+        return None
+    if n < 1:
+        return None
+    return n
+
+
 def nearest_size_for_estimate_pw(
     estimate_pw: float, ranges: dict[str, dict[str, int]] | None = None
 ) -> str:
@@ -339,24 +366,30 @@ def normalize_state(raw: Any) -> dict[str, Any] | None:
                 if a.get("size") is not None:
                     size = parse_size(a.get("size"))
                 else:
-                    try:
-                        est = float(a.get("estimatePw") or 1)
-                    except (TypeError, ValueError):
-                        est = 1
-                    size = pw_to_size(est, cap)
-                assignments.append(
-                    {
-                        "teamId": team_id,
-                        "size": size,
-                        "workStartDate": snap_to_monday(
-                            str(
-                                a.get("workStartDate")
-                                or r.get("workStartDate")
-                                or plan_start
-                            )
-                        ),
-                    }
-                )
+                    days_hint = parse_optional_days(a.get("days"))
+                    if days_hint is not None:
+                        size = nearest_size_from_days(days_hint)
+                    else:
+                        try:
+                            est = float(a.get("estimatePw") or 1)
+                        except (TypeError, ValueError):
+                            est = 1
+                        size = pw_to_size(est, cap)
+                row: dict[str, Any] = {
+                    "teamId": team_id,
+                    "size": size,
+                    "workStartDate": snap_to_monday(
+                        str(
+                            a.get("workStartDate")
+                            or r.get("workStartDate")
+                            or plan_start
+                        )
+                    ),
+                }
+                days = parse_optional_days(a.get("days"))
+                if days is not None:
+                    row["days"] = days
+                assignments.append(row)
         elif isinstance(r.get("teamId"), str):
             tid = r["teamId"]
             try:
@@ -404,6 +437,9 @@ def normalize_state(raw: Any) -> dict[str, Any] | None:
         }
         if r.get("notes") is not None:
             item["notes"] = str(r["notes"])
+        ds = str(r.get("demandStatus") or "").lower().strip()
+        if ds in {"submitted", "sent", "отправлено", "на согласовании"}:
+            item["demandStatus"] = "submitted"
         items.append(item)
 
     parsed_ranges = normalize_size_ranges(raw.get("sizeRanges"))
