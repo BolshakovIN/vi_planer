@@ -4130,11 +4130,48 @@ body.pdf-capturing .table-scroll-top {
   padding-bottom: 0;
 }
 
+.need-team-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0 4px;
+}
+
+.need-team-head .need-assign-name {
+  font-weight: 500;
+}
+
+.need-team-x,
+.need-role-del {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.need-team-x:hover,
+.need-role-del:hover {
+  background: var(--row-hover);
+  color: var(--ink);
+}
+
+.need-role-row {
+  padding-left: 0;
+}
+
 .need-roles {
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 0 0 2px 22px;
+  padding: 0 0 2px 18px;
 }
 
 .need-role {
@@ -4155,25 +4192,7 @@ body.pdf-capturing .table-scroll-top {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.need-role-del {
-  flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.need-role-del:hover {
-  background: var(--row-hover);
-  color: var(--ink);
+  min-width: 8rem;
 }
 
 @media (max-width: 800px) {
@@ -4452,6 +4471,20 @@ body.pdf-capturing .table-scroll-top {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.plan-bar.is-dragging {
+  cursor: grabbing;
+  z-index: 2;
+  opacity: 0.95;
+}
+
+body.plan-dragging {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .plan-bar.is-conflict {
@@ -4463,6 +4496,117 @@ body.pdf-capturing .table-scroll-top {
   width: 72px;
   border: 1px dashed var(--line);
   background: transparent;
+  cursor: pointer;
+}
+
+.plan-role-row .plan-cell {
+  padding-left: 48px;
+}
+
+.plan-task-form {
+  grid-column: 1 / -1;
+  padding: 10px 12px 12px 36px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.plan-task-form-title {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.plan-task-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 8px 0 4px;
+}
+
+.plan-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.plan-chip {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.plan-chip:hover {
+  border-color: var(--ink);
+}
+
+.plan-chip.is-on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.plan-task-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.team-manage-card {
+  border-bottom: 1px solid var(--line);
+}
+
+.team-manage-card:last-child {
+  border-bottom: none;
+}
+
+.team-manage-card .capacity-row {
+  border-bottom: 0;
+}
+
+.team-people-details {
+  padding: 0 16px 12px 54px;
+}
+
+.team-people-sum {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+  list-style: none;
+}
+
+.team-people-sum::-webkit-details-marker {
+  display: none;
+}
+
+.team-people-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.team-person-row,
+.team-person-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.team-person-input,
+.team-person-add input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
 }
 
 .plan-empty {

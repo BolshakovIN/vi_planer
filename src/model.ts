@@ -458,6 +458,7 @@ function parseAssignmentRoleRow(row: unknown): AssignmentRole | null {
   let days: number | undefined;
   let demandStatus: AssignmentDemandStatus | undefined;
   let workStartDate: string | undefined;
+  let extraAssigneeId = "";
   if (typeof row === "string") {
     name = row.trim();
   } else if (row && typeof row === "object") {
@@ -470,6 +471,7 @@ function parseAssignmentRoleRow(row: unknown): AssignmentRole | null {
     demandStatus = parseAssignmentDemandStatus(rec.demandStatus);
     const startRaw = String(rec.workStartDate ?? "").trim();
     if (startRaw) workStartDate = snapToMonday(startRaw);
+    extraAssigneeId = String(rec.assigneeId ?? rec.memberId ?? "").trim();
   }
   if (!name) return null;
   return {
@@ -479,16 +481,16 @@ function parseAssignmentRoleRow(row: unknown): AssignmentRole | null {
     ...(days != null ? { days } : {}),
     ...(demandStatus ? { demandStatus } : {}),
     ...(workStartDate ? { workStartDate } : {}),
+    ...(extraAssigneeId ? { assigneeId: extraAssigneeId } : {}),
   };
 }
 
 /**
- * Missing / invalid roles → seed the 5 defaults.
+ * Missing / invalid roles → undefined (caller seeds via fillAssignmentRoles).
  * Empty array is kept (user deleted every role).
  */
-export function parseAssignmentRoles(raw: unknown): AssignmentRole[] {
-  if (raw == null) return makeDefaultAssignmentRoles();
-  if (!Array.isArray(raw)) return makeDefaultAssignmentRoles();
+export function parseAssignmentRoles(raw: unknown): AssignmentRole[] | undefined {
+  if (raw == null || !Array.isArray(raw)) return undefined;
   if (raw.length === 0) return [];
   const out: AssignmentRole[] = [];
   const seen = new Set<string>();
@@ -498,7 +500,23 @@ export function parseAssignmentRoles(raw: unknown): AssignmentRole[] {
     seen.add(role.id);
     out.push(role);
   }
-  return out.length ? out : makeDefaultAssignmentRoles();
+  return out.length ? out : undefined;
+}
+
+export function submittedAssignmentRoles(a: TeamAssignment): AssignmentRole[] {
+  return (a.roles ?? []).filter((r) => resolveRoleDemandStatus(r) !== "draft");
+}
+
+export function roleJobLabel(roleName: string): string {
+  const n = roleName.toLowerCase();
+  if (n.includes("архитектур")) return "Архитектор";
+  if (n.includes("бизнес")) return "Бизнес-аналитик";
+  if (n.includes("тестир")) return "Тестировщик";
+  if (n.includes("разраб")) return "Разработчик";
+  if (n.includes("аналит")) return "Аналитик";
+  const trimmed = roleName.trim();
+  if (!trimmed) return trimmed;
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
 export function isArchitectureRole(role: AssignmentRole): boolean {
@@ -572,7 +590,12 @@ export function fillAssignmentRoles(
   teamName = ""
 ): TeamAssignment {
   let roles = a.roles;
-  if (roles == null) roles = makeDefaultAssignmentRoles(ranges);
+  if (roles == null) {
+    roles = DEFAULT_ASSIGNMENT_ROLE_NAMES.map((name) => ({
+      id: uid("role"),
+      name,
+    }));
+  }
   if (!roles.length) return { ...a, roles };
   const defaultDays = Math.round(sizePlanDays("M", ranges));
   const hasRoleDays = roles.some((r) => parseOptionalDays(r.days) != null);
@@ -580,6 +603,7 @@ export function fillAssignmentRoles(
   const inheritStatus = parseAssignmentDemandStatus(a.demandStatus);
   const prefer = preferRoleIndexByTeamName(roles, teamName);
   const nextRoles = roles.map((r, i) => {
+    const keepAssignee = r.assigneeId ? { assigneeId: r.assigneeId } : {};
     const days = parseOptionalDays(r.days);
     if (days != null) {
       return {
@@ -588,6 +612,7 @@ export function fillAssignmentRoles(
         size: r.size ?? nearestSizeFromDays(days, ranges),
         demandStatus: resolveRoleDemandStatus(r),
         workStartDate: r.workStartDate || a.workStartDate,
+        ...keepAssignee,
       };
     }
     if (!hasRoleDays && i === prefer && inheritDays != null) {
@@ -597,6 +622,7 @@ export function fillAssignmentRoles(
         size: a.size,
         demandStatus: inheritStatus ?? "draft",
         workStartDate: r.workStartDate || a.workStartDate,
+        ...keepAssignee,
       };
     }
     return {
@@ -605,14 +631,14 @@ export function fillAssignmentRoles(
       size: r.size ?? "M",
       demandStatus: parseAssignmentDemandStatus(r.demandStatus) ?? "draft",
       workStartDate: r.workStartDate || a.workStartDate,
+      ...keepAssignee,
     };
   });
   return syncAssignmentFromRoles({ ...a, roles: nextRoles }, ranges);
 }
 
 export function ensureAssignmentRoles(a: TeamAssignment): TeamAssignment {
-  if (a.roles != null) return a;
-  return { ...a, roles: makeDefaultAssignmentRoles() };
+  return fillAssignmentRoles(a);
 }
 
 /** Work of one initiative for a specific team (own effort → own ETA) */
@@ -669,17 +695,31 @@ export interface WorkItem {
   demandStatus?: DemandStatus;
 }
 
-export function ensureItemAssignmentRoles(items: WorkItem[]): WorkItem[] {
+export function ensureItemAssignmentRoles(
+  items: WorkItem[],
+  teams: Team[] = []
+): WorkItem[] {
+  const names = new Map(teams.map((t) => [t.id, t.name]));
   return items.map((item) => ({
     ...item,
-    assignments: item.assignments.map(ensureAssignmentRoles),
+    assignments: item.assignments.map((a) =>
+      fillAssignmentRoles(a, DEFAULT_SIZE_RANGES, names.get(a.teamId) ?? "")
+    ),
   }));
 }
 
-export function ensureStateAssignmentRoles<T extends { items: WorkItem[] }>(
+export function ensureStateAssignmentRoles<T extends { items: WorkItem[]; teams?: Team[] }>(
   state: T
 ): T {
-  return { ...state, items: ensureItemAssignmentRoles(state.items) };
+  const teams = (state.teams ?? []).map((t) => ({
+    ...t,
+    members: t.members != null ? t.members : makeSeedTeamMembers(t.id),
+  }));
+  return {
+    ...state,
+    ...(state.teams ? { teams } : {}),
+    items: ensureItemAssignmentRoles(state.items, teams),
+  };
 }
 
 /** Kind of activity-log entry (optional filter / icon hint). */
@@ -1127,11 +1167,14 @@ export function migrateRoiToPercent(n: number): number | null {
   return n;
 }
 
-/** Calendar days for one assignment: explicit `days` or t-shirt midpoint. */
+/** Calendar days for one assignment: sum of roles, else `days` or t-shirt midpoint. */
 export function assignmentPlanDays(
   a: TeamAssignment,
   ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): number {
+  if (a.roles && a.roles.length > 0) {
+    return a.roles.reduce((sum, role) => sum + rolePlanDays(role, ranges), 0);
+  }
   const days = parseOptionalDays(a.days);
   if (days != null) return days;
   return sizePlanDays(a.size, ranges);
@@ -1290,6 +1333,70 @@ export function moveItemToPriority(
     const rank = rankById.get(it.id);
     if (rank == null || it.manualRank === rank) return it;
     return { ...it, manualRank: rank };
+  });
+}
+
+/** Реестр project key: backlog container name. */
+export function projectGroupKey(item: WorkItem): string {
+  return containerNameFromBacklog(item.backlog) || "Без проекта";
+}
+
+/** Project groups in sequential priority order (min item rank, then name). */
+export function orderedProjectGroups(
+  items: WorkItem[],
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): { key: string; items: WorkItem[] }[] {
+  const map = new Map<string, WorkItem[]>();
+  for (const it of items) {
+    if (it.type !== "project") continue;
+    const key = projectGroupKey(it);
+    const list = map.get(key);
+    if (list) list.push(it);
+    else map.set(key, [it]);
+  }
+  const groups = [...map.entries()].map(([key, grouped]) => ({
+    key,
+    items: sortByPriority(grouped, ranges),
+  }));
+  groups.sort((a, b) => {
+    const pa = Math.min(...a.items.map((i) => i.manualRank ?? Number.POSITIVE_INFINITY));
+    const pb = Math.min(...b.items.map((i) => i.manualRank ?? Number.POSITIVE_INFINITY));
+    if (pa !== pb) return pa - pb;
+    return a.key.localeCompare(b.key, "ru");
+  });
+  return groups;
+}
+
+/**
+ * Move a whole project to display priority 1..N.
+ * Items inside the group keep their relative order; other groups shift.
+ */
+export function moveProjectGroupToPriority(
+  items: WorkItem[],
+  projectKey: string,
+  newPriority: number,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): WorkItem[] {
+  const groups = orderedProjectGroups(items, ranges);
+  const from = groups.findIndex((g) => g.key === projectKey);
+  if (from < 0) return items;
+  const next = [...groups];
+  const [group] = next.splice(from, 1);
+  if (!group) return items;
+  const target = Math.max(
+    0,
+    Math.min(next.length, Math.round(newPriority) - 1)
+  );
+  next.splice(target, 0, group);
+  const rankById = new Map<string, number>();
+  let rank = 1;
+  for (const g of next) {
+    for (const it of g.items) rankById.set(it.id, rank++);
+  }
+  return items.map((it) => {
+    const r = rankById.get(it.id);
+    if (r == null || it.manualRank === r) return it;
+    return { ...it, manualRank: r };
   });
 }
 
@@ -1769,11 +1876,13 @@ export function normalizeState(raw: unknown): AppState | null {
             XXL: 10,
           } as Record<TShirtSize, number>)[parseSize(t.capacity)]
         : null;
+    const teamId = String(t.id ?? uid("team"));
     return {
-      id: String(t.id ?? uid("team")),
+      id: teamId,
       name: String(t.name ?? "Команда"),
       color: String(t.color ?? "#737373"),
       capacityPw: fromPw ?? fromShirt ?? 3,
+      members: parseTeamMembers(t.members, teamId),
     };
   });
   const teamCap = new Map(teams.map((t) => [t.id, t.capacityPw]));
@@ -1798,6 +1907,7 @@ export function normalizeState(raw: unknown): AppState | null {
           const demandStatus =
             parseAssignmentDemandStatus(a.demandStatus) ??
             (itemDemand === "submitted" ? "pending" : undefined);
+          const parsedRoles = parseAssignmentRoles(a.roles);
           return {
             teamId,
             size,
@@ -1810,7 +1920,7 @@ export function normalizeState(raw: unknown): AppState | null {
             ),
             ...(days != null ? { days } : {}),
             ...(demandStatus ? { demandStatus } : {}),
-            roles: parseAssignmentRoles(a.roles),
+            ...(parsedRoles ? { roles: parsedRoles } : {}),
           };
         });
     } else if (typeof r.teamId === "string") {
@@ -1870,6 +1980,16 @@ export function normalizeState(raw: unknown): AppState | null {
   });
 
   const parsedRanges = normalizeSizeRanges(data.sizeRanges);
+  const filledItems = items.map((item) => ({
+    ...item,
+    assignments: item.assignments.map((a) =>
+      fillAssignmentRoles(
+        a,
+        parsedRanges,
+        teams.find((t) => t.id === a.teamId)?.name ?? ""
+      )
+    ),
+  }));
 
   let customers = parseCatalogNameList(data.customers);
   let executors = parseCatalogNameList(data.executors);
@@ -1920,6 +2040,6 @@ export function normalizeState(raw: unknown): AppState | null {
       data.portfolioPack != null && String(data.portfolioPack).trim()
         ? String(data.portfolioPack).trim()
         : undefined,
-    items: ensureUniquePriorities(items, parsedRanges),
+    items: ensureUniquePriorities(filledItems, parsedRanges),
   };
 }

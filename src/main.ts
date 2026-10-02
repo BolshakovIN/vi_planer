@@ -40,6 +40,8 @@ import {
   nextPriority,
   moveItemToPriority,
   reorderVisiblePriority,
+  orderedProjectGroups,
+  moveProjectGroupToPriority,
   TeamLoadWeek,
   Team,
   scheduledOverloadWeeks,
@@ -62,6 +64,18 @@ import {
   resolveAssignmentDemandStatus,
   makeDefaultAssignmentRoles,
   AssignmentRole,
+  fillAssignmentRoles,
+  rolePlanDays,
+  resolveRoleDemandStatus,
+  isArchitectureRole,
+  submittedAssignmentRoles,
+  roleJobLabel,
+  shortFio,
+  makeSeedTeamMembers,
+  TeamMember,
+  ensureStateAssignmentRoles,
+  weekIndex,
+  WORKING_DAYS_PER_WEEK,
 } from "./model";
 import { SEED, PORTFOLIO_PACK_ID } from "./seed";
 import {
@@ -214,7 +228,7 @@ interface UiState {
   needProjectKey: string | null;
   /** Functionality whose «+ Добавить команду» picker is open */
   needAddItemId: string | null;
-  /** `${itemId}:${teamId}` while days input is shown */
+  /** `${itemId}:${teamId}:${roleId}` while days input is shown */
   needDaysEdit: string | null;
   needCollapsedProjects: Record<string, true>;
   needCollapsedItems: Record<string, true>;
@@ -226,6 +240,17 @@ interface UiState {
   planAddItemId: string | null;
   planCollapsedProjects: Record<string, true>;
   planCollapsedItems: Record<string, true>;
+  /** Expanded people lists on Команды */
+  teamPeopleOpen: Record<string, true>;
+  /** Inline «Новая задача на таймлайн» */
+  planTaskForm: {
+    itemId: string;
+    teamId: string;
+    roleId: string;
+    memberId: string | null;
+    startWeek: number;
+    days: number;
+  } | null;
 }
 
 const SCHEDULE_MODE_META: Record<
@@ -271,9 +296,11 @@ const ui: UiState = {
   planAddItemId: null,
   planCollapsedProjects: {},
   planCollapsedItems: {},
+  teamPeopleOpen: {},
+  planTaskForm: null,
 };
 
-let state: AppState = structuredClone(SEED);
+let state: AppState = ensureStateAssignmentRoles(structuredClone(SEED));
 /** Latest scheduled load snapshot for overload explain popovers (same weeks as Gantt) */
 let lastScheduledLoad: Record<string, TeamLoadWeek[]> = {};
 let lastOverflowByTeam: Record<string, Set<number>> = {};
@@ -1050,7 +1077,7 @@ function columnsHelpHtml(): string {
     <details class="callout callout-cols agenda">
       <summary class="agenda-summary">Адженда</summary>
       <div class="cols-help">
-        <div><span class="cols-help-k">Приоритет</span> — сквозной ранг проекта (1 = выше; минимум по работам проекта)</div>
+        <div><span class="cols-help-k">Приоритет</span> — сквозной ранг проекта (1…N; 1 = выше). Смена — после подтверждения</div>
         <div><span class="cols-help-k">Проект</span> — контейнер плана; функциональности смотрите на вкладке «Потребность»</div>
         <div><span class="cols-help-k">Команды</span> — кто задействован в проекте</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
@@ -1097,19 +1124,14 @@ function uniqueAssignments(items: WorkItem[]): TeamAssignment[] {
 function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): string {
   const byId = rollupById(rollups);
   const visible = filteredItems(rollups);
-  const order = new Map(visible.map((it, i) => [it.id, i]));
-  const groups = groupByProjectKey(visible).sort((a, b) => {
-    const ia = Math.min(...a.items.map((it) => order.get(it.id) ?? 9999));
-    const ib = Math.min(...b.items.map((it) => order.get(it.id) ?? 9999));
-    return ia - ib;
-  });
+  const groups = orderedProjectGroups(visible, szRanges()).map((g) => ({
+    ...g,
+    title: g.key,
+  }));
 
   const rows = groups
-    .map((g) => {
-      const minPrio = Math.min(
-        ...g.items.map((it) => it.manualRank ?? Number.POSITIVE_INFINITY)
-      );
-      const prio = Number.isFinite(minPrio) ? minPrio : "—";
+    .map((g, gi) => {
+      const prio = gi + 1;
       const assigns = uniqueAssignments(g.items);
       const teamItem: WorkItem = { ...g.items[0], assignments: assigns };
       const score = g.items.reduce((s, it) => s + rice(it, szRanges()), 0);
@@ -1132,10 +1154,17 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
         ),
       ];
       const statuses = [...new Set(g.items.map((it) => it.status))];
-      const statusHtml =
-        statuses.length === 1
-          ? `<span class="badge badge-status-${statuses[0]}">${statusLabel(statuses[0])}</span>`
-          : `<span class="meta">несколько</span>`;
+      const statusVal = statuses.length === 1 ? statuses[0] : "";
+      const statusOpts = [
+        statusVal
+          ? ""
+          : `<option value="" selected disabled>несколько</option>`,
+        ...ITEM_STATUSES.map(
+          (s) =>
+            `<option value="${s}"${s === statusVal ? " selected" : ""}>${statusLabel(s)}</option>`
+        ),
+      ].join("");
+      const statusClass = statusVal ? `badge-status-${statusVal}` : "";
       let latest: ItemSchedule | undefined;
       for (const it of g.items) {
         const r = byId.get(it.id);
@@ -1143,15 +1172,17 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
         if (!latest || r.endDate > latest.endDate) latest = r;
       }
       return `
-        <tr class="clickable" data-need-open-project="${escapeAttr(g.key)}" title="Открыть потребность проекта">
+        <tr class="clickable" data-need-open-project="${escapeAttr(g.key)}" data-row-id="${escapeAttr(g.key)}" title="Открыть потребность проекта">
           <td${tdAttrs("priority", "prio-cell")}>
-            <span class="prio-num">${prio}</span>
+            <input class="prio-input" type="number" min="1" max="${projectCount}" step="1" value="${prio}" data-project-prio="${escapeAttr(g.key)}" data-project-prio-now="${prio}" data-stop-edit aria-label="Приоритет проекта" />
           </td>
           <td${tdAttrs("title", "title-cell")}>
             <div class="name">${escapeHtml(g.title)}</div>
           </td>
           <td${tdAttrs("teams", "teams-cell")}>${teamsCellHtml(teamItem)}</td>
-          <td${tdAttrs("status", "status-cell")}>${statusHtml}</td>
+          <td${tdAttrs("status", "status-cell")}>
+            <select class="status-select ${statusClass}" data-project-status="${escapeAttr(g.key)}" data-status-was="${statusVal}" data-stop-edit aria-label="Статус проекта">${statusOpts}</select>
+          </td>
           <td${tdAttrs("rice", "rice-cell mono metric-num")}>${Math.round(score * 10) / 10}</td>
           <td${tdAttrs("cashFlow", "finance-cell mono metric-num")}>${formatMlrd(cash)}</td>
           <td${tdAttrs("roi", "finance-cell mono metric-num")}>${
@@ -2467,34 +2498,63 @@ function openTeamColorPicker(
 
 function teamsManageHtml(): string {
   const rows = state.teams
-    .map(
-      (t) => `
-      <div class="capacity-row" data-team-row="${t.id}">
-        ${teamColorBtnHtml(t.color, { teamId: t.id })}
-        <input
-          class="team-name-input"
-          type="text"
-          data-team-name="${t.id}"
-          value="${escapeAttr(t.name)}"
-          aria-label="Название команды"
-        />
-        <label class="team-capacity-field">
-          <span class="meta">Ёмкость, чел·нед/нед</span>
-          <div class="team-capacity-slider">
-            <input type="range" min="1" max="8" step="0.5" value="${t.capacityPw}" data-cap="${t.id}" />
-            <span class="mono capacity-label" data-cap-label="${t.id}">${t.capacityPw}</span>
+    .map((t) => {
+      const members = t.members ?? [];
+      const peopleOpen = Boolean(ui.teamPeopleOpen[t.id]);
+      const peopleRows = members
+        .map(
+          (m) => `
+          <div class="team-person-row">
+            <input
+              class="team-person-input"
+              type="text"
+              data-team-person="${t.id}"
+              data-person-id="${escapeAttr(m.id)}"
+              value="${escapeAttr(m.name)}"
+              aria-label="ФИО"
+            />
+            <button type="button" class="need-role-del" data-team-person-del="${t.id}" data-person-id="${escapeAttr(m.id)}" title="Удалить" aria-label="Удалить">×</button>
+          </div>`
+        )
+        .join("");
+      return `
+      <div class="team-manage-card" data-team-row="${t.id}">
+        <div class="capacity-row">
+          ${teamColorBtnHtml(t.color, { teamId: t.id })}
+          <input
+            class="team-name-input"
+            type="text"
+            data-team-name="${t.id}"
+            value="${escapeAttr(t.name)}"
+            aria-label="Название команды"
+          />
+          <label class="team-capacity-field">
+            <span class="meta">Ёмкость, чел·нед/нед</span>
+            <div class="team-capacity-slider">
+              <input type="range" min="1" max="8" step="0.5" value="${t.capacityPw}" data-cap="${t.id}" />
+              <span class="mono capacity-label" data-cap-label="${t.id}">${t.capacityPw}</span>
+            </div>
+          </label>
+          <button
+            type="button"
+            class="btn btn-ghost team-delete-btn"
+            data-team-delete="${t.id}"
+            title="Удалить команду"
+            ${state.teams.length <= 1 ? "disabled" : ""}
+          >Удалить</button>
+        </div>
+        <details class="team-people-details"${peopleOpen ? " open" : ""} data-team-people="${t.id}">
+          <summary class="team-people-sum">Люди · ${members.length} ФИО</summary>
+          <div class="team-people-list">
+            ${peopleRows || `<div class="meta">Нет людей — добавьте ниже</div>`}
+            <div class="team-person-add">
+              <input type="text" data-team-person-new="${t.id}" placeholder="ФИО" aria-label="Новое ФИО" />
+              <button type="button" class="btn btn-primary" data-team-person-add="${t.id}">+ Человек</button>
+            </div>
           </div>
-        </label>
-        <button
-          type="button"
-          class="btn btn-ghost team-delete-btn"
-          data-team-delete="${t.id}"
-          title="Удалить команду"
-          ${state.teams.length <= 1 ? "disabled" : ""}
-        >Удалить</button>
-      </div>
-    `
-    )
+        </details>
+      </div>`;
+    })
     .join("");
 
   return `
@@ -3118,15 +3178,71 @@ function demandStatusClass(status: AssignmentDemandStatus): string {
 }
 
 function newDemandAssignment(teamId: string): TeamAssignment {
-  const size: TShirtSize = "M";
-  return {
-    teamId,
-    size,
-    workStartDate: state.startDate,
-    days: Math.round(sizePlanDays(size, szRanges())),
-    demandStatus: "draft",
-    roles: makeDefaultAssignmentRoles(),
-  };
+  return fillAssignmentRoles(
+    {
+      teamId,
+      size: "M",
+      workStartDate: state.startDate,
+      demandStatus: "draft",
+      roles: makeDefaultAssignmentRoles(szRanges()),
+    },
+    szRanges()
+  );
+}
+
+function titleRu(s: string): string {
+  const t = s.trim();
+  if (!t) return t;
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+function demandRoleRowHtml(
+  item: WorkItem,
+  a: TeamAssignment,
+  role: AssignmentRole
+): string {
+  const days = rolePlanDays(role, szRanges());
+  const st = resolveRoleDemandStatus(role);
+  const editKey = `${item.id}:${a.teamId}:${role.id}`;
+  const editing = ui.needDaysEdit === editKey;
+  const daysCell = editing
+    ? `<input type="number" class="need-days-input" min="1" step="1" inputmode="numeric" value="${days}" data-need-days="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" aria-label="Дни" /> <span class="meta">дн.</span>`
+    : `<span class="need-row-days-val">${days} дн.</span>`;
+  const statusOpts = ASSIGNMENT_DEMAND_STATUSES.map(
+    (s) =>
+      `<option value="${s}"${s === st ? " selected" : ""}>${ASSIGNMENT_DEMAND_LABELS[s]}</option>`
+  ).join("");
+  const action =
+    st === "draft"
+      ? `<button type="button" class="btn btn-primary need-send-btn" data-need-send="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}">Отправить</button>`
+      : `<button type="button" class="btn need-change-btn" data-need-revert="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}">Изменить</button>`;
+  return `<div class="need-row need-role-row">
+    <span class="need-row-left">
+      <span class="need-role-name">${escapeHtml(role.name)}</span>
+      <span class="need-row-days">${daysCell}</span>
+    </span>
+    <span class="need-row-right">
+      <select class="need-st-select ${demandStatusClass(st)}" data-need-status="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}">${statusOpts}</select>
+      <button type="button" class="need-edit-days" data-need-edit-days="${editKey}">Изменить дни</button>
+      ${action}
+      <button type="button" class="need-role-del" data-need-role-del="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" title="Удалить роль" aria-label="Удалить роль ${escapeAttr(role.name)}">×</button>
+    </span>
+  </div>`;
+}
+
+function demandAssignRowHtml(item: WorkItem, a: TeamAssignment): string {
+  const t = teamById(a.teamId);
+  const roles = a.roles ?? [];
+  const rolesHtml = roles.length
+    ? `<div class="need-roles">${roles.map((role) => demandRoleRowHtml(item, a, role)).join("")}</div>`
+    : `<p class="need-fn-empty meta">Роли удалены. Добавьте команду заново.</p>`;
+  return `<div class="need-assign">
+    <div class="need-team-head">
+      <span class="need-assign-name"><span class="team-dot" style="background:${t?.color ?? "#93999e"}"></span>${escapeHtml(t?.name ?? a.teamId)}</span>
+      <button type="button" class="need-team-x" data-need-remove-team="${item.id}" data-team="${a.teamId}" title="Удалить команду" aria-label="Удалить команду">×</button>
+    </div>
+    ${rolesHtml}
+  </div>`;
 }
 
 function patchDemandItem(
@@ -3152,54 +3268,6 @@ function withDemandTeams(
   if (!teamsChanged) return { ...item, assignments: nextAssignments };
   const { demandStatus: _cleared, ...rest } = item;
   return { ...rest, assignments: nextAssignments };
-}
-
-function demandRoleRowHtml(
-  item: WorkItem,
-  a: TeamAssignment,
-  role: AssignmentRole
-): string {
-  return `<div class="need-role">
-    <span class="need-role-name">${escapeHtml(role.name)}</span>
-    <button type="button" class="need-role-del" data-need-role-del="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" title="Удалить роль" aria-label="Удалить роль ${escapeAttr(role.name)}">×</button>
-  </div>`;
-}
-
-function demandAssignRowHtml(item: WorkItem, a: TeamAssignment): string {
-  const t = teamById(a.teamId);
-  const days = assignmentPlanDays(a, szRanges());
-  const st = resolveAssignmentDemandStatus(a, item);
-  const editKey = `${item.id}:${a.teamId}`;
-  const editing = ui.needDaysEdit === editKey;
-  const daysCell = editing
-    ? `<input type="number" class="need-days-input" min="1" step="1" inputmode="numeric" value="${days}" data-need-days="${item.id}" data-team="${a.teamId}" aria-label="Дни" /> <span class="meta">дн.</span>`
-    : `<span class="need-row-days-val">${days} дн.</span>`;
-  const statusOpts = ASSIGNMENT_DEMAND_STATUSES.map(
-    (s) =>
-      `<option value="${s}"${s === st ? " selected" : ""}>${ASSIGNMENT_DEMAND_LABELS[s]}</option>`
-  ).join("");
-  const action =
-    st === "draft"
-      ? `<button type="button" class="btn btn-primary need-send-btn" data-need-send="${item.id}" data-team="${a.teamId}">Отправить</button>`
-      : `<button type="button" class="btn need-change-btn" data-need-revert="${item.id}" data-team="${a.teamId}">Изменить</button>`;
-  const roles = a.roles ?? [];
-  const rolesHtml = roles.length
-    ? `<div class="need-roles">${roles.map((role) => demandRoleRowHtml(item, a, role)).join("")}</div>`
-    : "";
-  return `<div class="need-assign">
-    <div class="need-row">
-    <span class="need-row-left">
-      <span class="need-assign-name"><span class="team-dot" style="background:${t?.color ?? "#93999e"}"></span>${escapeHtml(t?.name ?? a.teamId)}</span>
-      <span class="need-row-days">${daysCell}</span>
-    </span>
-    <span class="need-row-right">
-      <select class="need-st-select ${demandStatusClass(st)}" data-need-status="${item.id}" data-team="${a.teamId}">${statusOpts}</select>
-      <button type="button" class="need-edit-days" data-need-edit-days="${editKey}">Изменить дни</button>
-      ${action}
-    </span>
-    </div>
-    ${rolesHtml}
-  </div>`;
 }
 
 function demandFnHtml(item: WorkItem): string {
@@ -3258,19 +3326,25 @@ function demandHtml(): string {
 
   if (selectedGroup) {
     const items = selectedGroup.items;
-    const assigns = items.flatMap((it) =>
-      it.assignments.map((a) => ({ item: it, a }))
-    );
     const fnCount = items.length;
     const totalDays = items.reduce(
       (s, it) => s + totalEstimateDays(it, szRanges()),
       0
     );
-    const pendingCount = assigns.filter(
-      (x) => resolveAssignmentDemandStatus(x.a, x.item) === "pending"
+    const roleEntries = items.flatMap((it) =>
+      it.assignments.flatMap((a) =>
+        (a.roles?.length ? a.roles : [null]).map((role) => ({ it, a, role }))
+      )
+    );
+    const pendingCount = roleEntries.filter((x) =>
+      x.role
+        ? resolveRoleDemandStatus(x.role) === "pending"
+        : resolveAssignmentDemandStatus(x.a, x.it) === "pending"
     ).length;
-    const approvedCount = assigns.filter(
-      (x) => resolveAssignmentDemandStatus(x.a, x.item) === "approved"
+    const approvedCount = roleEntries.filter((x) =>
+      x.role
+        ? resolveRoleDemandStatus(x.role) === "approved"
+        : resolveAssignmentDemandStatus(x.a, x.it) === "approved"
     ).length;
     const open = !ui.needCollapsedProjects[selectedGroup.key];
     const fns = items.map((it) => demandFnHtml(it)).join("");
@@ -3323,12 +3397,6 @@ function planFocusTeamId(selected: string[]): string | null {
   return selected[0] ?? null;
 }
 
-function planExecutorLabel(item: WorkItem, teamId: string): string {
-  const person = item.assignee.trim();
-  if (person && person !== "—") return person;
-  return teamById(teamId)?.name ?? teamId;
-}
-
 function planSliceDays(slice: ScheduledSlice): number {
   return Math.max(1, slice.endWeek - slice.startWeek + 1) * 5;
 }
@@ -3361,18 +3429,99 @@ function planAxisHtml(weeks: number): string {
   }).join("");
 }
 
+const PLAN_DURATION_CHIPS = [5, 10, 15, 20, 25, 30, 35, 40, 50, 60];
+
+function planDurationWeeks(days: number): number {
+  return Math.max(1, Math.ceil(days / WORKING_DAYS_PER_WEEK - 1e-9));
+}
+
+function planChipDate(iso: string): string {
+  const months = [
+    "янв",
+    "фев",
+    "мар",
+    "апр",
+    "мая",
+    "июн",
+    "июл",
+    "авг",
+    "сен",
+    "окт",
+    "ноя",
+    "дек",
+  ];
+  const parts = iso.split("-");
+  const m = Number(parts[1]);
+  const d = Number(parts[2]);
+  return `${d} ${months[m - 1] ?? ""}`;
+}
+
+function teamMemberById(teamId: string, memberId?: string): TeamMember | undefined {
+  if (!memberId) return undefined;
+  return teamById(teamId)?.members?.find((m) => m.id === memberId);
+}
+
+function planTaskFormHtml(item: WorkItem, teamId: string, roleId: string): string {
+  const form = ui.planTaskForm;
+  if (
+    !form ||
+    form.itemId !== item.id ||
+    form.teamId !== teamId ||
+    form.roleId !== roleId
+  ) {
+    return "";
+  }
+  const team = teamById(teamId);
+  const assign = item.assignments.find((a) => a.teamId === teamId);
+  const role = assign?.roles?.find((r) => r.id === roleId);
+  const job = roleJobLabel(role?.name ?? "");
+  const people = (team?.members ?? [])
+    .map((m) => {
+      const on = form.memberId === m.id;
+      return `<button type="button" class="plan-chip${on ? " is-on" : ""}" data-plan-form-member="${escapeAttr(m.id)}">${escapeHtml(shortFio(m.name))} · ${escapeHtml(job)}</button>`;
+    })
+    .join("");
+  const starts = Array.from({ length: PLAN_WEEKS }, (_, w) => {
+    const on = form.startWeek === w;
+    return `<button type="button" class="plan-chip${on ? " is-on" : ""}" data-plan-form-week="${w}">${planChipDate(addWeeks(state.startDate, w))}</button>`;
+  }).join("");
+  const durs = PLAN_DURATION_CHIPS.map((d) => {
+    const on = form.days === d;
+    return `<button type="button" class="plan-chip${on ? " is-on" : ""}" data-plan-form-days="${d}">${d}</button>`;
+  }).join("");
+  return `<div class="plan-task-form">
+    <div class="plan-task-form-title">Новая задача на таймлайн: ${escapeHtml(item.title)}</div>
+    <div class="plan-task-label">Исполнитель</div>
+    <div class="plan-chips">${people || `<span class="meta">Добавьте людей на вкладке «Команды»</span>`}</div>
+    <div class="plan-task-label">Дата старта</div>
+    <div class="plan-chips">${starts}</div>
+    <div class="plan-task-label">Длительность, рабочих дней</div>
+    <div class="plan-chips">${durs}</div>
+    <div class="plan-task-actions">
+      <button type="button" class="btn btn-primary" data-plan-form-submit>Поставить на таймлайн</button>
+      <button type="button" class="btn" data-plan-form-cancel>Отмена</button>
+    </div>
+  </div>`;
+}
+
 function planBarHtml(
   startWeek: number,
   endWeek: number,
   weeks: number,
   color: string,
   label: string,
-  conflict: boolean
+  conflict: boolean,
+  data?: { itemId: string; teamId: string; roleId?: string }
 ): string {
   const left = (Math.max(0, startWeek) / weeks) * 100;
   const span = Math.max(1, endWeek - startWeek + 1);
   const width = (span / weeks) * 100;
-  return `<div class="plan-bar${conflict ? " is-conflict" : ""}" style="left:${left}%;width:${Math.max(width, 3)}%;background:${color}" title="${escapeAttr(label)}">${escapeHtml(label)}</div>`;
+  const attrs = data
+    ? ` data-plan-bar data-item="${escapeAttr(data.itemId)}" data-team="${escapeAttr(data.teamId)}"${
+        data.roleId ? ` data-role="${escapeAttr(data.roleId)}"` : ""
+      } data-start-week="${startWeek}" data-end-week="${endWeek}"`
+    : "";
+  return `<div class="plan-bar${conflict ? " is-conflict" : ""}"${attrs} style="left:${left}%;width:${Math.max(width, 3)}%;background:${color}" title="${escapeAttr(label)}">${escapeHtml(label)}</div>`;
 }
 
 function planTrackHtml(inner: string, weeks: number): string {
@@ -3467,33 +3616,59 @@ function planningHtml(
               const execRows = assigns
                 .map((a) => {
                   const team = teamById(a.teamId);
-                  const name = planExecutorLabel(item, a.teamId);
-                  const slice = itemSlices.find((s) => s.teamId === a.teamId);
-                  const days = slice
-                    ? planSliceDays(slice)
-                    : assignmentPlanDays(a, ranges);
-                  const conflict = planConflictWeeks(
-                    a.teamId,
-                    overflowByTeam,
-                    weeks
-                  ) > 0;
-                  const bar = slice
-                    ? planBarHtml(
-                        slice.startWeek,
-                        slice.endWeek,
-                        weeks,
-                        team?.color ?? "#484f55",
-                        `${name} · ${days} дн.`,
-                        conflict
-                      )
-                    : `<div class="plan-bar-empty"></div>`;
-                  return `<div class="plan-row plan-exec-row">
+                  const roles = submittedAssignmentRoles(a);
+                  const conflict =
+                    planConflictWeeks(a.teamId, overflowByTeam, weeks) > 0;
+                  const head = `<div class="plan-row plan-exec-row plan-team-row">
                     <div class="plan-cell">
-                      <span class="plan-exec-name"><span class="team-dot" style="background:${team?.color ?? "#93999e"}"></span>${escapeHtml(name)}</span>
-                      <button type="button" class="plan-x" data-plan-remove="${item.id}" data-team="${a.teamId}" title="Убрать назначение" aria-label="Убрать">×</button>
+                      <span class="plan-exec-name"><span class="team-dot" style="background:${team?.color ?? "#93999e"}"></span>${escapeHtml(team?.name ?? a.teamId)}</span>
+                      <button type="button" class="plan-x" data-plan-remove="${item.id}" data-team="${a.teamId}" title="Удалить команду" aria-label="Удалить команду">×</button>
                     </div>
-                    ${planTrackHtml(bar, weeks)}
+                    ${planTrackHtml("", weeks)}
                   </div>`;
+                  if (!roles.length) {
+                    return `${head}<div class="plan-row plan-role-row"><div class="plan-cell"><span class="meta">Нет отправленных ролей</span></div>${planTrackHtml("", weeks)}</div>`;
+                  }
+                  const roleRows = roles
+                    .map((role) => {
+                      const member = teamMemberById(a.teamId, role.assigneeId);
+                      const days = rolePlanDays(role, ranges);
+                      const startWeek = weekIndex(
+                        state.startDate,
+                        role.workStartDate || a.workStartDate
+                      );
+                      const endWeek = startWeek + planDurationWeeks(days) - 1;
+                      const label = member
+                        ? `${shortFio(member.name)} · ${days} дн.`
+                        : `${role.name} · ${days} дн.`;
+                      const bar = member
+                        ? planBarHtml(
+                            startWeek,
+                            endWeek,
+                            weeks,
+                            team?.color ?? "#484f55",
+                            label,
+                            conflict,
+                            {
+                              itemId: item.id,
+                              teamId: a.teamId,
+                              roleId: role.id,
+                            }
+                          )
+                        : `<button type="button" class="plan-bar-empty" data-plan-task-open="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" title="Поставить на таймлайн"></button>`;
+                      const leftName = member
+                        ? shortFio(member.name)
+                        : role.name;
+                      return `${planTaskFormHtml(item, a.teamId, role.id)}<div class="plan-row plan-role-row">
+                        <div class="plan-cell">
+                          <span class="plan-exec-name">${escapeHtml(leftName)}</span>
+                          <button type="button" class="plan-add-btn" data-plan-task-open="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" title="Поставить на таймлайн">+</button>
+                        </div>
+                        ${planTrackHtml(bar, weeks)}
+                      </div>`;
+                    })
+                    .join("");
+                  return `${head}${roleRows}`;
                 })
                 .join("");
               const fnBar =
@@ -4774,8 +4949,8 @@ function readAssignments(): TeamAssignment[] {
           : Math.round(sizePlanDays(size, szRanges()));
     }
     if (existing?.demandStatus) next.demandStatus = existing.demandStatus;
-    next.roles = existing?.roles ?? makeDefaultAssignmentRoles();
-    assignments.push(next);
+    next.roles = existing?.roles ?? makeDefaultAssignmentRoles(szRanges());
+    assignments.push(fillAssignmentRoles(next, szRanges()));
   }
   return assignments;
 }
@@ -4960,6 +5135,25 @@ function removeDemandTeam(itemId: string, teamId: string) {
   persist();
 }
 
+function patchDemandRole(
+  itemId: string,
+  teamId: string,
+  roleId: string,
+  fn: (role: AssignmentRole) => AssignmentRole
+) {
+  const teamName = teamById(teamId)?.name ?? "";
+  patchDemandAssignment(itemId, teamId, (a) =>
+    fillAssignmentRoles(
+      {
+        ...a,
+        roles: (a.roles ?? []).map((r) => (r.id === roleId ? fn(r) : r)),
+      },
+      szRanges(),
+      teamName
+    )
+  );
+}
+
 function removeDemandRole(itemId: string, teamId: string, roleId: string) {
   const item = state.items.find((i) => i.id === itemId);
   const team = teamById(teamId);
@@ -4967,14 +5161,27 @@ function removeDemandRole(itemId: string, teamId: string, roleId: string) {
   const assign = item.assignments.find((a) => a.teamId === teamId);
   const role = assign?.roles?.find((r) => r.id === roleId);
   if (!assign || !role) return;
-  patchDemandAssignment(itemId, teamId, (a) => ({
-    ...a,
-    roles: (a.roles ?? []).filter((r) => r.id !== roleId),
-  }));
-  logChange(
-    `Потребность «${item.title}»: ${team?.name ?? teamId} — удалена роль «${role.name}»`,
-    "team"
-  );
+  const nextRoles = (assign.roles ?? []).filter((r) => r.id !== roleId);
+  if (!nextRoles.length) {
+    patchDemandItem(itemId, (it) =>
+      withDemandTeams(
+        it,
+        it.assignments.filter((a) => a.teamId !== teamId)
+      )
+    );
+    logChange(
+      `Потребность «${item.title}»: снята команда «${team?.name ?? teamId}» (последняя роль)`,
+      "team"
+    );
+  } else {
+    patchDemandAssignment(itemId, teamId, (a) =>
+      fillAssignmentRoles({ ...a, roles: nextRoles }, szRanges(), team?.name ?? "")
+    );
+    logChange(
+      `Потребность «${item.title}»: ${team?.name ?? teamId} — удалена роль «${role.name}»`,
+      "team"
+    );
+  }
   persist();
 }
 
@@ -4987,13 +5194,36 @@ function confirmRemoveDemandRole(
   const item = state.items.find((i) => i.id === itemId);
   const assign = item?.assignments.find((a) => a.teamId === teamId);
   const role = assign?.roles?.find((r) => r.id === roleId);
+  const teamName = teamById(teamId)?.name ?? teamId;
   if (!role) return;
+  const roleTitle = isArchitectureRole(role)
+    ? "Архитектура"
+    : titleRu(role.name);
+  const text = isArchitectureRole(role)
+    ? `Удалить роль «<strong>${escapeHtml(roleTitle)}</strong>» у команды «${escapeHtml(teamName)}»?`
+    : `Удалить роль «<strong>${escapeHtml(roleTitle)}</strong>» у команды «${escapeHtml(teamName)}»?`;
   askAppConfirm(
     anchor,
-    `Удалить роль «<strong>${escapeHtml(role.name)}</strong>»?`,
+    text,
     () => removeDemandRole(itemId, teamId, roleId),
     () => undefined,
-    { wide: true }
+    { wide: true, yesLabel: "Удалить", noLabel: "Отмена" }
+  );
+}
+
+function confirmRemoveDemandTeam(
+  itemId: string,
+  teamId: string,
+  anchor: HTMLElement
+) {
+  const team = teamById(teamId);
+  const name = team?.name ?? teamId;
+  askAppConfirm(
+    anchor,
+    `Удалить команду «<strong>${escapeHtml(name)}</strong>» и все её роли?`,
+    () => removeDemandTeam(itemId, teamId),
+    () => undefined,
+    { wide: true, yesLabel: "Удалить", noLabel: "Отмена" }
   );
 }
 
@@ -5081,29 +5311,41 @@ function bindDemandTab() {
     const commit = () => {
       const itemId = input.dataset.needDays;
       const teamId = input.dataset.team;
+      const roleId = input.dataset.role;
       if (!itemId || !teamId) return;
       const item = state.items.find((i) => i.id === itemId);
       const assign = item?.assignments.find((a) => a.teamId === teamId);
+      const role = roleId
+        ? assign?.roles?.find((r) => r.id === roleId)
+        : undefined;
       if (!item || !assign) return;
       const raw = Math.round(Number(input.value));
-      const days =
-        Number.isFinite(raw) && raw >= 1
-          ? raw
-          : assignmentPlanDays(assign, szRanges());
+      const fallback = role
+        ? rolePlanDays(role, szRanges())
+        : assignmentPlanDays(assign, szRanges());
+      const days = Number.isFinite(raw) && raw >= 1 ? raw : fallback;
       input.value = String(days);
-      if (assign.days === days) {
+      if (role && role.days === days) {
         ui.needDaysEdit = null;
         render();
         return;
       }
       const size = nearestSizeFromDays(days, szRanges());
       const team = teamById(teamId);
-      patchDemandAssignment(itemId, teamId, (a) => ({ ...a, days, size }));
+      if (roleId && role) {
+        patchDemandRole(itemId, teamId, roleId, (r) => ({ ...r, days, size }));
+        logChange(
+          `Потребность «${item.title}»: ${team?.name ?? teamId} / ${role.name} — ${days} дн.`,
+          "team"
+        );
+      } else {
+        patchDemandAssignment(itemId, teamId, (a) => ({ ...a, days, size }));
+        logChange(
+          `Потребность «${item.title}»: ${team?.name ?? teamId} — ${days} дн.`,
+          "team"
+        );
+      }
       ui.needDaysEdit = null;
-      logChange(
-        `Потребность «${item.title}»: ${team?.name ?? teamId} — ${days} дн.`,
-        "team"
-      );
       persist();
     };
     input.addEventListener("change", commit);
@@ -5121,11 +5363,22 @@ function bindDemandTab() {
     sel.addEventListener("change", () => {
       const itemId = sel.dataset.needStatus;
       const teamId = sel.dataset.team;
+      const roleId = sel.dataset.role;
       const next = sel.value as AssignmentDemandStatus;
       if (!itemId || !teamId) return;
       if (!ASSIGNMENT_DEMAND_STATUSES.includes(next)) return;
       const item = state.items.find((i) => i.id === itemId);
-      patchDemandAssignment(itemId, teamId, (a) => ({ ...a, demandStatus: next }));
+      if (roleId) {
+        patchDemandRole(itemId, teamId, roleId, (r) => ({
+          ...r,
+          demandStatus: next,
+        }));
+      } else {
+        patchDemandAssignment(itemId, teamId, (a) => ({
+          ...a,
+          demandStatus: next,
+        }));
+      }
       logChange(
         `Потребность «${item?.title ?? itemId}»: ${ASSIGNMENT_DEMAND_LABELS[next]}`,
         "team"
@@ -5138,12 +5391,20 @@ function bindDemandTab() {
     btn.addEventListener("click", () => {
       const itemId = btn.dataset.needSend;
       const teamId = btn.dataset.team;
+      const roleId = btn.dataset.role;
       if (!itemId || !teamId) return;
       const item = state.items.find((i) => i.id === itemId);
-      patchDemandAssignment(itemId, teamId, (a) => ({
-        ...a,
-        demandStatus: "pending",
-      }));
+      if (roleId) {
+        patchDemandRole(itemId, teamId, roleId, (r) => ({
+          ...r,
+          demandStatus: "pending",
+        }));
+      } else {
+        patchDemandAssignment(itemId, teamId, (a) => ({
+          ...a,
+          demandStatus: "pending",
+        }));
+      }
       logChange(
         `Отправлена потребность: «${item?.title ?? itemId}»`,
         "item"
@@ -5156,11 +5417,19 @@ function bindDemandTab() {
     btn.addEventListener("click", () => {
       const itemId = btn.dataset.needRevert;
       const teamId = btn.dataset.team;
+      const roleId = btn.dataset.role;
       if (!itemId || !teamId) return;
-      patchDemandAssignment(itemId, teamId, (a) => ({
-        ...a,
-        demandStatus: "draft",
-      }));
+      if (roleId) {
+        patchDemandRole(itemId, teamId, roleId, (r) => ({
+          ...r,
+          demandStatus: "draft",
+        }));
+      } else {
+        patchDemandAssignment(itemId, teamId, (a) => ({
+          ...a,
+          demandStatus: "draft",
+        }));
+      }
       persist();
     });
   });
@@ -5174,6 +5443,17 @@ function bindDemandTab() {
       const roleId = btn.dataset.role;
       if (!itemId || !teamId || !roleId) return;
       confirmRemoveDemandRole(itemId, teamId, roleId, btn);
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-need-remove-team]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const itemId = btn.dataset.needRemoveTeam;
+      const teamId = btn.dataset.team;
+      if (!itemId || !teamId) return;
+      confirmRemoveDemandTeam(itemId, teamId, btn);
     });
   });
 }
@@ -5237,9 +5517,109 @@ function bindPlanningTab() {
       const itemId = btn.dataset.planRemove;
       const teamId = btn.dataset.team;
       if (!itemId || !teamId) return;
-      removeDemandTeam(itemId, teamId);
+      confirmRemoveDemandTeam(itemId, teamId, btn);
     });
   });
+
+  const openTaskForm = (itemId: string, teamId: string, roleId: string) => {
+    const item = state.items.find((i) => i.id === itemId);
+    const assign = item?.assignments.find((a) => a.teamId === teamId);
+    const role = assign?.roles?.find((r) => r.id === roleId);
+    if (!item || !assign || !role) return;
+    const days = rolePlanDays(role, szRanges());
+    const nearest = PLAN_DURATION_CHIPS.reduce((best, d) =>
+      Math.abs(d - days) < Math.abs(best - days) ? d : best
+    );
+    ui.planTaskForm = {
+      itemId,
+      teamId,
+      roleId,
+      memberId: role.assigneeId ?? teamById(teamId)?.members?.[0]?.id ?? null,
+      startWeek: weekIndex(
+        state.startDate,
+        role.workStartDate || assign.workStartDate
+      ),
+      days: PLAN_DURATION_CHIPS.includes(days) ? days : nearest,
+    };
+    render();
+  };
+
+  root.querySelectorAll<HTMLElement>("[data-plan-task-open]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const itemId = el.dataset.planTaskOpen;
+      const teamId = el.dataset.team;
+      const roleId = el.dataset.role;
+      if (!itemId || !teamId || !roleId) return;
+      openTaskForm(itemId, teamId, roleId);
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-plan-form-member]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!ui.planTaskForm) return;
+      ui.planTaskForm = { ...ui.planTaskForm, memberId: btn.dataset.planFormMember ?? null };
+      render();
+    });
+  });
+  root.querySelectorAll<HTMLButtonElement>("[data-plan-form-week]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!ui.planTaskForm) return;
+      ui.planTaskForm = {
+        ...ui.planTaskForm,
+        startWeek: Number(btn.dataset.planFormWeek) || 0,
+      };
+      render();
+    });
+  });
+  root.querySelectorAll<HTMLButtonElement>("[data-plan-form-days]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!ui.planTaskForm) return;
+      ui.planTaskForm = {
+        ...ui.planTaskForm,
+        days: Number(btn.dataset.planFormDays) || ui.planTaskForm.days,
+      };
+      render();
+    });
+  });
+  root.querySelector("[data-plan-form-cancel]")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    ui.planTaskForm = null;
+    render();
+  });
+  root.querySelector("[data-plan-form-submit]")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const form = ui.planTaskForm;
+    if (!form) return;
+    const start = addWeeks(state.startDate, form.startWeek);
+    const size = nearestSizeFromDays(form.days, szRanges());
+    patchDemandRole(form.itemId, form.teamId, form.roleId, (r) => ({
+      ...r,
+      assigneeId: form.memberId || undefined,
+      workStartDate: snapToMonday(start),
+      days: form.days,
+      size,
+    }));
+    const item = state.items.find((i) => i.id === form.itemId);
+    const member = teamMemberById(form.teamId, form.memberId ?? undefined);
+    logChange(
+      `Планирование «${item?.title ?? form.itemId}»: ${member ? shortFio(member.name) : "исполнитель"} — ${form.days} дн.`,
+      "schedule"
+    );
+    ui.planTaskForm = null;
+    persist();
+  });
+
+  bindPlanBarDrag(root);
 
   root.querySelectorAll<HTMLDetailsElement>("[data-plan-project]").forEach((el) => {
     el.addEventListener("toggle", () => {
@@ -5256,6 +5636,104 @@ function bindPlanningTab() {
       if (!id) return;
       if (el.open) delete ui.planCollapsedItems[id];
       else ui.planCollapsedItems[id] = true;
+    });
+  });
+}
+
+function applyPlanBarPreview(
+  bar: HTMLElement,
+  startWeek: number,
+  endWeek: number,
+  weeks: number
+) {
+  const span = Math.max(1, endWeek - startWeek + 1);
+  const left = (startWeek / weeks) * 100;
+  const width = (span / weeks) * 100;
+  bar.style.left = `${left}%`;
+  bar.style.width = `${Math.max(width, 3)}%`;
+  bar.dataset.startWeek = String(startWeek);
+  bar.dataset.endWeek = String(endWeek);
+}
+
+function bindPlanBarDrag(root: Element) {
+  root.querySelectorAll<HTMLElement>("[data-plan-bar]").forEach((bar) => {
+    bar.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const track = bar.closest<HTMLElement>(".plan-track");
+      if (!track) return;
+      const itemId = bar.dataset.item;
+      const teamId = bar.dataset.team;
+      const roleId = bar.dataset.role;
+      if (!itemId || !teamId) return;
+      const weeks = PLAN_WEEKS;
+      const originStart = Number(bar.dataset.startWeek);
+      const originEnd = Number(bar.dataset.endWeek);
+      if (!Number.isFinite(originStart) || !Number.isFinite(originEnd)) return;
+      const span = Math.max(1, originEnd - originStart + 1);
+      let previewStart = originStart;
+      const grab = bar.getBoundingClientRect();
+      const grabOffset = e.clientX - grab.left;
+      bar.classList.add("is-dragging");
+      document.body.classList.add("plan-dragging");
+      try {
+        bar.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+
+      const onMove = (ev: PointerEvent) => {
+        if (ev.pointerId !== e.pointerId) return;
+        const rect = track.getBoundingClientRect();
+        const weekW = rect.width / weeks;
+        let start = Math.round((ev.clientX - grabOffset - rect.left) / weekW);
+        start = Math.max(0, Math.min(weeks - span, start));
+        previewStart = start;
+        applyPlanBarPreview(bar, start, start + span - 1, weeks);
+      };
+
+      const cleanup = () => {
+        bar.classList.remove("is-dragging");
+        document.body.classList.remove("plan-dragging");
+        bar.removeEventListener("pointermove", onMove);
+        bar.removeEventListener("pointerup", onUp);
+        bar.removeEventListener("pointercancel", onUp);
+        try {
+          bar.releasePointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
+      };
+
+      const onUp = (ev: PointerEvent) => {
+        if (ev.pointerId !== e.pointerId) return;
+        cleanup();
+        if (previewStart === originStart) return;
+        const newStart = snapToMonday(addWeeks(state.startDate, previewStart));
+        if (roleId) {
+          patchDemandRole(itemId, teamId, roleId, (r) => ({
+            ...r,
+            workStartDate: newStart,
+          }));
+        } else {
+          patchDemandAssignment(itemId, teamId, (a) => ({
+            ...a,
+            workStartDate: newStart,
+          }));
+        }
+        const item = state.items.find((i) => i.id === itemId);
+        const team = teamById(teamId);
+        logChange(
+          `Планирование «${item?.title ?? itemId}» / ${team?.name ?? teamId}: старт ${formatDate(newStart)}`,
+          "schedule"
+        );
+        persist();
+      };
+
+      bar.addEventListener("pointermove", onMove);
+      bar.addEventListener("pointerup", onUp);
+      bar.addEventListener("pointercancel", onUp);
     });
   });
 }
@@ -5293,7 +5771,10 @@ function bindUiRest() {
     btn.addEventListener("click", () => {
       const next = normalizeTab(btn.dataset.tab);
       if (next !== "demand") ui.needAddItemId = null;
-      if (next !== "planning") ui.planAddItemId = null;
+      if (next !== "planning") {
+        ui.planAddItemId = null;
+        ui.planTaskForm = null;
+      }
       ui.tab = next;
       render();
     });
@@ -5424,7 +5905,8 @@ function bindUiRest() {
   bindPortfolioDrag();
 
   document.querySelectorAll<HTMLInputElement>(".prio-input").forEach((input) => {
-    const itemId = input.dataset.prioId!;
+    const itemId = input.dataset.prioId;
+    if (!itemId) return;
     const revert = () => {
       const item = state.items.find((i) => i.id === itemId);
       input.value = String(item?.manualRank ?? 1);
@@ -5476,7 +5958,101 @@ function bindUiRest() {
     input.addEventListener("change", commit);
   });
 
+  document.querySelectorAll<HTMLInputElement>("[data-project-prio]").forEach((input) => {
+    const key = input.dataset.projectPrio ?? "";
+    const revert = () => {
+      input.value = input.dataset.projectPrioNow ?? "1";
+    };
+    const commit = () => {
+      const raw = Number(input.value);
+      const now = Number(input.dataset.projectPrioNow);
+      if (!Number.isFinite(raw) || raw < 1) {
+        revert();
+        return;
+      }
+      const priority = Math.round(raw);
+      input.value = String(priority);
+      if (priority === now) return;
+      const group = groupByProjectKey(state.items).find((g) => g.key === key);
+      const title = group?.title ?? key;
+      askPrioConfirm(
+        input,
+        `Сменить приоритет проекта «${escapeHtml(title)}» на <span class="accent">${priority}</span>?`,
+        () => {
+          state.items = moveProjectGroupToPriority(
+            state.items,
+            key,
+            priority,
+            szRanges()
+          );
+          logChange(
+            `Приоритет проекта «${title}»: #${now} → #${priority}`,
+            "priority"
+          );
+          persist();
+        },
+        revert
+      );
+    };
+    input.addEventListener("click", (e) => e.stopPropagation());
+    input.addEventListener("mousedown", (e) => e.stopPropagation());
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        commit();
+      }
+      if (e.key === "Escape") {
+        closePrioPop();
+        revert();
+        input.blur();
+      }
+    });
+    input.addEventListener("change", commit);
+  });
+
+  document.querySelectorAll<HTMLSelectElement>("[data-project-status]").forEach((sel) => {
+    const stop = (e: Event) => {
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    };
+    sel.addEventListener("click", stop, true);
+    sel.addEventListener("mousedown", stop, true);
+    sel.addEventListener("pointerdown", stop, true);
+    sel.addEventListener("change", () => {
+      const key = sel.dataset.projectStatus ?? "";
+      const next = sel.value as ItemStatus;
+      const was = sel.dataset.statusWas ?? "";
+      if (!ITEM_STATUSES.includes(next)) {
+        sel.value = was;
+        return;
+      }
+      if (next === was) return;
+      const group = groupByProjectKey(state.items).find((g) => g.key === key);
+      const title = group?.title ?? key;
+      askAppConfirm(
+        sel,
+        `Сменить статус проекта «${escapeHtml(title)}» на «<strong>${escapeHtml(statusLabel(next))}</strong>»?`,
+        () => {
+          state.items = state.items.map((it) =>
+            demandProjectKey(it) === key ? { ...it, status: next } : it
+          );
+          logChange(
+            `Статус проекта «${title}»: ${was ? statusLabel(was as ItemStatus) : "несколько"} → ${statusLabel(next)}`,
+            "item"
+          );
+          persist();
+        },
+        () => {
+          sel.value = was;
+          sel.className = `status-select${was ? ` badge-status-${was}` : ""}`;
+        },
+        { wide: true, yesLabel: "Да", noLabel: "Отмена" }
+      );
+    });
+  });
+
   document.querySelectorAll<HTMLSelectElement>(".status-select").forEach((sel) => {
+    if (sel.dataset.projectStatus) return;
     const stop = (e: Event) => {
       e.stopPropagation();
       e.stopImmediatePropagation();
@@ -5791,6 +6367,83 @@ function bindUiRest() {
     });
   });
 
+  document.querySelectorAll<HTMLDetailsElement>("[data-team-people]").forEach((el) => {
+    el.addEventListener("toggle", () => {
+      const id = el.dataset.teamPeople;
+      if (!id) return;
+      if (el.open) ui.teamPeopleOpen[id] = true;
+      else delete ui.teamPeopleOpen[id];
+    });
+  });
+
+  document.querySelectorAll<HTMLInputElement>("[data-team-person]").forEach((input) => {
+    const commit = () => {
+      const teamId = input.dataset.teamPerson!;
+      const personId = input.dataset.personId!;
+      const team = state.teams.find((t) => t.id === teamId);
+      const person = team?.members?.find((m) => m.id === personId);
+      if (!team || !person) return;
+      const name = input.value.trim() || person.name;
+      input.value = name;
+      if (name === person.name) return;
+      person.name = name;
+      logChange(`Команда «${team.name}»: ФИО обновлено`, "team");
+      persist();
+    };
+    input.addEventListener("change", commit);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        input.blur();
+      }
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-team-person-del]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const teamId = btn.dataset.teamPersonDel!;
+      const personId = btn.dataset.personId!;
+      const team = state.teams.find((t) => t.id === teamId);
+      if (!team?.members) return;
+      const person = team.members.find((m) => m.id === personId);
+      team.members = team.members.filter((m) => m.id !== personId);
+      logChange(
+        `Команда «${team.name}»: удалён ${person?.name ?? "человек"}`,
+        "team"
+      );
+      persist();
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-team-person-add]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const teamId = btn.dataset.teamPersonAdd!;
+      const team = state.teams.find((t) => t.id === teamId);
+      const input = document.querySelector<HTMLInputElement>(
+        `[data-team-person-new="${CSS.escape(teamId)}"]`
+      );
+      const name = input?.value.trim() || "";
+      if (!team || !name) {
+        input?.focus();
+        return;
+      }
+      team.members = [...(team.members ?? []), { id: uid("p"), name }];
+      ui.teamPeopleOpen[teamId] = true;
+      logChange(`Команда «${team.name}»: добавлен ${name}`, "team");
+      persist();
+    });
+  });
+  document.querySelectorAll<HTMLInputElement>("[data-team-person-new]").forEach((input) => {
+    input.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const teamId = input.dataset.teamPersonNew;
+      document
+        .querySelector<HTMLButtonElement>(`[data-team-person-add="${CSS.escape(teamId ?? "")}"]`)
+        ?.click();
+    });
+  });
+
   document.querySelectorAll<HTMLAnchorElement | HTMLButtonElement>("[data-tab-jump]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.preventDefault();
@@ -5979,11 +6632,13 @@ function bindUiRest() {
       nameInput?.focus();
       return;
     }
+    const id = uid("team");
     state.teams.push({
-      id: uid("team"),
+      id,
       name,
       capacityPw: 3,
       color: newTeamColor(),
+      members: makeSeedTeamMembers(id),
     });
     draftNewTeamColor = null;
     if (nameInput) nameInput.value = "";
