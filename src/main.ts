@@ -14,7 +14,6 @@ import {
   normalizeScheduleMode,
   sortByPriority,
   totalEstimateWeeks,
-  totalEstimateDays,
   sizePlanWeeks,
   sizePlanDays,
   sizeLabel,
@@ -56,6 +55,10 @@ import {
   ChangeLogKind,
   CHANGE_LOG_MAX,
   prependChangeLog,
+  AssignmentDemandStatus,
+  ASSIGNMENT_DEMAND_STATUSES,
+  ASSIGNMENT_DEMAND_LABELS,
+  resolveAssignmentDemandStatus,
 } from "./model";
 import { SEED, PORTFOLIO_PACK_ID } from "./seed";
 import {
@@ -199,9 +202,18 @@ interface UiState {
   scheduleMode: ScheduleMode;
   hiddenCols: HideablePortfolioCol[];
   colPickerOpen: boolean;
-  /** Selected functionality on Потребность */
+  /** Selected functionality on Потребность (legacy detail; optional) */
   needItemId: string | null;
-  needAddOpen: boolean;
+  /** Single-select project chip; null = all projects */
+  needProjectKey: string | null;
+  /** Single-select team filter; null = all teams */
+  needTeamFilter: string | null;
+  /** Functionality whose «+ Добавить команду» picker is open */
+  needAddItemId: string | null;
+  /** `${itemId}:${teamId}` while days input is shown */
+  needDaysEdit: string | null;
+  needCollapsedProjects: Record<string, true>;
+  needCollapsedItems: Record<string, true>;
 }
 
 const SCHEDULE_MODE_META: Record<
@@ -237,7 +249,12 @@ const ui: UiState = {
   hiddenCols: [],
   colPickerOpen: false,
   needItemId: null,
-  needAddOpen: false,
+  needProjectKey: null,
+  needTeamFilter: null,
+  needAddItemId: null,
+  needDaysEdit: null,
+  needCollapsedProjects: {},
+  needCollapsedItems: {},
 };
 
 let state: AppState = structuredClone(SEED);
@@ -3070,11 +3087,37 @@ function demandProjectItems(): WorkItem[] {
   );
 }
 
-function selectedDemandItem(): WorkItem | null {
-  const items = demandProjectItems();
-  if (!items.length) return null;
-  const found = items.find((i) => i.id === ui.needItemId);
-  return found ?? items[0]!;
+function demandProjectKey(item: WorkItem): string {
+  return productProjectName(item.backlog) || "Без проекта";
+}
+
+function demandGroupedItems(): { key: string; title: string; items: WorkItem[] }[] {
+  const map = new Map<string, WorkItem[]>();
+  for (const it of demandProjectItems()) {
+    const key = demandProjectKey(it);
+    const list = map.get(key);
+    if (list) list.push(it);
+    else map.set(key, [it]);
+  }
+  return [...map.entries()].map(([key, items]) => ({ key, title: key, items }));
+}
+
+function demandVisibleGroups(): {
+  key: string;
+  title: string;
+  items: WorkItem[];
+}[] {
+  let groups = demandGroupedItems();
+  if (ui.needProjectKey) {
+    groups = groups.filter((g) => g.key === ui.needProjectKey);
+  }
+  return groups.filter((g) => g.items.length);
+}
+
+function demandStatusClass(status: AssignmentDemandStatus): string {
+  if (status === "pending") return "need-st-pending";
+  if (status === "approved") return "need-st-approved";
+  return "need-st-draft";
 }
 
 function newDemandAssignment(teamId: string): TeamAssignment {
@@ -3084,6 +3127,7 @@ function newDemandAssignment(teamId: string): TeamAssignment {
     size,
     workStartDate: state.startDate,
     days: Math.round(sizePlanDays(size, szRanges())),
+    demandStatus: "draft",
   };
 }
 
@@ -3112,107 +3156,125 @@ function withDemandTeams(
   return { ...rest, assignments: nextAssignments };
 }
 
+function demandAssignRowHtml(item: WorkItem, a: TeamAssignment): string {
+  const t = teamById(a.teamId);
+  const days = assignmentPlanDays(a, szRanges());
+  const st = resolveAssignmentDemandStatus(a, item);
+  const editKey = `${item.id}:${a.teamId}`;
+  const editing = ui.needDaysEdit === editKey;
+  const daysCell = editing
+    ? `<input type="number" class="need-days-input" min="1" step="1" inputmode="numeric" value="${days}" data-need-days="${item.id}" data-team="${a.teamId}" aria-label="Дни" /> <span class="meta">дн.</span>`
+    : `<span class="need-row-days-val">${days} дн.</span>`;
+  const statusOpts = ASSIGNMENT_DEMAND_STATUSES.map(
+    (s) =>
+      `<option value="${s}"${s === st ? " selected" : ""}>${ASSIGNMENT_DEMAND_LABELS[s]}</option>`
+  ).join("");
+  const action =
+    st === "draft"
+      ? `<button type="button" class="btn btn-primary need-send-btn" data-need-send="${item.id}" data-team="${a.teamId}">Отправить</button>`
+      : `<button type="button" class="btn need-change-btn" data-need-revert="${item.id}" data-team="${a.teamId}">Изменить</button>`;
+  return `<div class="need-row">
+    <span class="need-assign-name"><span class="team-dot" style="background:${t?.color ?? "#93999e"}"></span>${escapeHtml(t?.name ?? a.teamId)}</span>
+    <span class="need-row-days">${daysCell}</span>
+    <select class="need-st-select ${demandStatusClass(st)}" data-need-status="${item.id}" data-team="${a.teamId}">${statusOpts}</select>
+    <button type="button" class="need-edit-days" data-need-edit-days="${editKey}">Изменить дни</button>
+    ${action}
+  </div>`;
+}
+
+function demandFnHtml(item: WorkItem, teamId: string): string {
+  const assign = item.assignments.find((a) => a.teamId === teamId);
+  const days = assign ? assignmentPlanDays(assign, szRanges()) : 0;
+  const open = !ui.needCollapsedItems[item.id];
+  const addBtn = assign
+    ? ""
+    : `<button type="button" class="btn need-add-btn" data-need-add-selected="${item.id}">+ Добавить команду</button>`;
+  const body = assign
+    ? demandAssignRowHtml(item, assign)
+    : `<p class="need-fn-empty meta">Команда ещё не назначена. Нажмите «+ Добавить команду», затем «Отправить».</p>`;
+  return `<details class="need-fn" data-need-fn="${item.id}"${open ? " open" : ""}>
+    <summary class="need-fn-sum">
+      <span class="need-fn-left">
+        <span class="need-fn-title">${escapeHtml(item.title)}</span>
+        <span class="need-fn-req">запрошено ${days} дн.</span>
+      </span>
+      ${addBtn}
+    </summary>
+    <div class="need-fn-body">${body}</div>
+  </details>`;
+}
+
 function demandHtml(): string {
-  const items = demandProjectItems();
-  const selected = selectedDemandItem();
-  if (selected && ui.needItemId !== selected.id) ui.needItemId = selected.id;
-
-  const totalDays = items.reduce(
-    (s, it) => s + totalEstimateDays(it, szRanges()),
-    0
-  );
-  const submittedCount = items.filter((i) => i.demandStatus === "submitted")
-    .length;
-
+  const teamId = ui.needTeamFilter;
+  const team = teamId ? teamById(teamId) : null;
+  const allGroups = demandGroupedItems();
   const chips = state.teams
     .map((t) => {
-      const on = selected ? hasTeam(selected, t.id) : false;
-      return `<button type="button" class="need-team-chip${on ? " is-on" : ""}" data-need-team="${t.id}" title="${escapeAttr(on ? "Уже назначена" : "Добавить к выбранной функциональности")}" ${selected ? "" : "disabled"}>
+      const on = teamId === t.id;
+      return `<button type="button" class="need-team-chip${on ? " is-on" : ""}" data-need-team-filter="${t.id}" title="${escapeAttr(on ? "Снять выбор" : "Показать потребность команды")}">
         <span class="team-dot" style="background:${t.color}"></span>
         <span class="need-team-chip-name">${escapeHtml(t.name)}</span>
       </button>`;
     })
     .join("");
 
-  const list = items
-    .map((item) => {
-      const days = totalEstimateDays(item, szRanges());
-      const active = selected?.id === item.id;
-      const sent = item.demandStatus === "submitted";
-      return `<button type="button" class="need-list-item${active ? " is-active" : ""}" data-need-item="${item.id}">
-        <span class="need-list-title">${escapeHtml(item.title)}</span>
-        <span class="need-list-meta">
-          ${sent ? `<span class="need-badge">Отправлено</span>` : ""}
-          <span class="mono">${days} дн.</span>
-          <span class="meta">${item.assignments.length} ком.</span>
-        </span>
-      </button>`;
-    })
-    .join("");
+  let body = `<div class="need-hint meta">Выберите команду сверху — затем проекты и функциональности этой команды. Назначьте её через «+ Добавить команду» и подтвердите «Отправить».</div>`;
 
-  let detail = `<div class="need-detail-empty meta">Нет проектных функциональностей</div>`;
-  if (selected) {
-    const sent = selected.demandStatus === "submitted";
-    const used = new Set(selected.assignments.map((a) => a.teamId));
-    const unused = state.teams.filter((t) => !used.has(t.id));
-    const daysSum = totalEstimateDays(selected, szRanges());
-    const rows = selected.assignments
-      .map((a) => {
-        const t = teamById(a.teamId);
-        const days = assignmentPlanDays(a, szRanges());
-        return `<tr>
-          <td>
-            <span class="need-assign-name">
-              <span class="team-dot" style="background:${t?.color ?? "#93999e"}"></span>
-              ${escapeHtml(t?.name ?? a.teamId)}
-            </span>
-          </td>
-          <td class="need-days-cell">
-            <input type="number" class="need-days-input" min="1" step="1" inputmode="numeric" value="${days}" data-need-days="${selected.id}" data-team="${a.teamId}" aria-label="Дни" />
-            <span class="meta">дн.</span>
-          </td>
-          <td class="need-remove-cell">
-            <button type="button" class="btn btn-ghost need-remove-btn" data-need-remove="${a.teamId}" title="Убрать команду">×</button>
-          </td>
-        </tr>`;
+  if (teamId && team) {
+    const groups = demandVisibleGroups();
+    const visibleItems = groups.flatMap((g) => g.items);
+    const teamAssigns = visibleItems
+      .map((it) => {
+        const a = it.assignments.find((x) => x.teamId === teamId);
+        return a ? { item: it, a } : null;
+      })
+      .filter((x): x is { item: WorkItem; a: TeamAssignment } => x != null);
+    const fnCount = teamAssigns.length;
+    const totalDays = teamAssigns.reduce(
+      (s, x) => s + assignmentPlanDays(x.a, szRanges()),
+      0
+    );
+    const pendingCount = teamAssigns.filter(
+      (x) => resolveAssignmentDemandStatus(x.a, x.item) === "pending"
+    ).length;
+    const approvedCount = teamAssigns.filter(
+      (x) => resolveAssignmentDemandStatus(x.a, x.item) === "approved"
+    ).length;
+
+    const projectChips = allGroups
+      .map((g) => {
+        const on = ui.needProjectKey === g.key;
+        return `<button type="button" class="need-project-chip${on ? " is-on" : ""}" data-need-project-chip="${escapeAttr(g.key)}">${escapeHtml(g.title)}</button>`;
       })
       .join("");
 
-    const picker = unused.length
-      ? `<details class="need-add-picker"${ui.needAddOpen ? " open" : ""}>
-          <summary class="btn">+ Добавить команду</summary>
-          <div class="need-add-menu">
-            ${unused
-              .map(
-                (t) =>
-                  `<button type="button" class="need-add-option" data-need-add="${t.id}"><span class="team-dot" style="background:${t.color}"></span>${escapeHtml(t.name)}</button>`
-              )
-              .join("")}
-          </div>
-        </details>`
-      : `<span class="meta">Все команды назначены</span>`;
+    const tree = groups
+      .map((g) => {
+        const open = !ui.needCollapsedProjects[g.key];
+        const fns = g.items.map((it) => demandFnHtml(it, teamId)).join("");
+        const gDays = g.items.reduce((s, it) => {
+          const a = it.assignments.find((x) => x.teamId === teamId);
+          return s + (a ? assignmentPlanDays(a, szRanges()) : 0);
+        }, 0);
+        return `<details class="need-project" data-need-project="${escapeAttr(g.key)}"${open ? " open" : ""}>
+          <summary class="need-project-sum">
+            <span class="need-project-title">${escapeHtml(g.title)}</span>
+            <span class="need-project-meta">${g.items.length} функц. · ${gDays} дн.</span>
+          </summary>
+          <div class="need-project-body">${fns}</div>
+        </details>`;
+      })
+      .join("");
 
-    detail = `
-      <div class="need-detail-head">
-        <div>
-          <h3>${escapeHtml(selected.title)}</h3>
-          <p class="meta">запрошено ${daysSum} дн.${sent ? " · <span class=\"need-badge\">Отправлено</span>" : ""}</p>
-        </div>
-        ${picker}
+    body = `
+      <div class="need-projects" aria-label="Проекты">${projectChips}</div>
+      <div class="need-stats">
+        <div class="need-stat"><div class="label">Функциональностей</div><div class="value">${fnCount}</div></div>
+        <div class="need-stat"><div class="label">Запрошено дней</div><div class="value">${totalDays}</div></div>
+        <div class="need-stat"><div class="label">На согласовании</div><div class="value is-pending">${pendingCount}</div></div>
+        <div class="need-stat"><div class="label">Согласовано</div><div class="value is-approved">${approvedCount}</div></div>
       </div>
-      ${
-        selected.assignments.length
-          ? `<table class="need-assign-table">
-              <thead><tr><th>Команда</th><th>Дни</th><th></th></tr></thead>
-              <tbody>${rows}</tbody>
-            </table>`
-          : `<p class="need-detail-empty meta">Выберите команду сверху или нажмите «+ Добавить команду»</p>`
-      }
-      <div class="need-detail-foot">
-        <button type="button" class="btn btn-primary" id="needSubmitBtn" ${
-          selected.assignments.length && !sent ? "" : "disabled"
-        }>${sent ? "Отправлено" : "Отправить"}</button>
-      </div>
+      <div class="need-tree">${tree || `<p class="need-hint meta">Нет функциональностей</p>`}</div>
     `;
   }
 
@@ -3220,22 +3282,14 @@ function demandHtml(): string {
     <div class="need-page">
       <div class="panel-header need-page-head">
         <div>
-          <h2>Потребность</h2>
-          <p class="meta">Выберите функциональность слева, затем команду сверху. Укажите дни и нажмите «Отправить».</p>
+          <h2>Потребность по проекту</h2>
+          <p class="meta">Сначала выберите команду. Затем смотрите её проекты и функциональности, назначайте через «+ Добавить команду» и подтверждайте «Отправить».</p>
         </div>
-      </div>
-      <div class="need-stats">
-        <div class="need-stat"><div class="label">Функциональностей</div><div class="value">${items.length}</div></div>
-        <div class="need-stat"><div class="label">Запрошено дней</div><div class="value">${totalDays}</div></div>
-        <div class="need-stat"><div class="label">Отправлено</div><div class="value">${submittedCount}</div></div>
       </div>
       <div class="need-teams" aria-label="Команды">
         ${chips || `<span class="meta">Нет команд в справочнике</span>`}
       </div>
-      <div class="need-layout">
-        <div class="need-list" role="list">${list || `<div class="empty">Нет проектов</div>`}</div>
-        <div class="panel need-detail">${detail}</div>
-      </div>
+      ${body}
     </div>
   `;
 }
@@ -4452,6 +4506,7 @@ function readAssignments(): TeamAssignment[] {
           ? existing.days
           : Math.round(sizePlanDays(size, szRanges()));
     }
+    if (existing?.demandStatus) next.demandStatus = existing.demandStatus;
     assignments.push(next);
   }
   return assignments;
@@ -4611,7 +4666,7 @@ function addDemandTeam(itemId: string, teamId: string) {
   patchDemandItem(itemId, (it) =>
     withDemandTeams(it, [...it.assignments, newDemandAssignment(teamId)])
   );
-  ui.needAddOpen = false;
+  ui.needAddItemId = null;
   logChange(
     `Потребность «${item.title}»: добавлена команда «${team.name}»`,
     "team"
@@ -4619,58 +4674,74 @@ function addDemandTeam(itemId: string, teamId: string) {
   persist();
 }
 
+function patchDemandAssignment(
+  itemId: string,
+  teamId: string,
+  fn: (a: TeamAssignment) => TeamAssignment
+) {
+  patchDemandItem(itemId, (it) => ({
+    ...it,
+    assignments: it.assignments.map((a) => (a.teamId === teamId ? fn(a) : a)),
+  }));
+}
+
 function bindDemandTab() {
   const root = document.querySelector(".need-page");
   if (!root) return;
 
-  root.querySelectorAll<HTMLButtonElement>("[data-need-item]").forEach((btn) => {
+  root.querySelectorAll<HTMLButtonElement>("[data-need-team-filter]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      ui.needItemId = btn.dataset.needItem ?? null;
-      ui.needAddOpen = false;
+      const id = btn.dataset.needTeamFilter ?? "";
+      ui.needTeamFilter = ui.needTeamFilter === id ? null : id;
+      ui.needAddItemId = null;
       render();
     });
   });
 
-  root.querySelectorAll<HTMLButtonElement>("[data-need-team]").forEach((btn) => {
+  root.querySelectorAll<HTMLButtonElement>("[data-need-project-chip]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const selected = selectedDemandItem();
-      const teamId = btn.dataset.needTeam;
-      if (!selected || !teamId) return;
-      addDemandTeam(selected.id, teamId);
+      const key = btn.dataset.needProjectChip ?? "";
+      ui.needProjectKey = ui.needProjectKey === key ? null : key;
+      render();
     });
   });
 
-  const picker = root.querySelector<HTMLDetailsElement>(".need-add-picker");
-  picker?.addEventListener("toggle", () => {
-    ui.needAddOpen = picker.open;
-  });
-
-  root.querySelectorAll<HTMLButtonElement>("[data-need-add]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const selected = selectedDemandItem();
-      const teamId = btn.dataset.needAdd;
-      if (!selected || !teamId) return;
-      addDemandTeam(selected.id, teamId);
+  root.querySelectorAll<HTMLButtonElement>("[data-need-add-selected]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const itemId = btn.dataset.needAddSelected;
+      const teamId = ui.needTeamFilter;
+      if (!itemId || !teamId) return;
+      addDemandTeam(itemId, teamId);
     });
   });
 
-  root.querySelectorAll<HTMLButtonElement>("[data-need-remove]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const selected = selectedDemandItem();
-      const teamId = btn.dataset.needRemove;
-      if (!selected || !teamId) return;
-      const team = teamById(teamId);
-      patchDemandItem(selected.id, (it) =>
-        withDemandTeams(
-          it,
-          it.assignments.filter((a) => a.teamId !== teamId)
-        )
-      );
-      logChange(
-        `Потребность «${selected.title}»: снята команда «${team?.name ?? teamId}»`,
-        "team"
-      );
-      persist();
+  root.querySelectorAll<HTMLDetailsElement>("[data-need-project]").forEach((el) => {
+    el.addEventListener("toggle", () => {
+      const key = el.dataset.needProject;
+      if (!key) return;
+      if (el.open) delete ui.needCollapsedProjects[key];
+      else ui.needCollapsedProjects[key] = true;
+    });
+  });
+
+  root.querySelectorAll<HTMLDetailsElement>("[data-need-fn]").forEach((el) => {
+    el.addEventListener("toggle", () => {
+      const id = el.dataset.needFn;
+      if (!id) return;
+      if (el.open) delete ui.needCollapsedItems[id];
+      else ui.needCollapsedItems[id] = true;
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-need-edit-days]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const key = btn.dataset.needEditDays ?? null;
+      ui.needDaysEdit = ui.needDaysEdit === key ? null : key;
+      render();
     });
   });
 
@@ -4683,17 +4754,20 @@ function bindDemandTab() {
       const assign = item?.assignments.find((a) => a.teamId === teamId);
       if (!item || !assign) return;
       const raw = Math.round(Number(input.value));
-      const days = Number.isFinite(raw) && raw >= 1 ? raw : assignmentPlanDays(assign, szRanges());
+      const days =
+        Number.isFinite(raw) && raw >= 1
+          ? raw
+          : assignmentPlanDays(assign, szRanges());
       input.value = String(days);
-      if (assign.days === days) return;
+      if (assign.days === days) {
+        ui.needDaysEdit = null;
+        render();
+        return;
+      }
       const size = nearestSizeFromDays(days, szRanges());
       const team = teamById(teamId);
-      patchDemandItem(itemId, (it) => ({
-        ...it,
-        assignments: it.assignments.map((a) =>
-          a.teamId === teamId ? { ...a, days, size } : a
-        ),
-      }));
+      patchDemandAssignment(itemId, teamId, (a) => ({ ...a, days, size }));
+      ui.needDaysEdit = null;
       logChange(
         `Потребность «${item.title}»: ${team?.name ?? teamId} — ${days} дн.`,
         "team"
@@ -4707,18 +4781,56 @@ function bindDemandTab() {
         input.blur();
       }
     });
+    input.focus();
+    input.select();
   });
 
-  document.querySelector("#needSubmitBtn")?.addEventListener("click", () => {
-    const selected = selectedDemandItem();
-    if (!selected || !selected.assignments.length) return;
-    if (selected.demandStatus === "submitted") return;
-    patchDemandItem(selected.id, (it) => ({
-      ...it,
-      demandStatus: "submitted",
-    }));
-    logChange(`Отправлена потребность: «${selected.title}»`, "item");
-    persist();
+  root.querySelectorAll<HTMLSelectElement>("[data-need-status]").forEach((sel) => {
+    sel.addEventListener("change", () => {
+      const itemId = sel.dataset.needStatus;
+      const teamId = sel.dataset.team;
+      const next = sel.value as AssignmentDemandStatus;
+      if (!itemId || !teamId) return;
+      if (!ASSIGNMENT_DEMAND_STATUSES.includes(next)) return;
+      const item = state.items.find((i) => i.id === itemId);
+      patchDemandAssignment(itemId, teamId, (a) => ({ ...a, demandStatus: next }));
+      logChange(
+        `Потребность «${item?.title ?? itemId}»: ${ASSIGNMENT_DEMAND_LABELS[next]}`,
+        "team"
+      );
+      persist();
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-need-send]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const itemId = btn.dataset.needSend;
+      const teamId = btn.dataset.team;
+      if (!itemId || !teamId) return;
+      const item = state.items.find((i) => i.id === itemId);
+      patchDemandAssignment(itemId, teamId, (a) => ({
+        ...a,
+        demandStatus: "pending",
+      }));
+      logChange(
+        `Отправлена потребность: «${item?.title ?? itemId}»`,
+        "item"
+      );
+      persist();
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-need-revert]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const itemId = btn.dataset.needRevert;
+      const teamId = btn.dataset.team;
+      if (!itemId || !teamId) return;
+      patchDemandAssignment(itemId, teamId, (a) => ({
+        ...a,
+        demandStatus: "draft",
+      }));
+      persist();
+    });
   });
 }
 
@@ -4754,7 +4866,7 @@ function bindUiRest() {
   document.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const next = normalizeTab(btn.dataset.tab);
-      if (next !== "demand") ui.needAddOpen = false;
+      if (next !== "demand") ui.needAddItemId = null;
       ui.tab = next;
       render();
     });

@@ -207,8 +207,23 @@ export function parseOptionalDays(raw: unknown): number | undefined {
   return n;
 }
 
-/** Demand tab: submitted after «Отправить». Absent = черновик. */
+/** Legacy item-level flag after «Отправить». Prefer assignment `demandStatus`. */
 export type DemandStatus = "submitted";
+
+/** Per-assignment потребность status (Черновик / На согласовании / Согласовано). */
+export type AssignmentDemandStatus = "draft" | "pending" | "approved";
+
+export const ASSIGNMENT_DEMAND_STATUSES: AssignmentDemandStatus[] = [
+  "draft",
+  "pending",
+  "approved",
+];
+
+export const ASSIGNMENT_DEMAND_LABELS: Record<AssignmentDemandStatus, string> = {
+  draft: "Черновик",
+  pending: "На согласовании",
+  approved: "Согласовано",
+};
 
 export function parseDemandStatus(raw: unknown): DemandStatus | undefined {
   const s = String(raw ?? "").toLowerCase().trim();
@@ -221,6 +236,34 @@ export function parseDemandStatus(raw: unknown): DemandStatus | undefined {
     return "submitted";
   }
   return undefined;
+}
+
+export function parseAssignmentDemandStatus(
+  raw: unknown
+): AssignmentDemandStatus | undefined {
+  const s = String(raw ?? "").toLowerCase().trim();
+  if (!s) return undefined;
+  if (
+    s === "pending" ||
+    s === "submitted" ||
+    s === "sent" ||
+    s === "на согласовании"
+  ) {
+    return "pending";
+  }
+  if (s === "approved" || s === "согласовано") return "approved";
+  if (s === "draft" || s === "черновик") return "draft";
+  return undefined;
+}
+
+export function resolveAssignmentDemandStatus(
+  a: TeamAssignment,
+  item?: WorkItem
+): AssignmentDemandStatus {
+  return (
+    parseAssignmentDemandStatus(a.demandStatus) ??
+    (item?.demandStatus === "submitted" ? "pending" : "draft")
+  );
 }
 
 export interface Team {
@@ -243,6 +286,8 @@ export interface TeamAssignment {
    * When set, this is the effort source of truth; `size` is kept in sync.
    */
   days?: number;
+  /** Потребность row status; default Черновик. */
+  demandStatus?: AssignmentDemandStatus;
 }
 
 export interface WorkItem {
@@ -1379,6 +1424,7 @@ export function normalizeState(raw: unknown): AppState | null {
 
   const items: WorkItem[] = data.items.map((row) => {
     const r = row as Record<string, unknown>;
+    const itemDemand = parseDemandStatus(r.demandStatus);
     let assignments: TeamAssignment[] = [];
     if (Array.isArray(r.assignments) && r.assignments.length) {
       assignments = (r.assignments as Record<string, unknown>[])
@@ -1393,6 +1439,9 @@ export function normalizeState(raw: unknown): AppState | null {
               : days != null
                 ? nearestSizeFromDays(days)
                 : pwToSize(Number(a.estimatePw) || 1, cap);
+          const demandStatus =
+            parseAssignmentDemandStatus(a.demandStatus) ??
+            (itemDemand === "submitted" ? "pending" : undefined);
           return {
             teamId,
             size,
@@ -1404,6 +1453,7 @@ export function normalizeState(raw: unknown): AppState | null {
               )
             ),
             ...(days != null ? { days } : {}),
+            ...(demandStatus ? { demandStatus } : {}),
           };
         });
     } else if (typeof r.teamId === "string") {
