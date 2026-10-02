@@ -514,67 +514,6 @@ function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
   });
 }
 
-const THEME_KEY = "vi-planer-theme";
-type AppTheme = "vi" | "portal";
-
-function readStoredTheme(): AppTheme {
-  try {
-    const raw = localStorage.getItem(THEME_KEY);
-    if (raw === "vi" || raw === "portal") return raw;
-  } catch {
-    /* private mode */
-  }
-  return "portal";
-}
-
-function currentTheme(): AppTheme {
-  const t = document.documentElement.getAttribute("data-theme");
-  return t === "vi" || t === "portal" ? t : "portal";
-}
-
-function applyTheme(theme: AppTheme) {
-  document.documentElement.setAttribute("data-theme", theme);
-  try {
-    localStorage.setItem(THEME_KEY, theme);
-  } catch {
-    /* private mode */
-  }
-}
-
-function themeSegHtml(compact: boolean): string {
-  const t = currentTheme();
-  return `
-    <div class="schedule-mode-seg theme-seg${compact ? " theme-seg-compact" : ""}" role="radiogroup" aria-label="Тема">
-      <button
-        type="button"
-        class="schedule-mode-btn${t === "vi" ? " is-active" : ""}"
-        data-theme-choice="vi"
-        aria-pressed="${t === "vi" ? "true" : "false"}"
-        title="Тема VI Planer"
-      >VI Planer</button>
-      <button
-        type="button"
-        class="schedule-mode-btn${t === "portal" ? " is-active" : ""}"
-        data-theme-choice="portal"
-        aria-pressed="${t === "portal" ? "true" : "false"}"
-        title="Тема портала ВИ.ру"
-      >Портал ВИ.ру</button>
-    </div>
-  `;
-}
-
-function bindThemeControls() {
-  document.querySelectorAll<HTMLButtonElement>("[data-theme-choice]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const next = btn.dataset.themeChoice;
-      if (next !== "vi" && next !== "portal") return;
-      if (next === currentTheme()) return;
-      applyTheme(next);
-      render();
-    });
-  });
-}
-
 const COL_WIDTH_KEY = "vi-planer-col-widths";
 const COL_VISIBILITY_KEY = "vi-planer-col-hidden";
 const SCHEDULE_MODE_KEY = "vi-planer-schedule-mode";
@@ -877,7 +816,7 @@ function measureColMinWidth(label: string, col?: PortfolioCol): number {
   const probe = document.createElement("span");
   probe.textContent = label;
   probe.style.cssText =
-    "position:absolute;visibility:hidden;white-space:nowrap;font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;font-family:IBM Plex Sans,system-ui,sans-serif;padding:0;";
+    "position:absolute;visibility:hidden;white-space:nowrap;font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;font-family:ViSans,Arial,sans-serif;padding:0;";
   document.body.appendChild(probe);
   const w = Math.ceil(probe.getBoundingClientRect().width);
   probe.remove();
@@ -3195,18 +3134,6 @@ function settingsHtml(rollups: ItemSchedule[]): string {
     <div class="settings-stack">
       <div class="panel">
         <div class="panel-header">
-          <h2>Тема</h2>
-        </div>
-        <div class="settings-theme-body">
-          <p class="meta">
-            Цвета, шрифт и скругления. «Портал ВИ.ру» — токены корпоративного портала.
-            «VI Planer» возвращает прежний вид.
-          </p>
-          ${themeSegHtml(false)}
-        </div>
-      </div>
-      <div class="panel">
-        <div class="panel-header">
           <h2>Старт планирования</h2>
         </div>
         <div class="settings-plan-start">
@@ -4258,7 +4185,6 @@ function render() {
         <div class="top-actions">
           <span class="release-stamp" title="Дата релиза">updated ${RELEASE_UPDATED}</span>
           <span class="sync-badge" id="syncStatus" data-status="${getSyncStatus()}">${syncStatusLabel(getSyncStatus())}</span>
-          ${themeSegHtml(true)}
           <button class="btn" id="exportPdfBtn">Экспорт PDF</button>
         </div>
         <p class="subtitle">
@@ -4492,8 +4418,6 @@ function bind() {
 }
 
 function bindUiRest() {
-  bindThemeControls();
-
   document.querySelector("#brandHomeBtn")?.addEventListener("click", () => {
     ui.tab = "portfolio";
     render();
@@ -5636,8 +5560,6 @@ async function exportPortfolioReportPdf() {
     }
   }
 }
-
-applyTheme(readStoredTheme());
 
 async function bootstrap() {
   state = await loadState();
