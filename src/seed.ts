@@ -1,5 +1,6 @@
 import {
   AppState,
+  CLEARED_DEMAND_TEAMS_V1,
   ensureUniquePriorities,
   uniqCatalogNames,
   containerNameFromBacklog,
@@ -34,6 +35,7 @@ const SEED_RAW: AppState = {
   demoVariantA: true,
   demoVariantB: false,
   portfolioPack: PORTFOLIO_PACK_ID,
+  clearedDemandTeams: CLEARED_DEMAND_TEAMS_V1,
   teams: [
     {
       id: "data-office",
@@ -262,9 +264,7 @@ const SEED_RAW: AppState = {
       title: "Налажены сквозная аналитика и SLA (командой Data-office)",
       type: "project",
       backlog: "Единая операционная модель",
-      assignments: [
-        { teamId: "data-office", size: "S", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -280,9 +280,7 @@ const SEED_RAW: AppState = {
       title: "Оптимизировано управление исполнителями и рабочими очередями",
       type: "project",
       backlog: "Единая операционная модель",
-      assignments: [
-        { teamId: "crm", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -299,10 +297,7 @@ const SEED_RAW: AppState = {
       title: "Выполнена продуктовая проработка, архитектура и аналитика по реализации одной сущности обращения (претензия + ФОК)",
       type: "project",
       backlog: "Единая операционная модель",
-      assignments: [
-        { teamId: "crm", size: "M", workStartDate: START },
-        { teamId: "crm-prod-prorabotka", size: "S", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -319,11 +314,7 @@ const SEED_RAW: AppState = {
       title: "Сбор CSAT по закрытым обращениям (к обсуждению с клиентским опытом и сайтом)",
       type: "project",
       backlog: "Единая операционная модель",
-      assignments: [
-        { teamId: "crm-analitika", size: "S", workStartDate: START },
-        { teamId: "crm-razrabotka", size: "M", workStartDate: START },
-        { teamId: "crm", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -340,9 +331,7 @@ const SEED_RAW: AppState = {
       title: "Реализация поиска на странице обращений на сайте",
       type: "project",
       backlog: "Единая операционная модель",
-      assignments: [
-        { teamId: "tbd", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -358,10 +347,7 @@ const SEED_RAW: AppState = {
       title: "Реализовано повторное открытие обращения с выбором причины",
       type: "project",
       backlog: "Единая операционная модель",
-      assignments: [
-        { teamId: "crm", size: "M", workStartDate: START },
-        { teamId: "sayt-lk", size: "S", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -378,10 +364,7 @@ const SEED_RAW: AppState = {
       title: "Возможность обмена файлами внутри обращения с клиентами",
       type: "project",
       backlog: "Единая операционная модель",
-      assignments: [
-        { teamId: "crm", size: "XS", workStartDate: START },
-        { teamId: "sayt-lk", size: "L", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -398,10 +381,7 @@ const SEED_RAW: AppState = {
       title: "Возможность обмена сообщениями внутри обращения с клиентами",
       type: "project",
       backlog: "Единая операционная модель",
-      assignments: [
-        { teamId: "crm", size: "S", workStartDate: START },
-        { teamId: "sayt-lk", size: "S", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -418,10 +398,7 @@ const SEED_RAW: AppState = {
       title: "Подключены проактивные уведомления (Клиент получает уведомления в предпочтительном канале)",
       type: "project",
       backlog: "Единая операционная модель",
-      assignments: [
-        { teamId: "crm-touch", size: "L", workStartDate: START },
-        { teamId: "sayt-lk", size: "S", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -438,10 +415,7 @@ const SEED_RAW: AppState = {
       title: "Реализована админка редактирования обращений на сайте (к обсуждению)",
       type: "project",
       backlog: "Единая операционная модель",
-      assignments: [
-        { teamId: "crm", size: "S", workStartDate: START },
-        { teamId: "sayt", size: "S", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -458,11 +432,7 @@ const SEED_RAW: AppState = {
       title: "Вариант HLD 1.1. Оркестрация на OMS (Своими силами) — OMS/ARM",
       type: "project",
       backlog: "Подарочные сертификаты",
-      assignments: [
-        { teamId: "oms-arm-analitika", size: "L", workStartDate: START },
-        { teamId: "oms-arm-razrabotka", size: "XL", workStartDate: START },
-        { teamId: "oms-arm", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -479,11 +449,7 @@ const SEED_RAW: AppState = {
       title: "Вариант HLD 1.1. Оркестрация на OMS (Своими силами) — САЙТ Выбор",
       type: "project",
       backlog: "Подарочные сертификаты",
-      assignments: [
-        { teamId: "sayt-vybor-analitika", size: "XL", workStartDate: START },
-        { teamId: "sayt-vybor-razrabotka", size: "XXL", workStartDate: START },
-        { teamId: "sayt-vybor", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -500,12 +466,7 @@ const SEED_RAW: AppState = {
       title: "Вариант HLD 1.1. Оркестрация на OMS (Своими силами) — ФД",
       type: "project",
       backlog: "Подарочные сертификаты",
-      assignments: [
-        { teamId: "fd-analitika", size: "L", workStartDate: START },
-        { teamId: "fd-oplaty", size: "L", workStartDate: START },
-        { teamId: "fd-dokumenty", size: "L", workStartDate: START },
-        { teamId: "fd", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -522,10 +483,7 @@ const SEED_RAW: AppState = {
       title: "Вариант HLD 1.1. Оркестрация на OMS (Своими силами) — 1C",
       type: "project",
       backlog: "Подарочные сертификаты",
-      assignments: [
-        { teamId: "1s-razrabotka", size: "L", workStartDate: START },
-        { teamId: "1s", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -542,11 +500,7 @@ const SEED_RAW: AppState = {
       title: "Вариант HLD 2.1. (Силами подрядчика) — OMS/ARM",
       type: "project",
       backlog: "Подарочные сертификаты",
-      assignments: [
-        { teamId: "oms-arm-analitika", size: "L", workStartDate: START },
-        { teamId: "oms-arm-razrabotka", size: "XL", workStartDate: START },
-        { teamId: "oms-arm", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -563,11 +517,7 @@ const SEED_RAW: AppState = {
       title: "Вариант HLD 2.1. (Силами подрядчика) — САЙТ Выбор",
       type: "project",
       backlog: "Подарочные сертификаты",
-      assignments: [
-        { teamId: "sayt-vybor-analitika", size: "L", workStartDate: START },
-        { teamId: "sayt-vybor-razrabotka", size: "XXL", workStartDate: START },
-        { teamId: "sayt-vybor", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -584,12 +534,7 @@ const SEED_RAW: AppState = {
       title: "Вариант HLD 2.1. (Силами подрядчика) — ФД",
       type: "project",
       backlog: "Подарочные сертификаты",
-      assignments: [
-        { teamId: "fd-analitika", size: "L", workStartDate: START },
-        { teamId: "fd-oplaty", size: "L", workStartDate: START },
-        { teamId: "fd-dokumenty", size: "L", workStartDate: START },
-        { teamId: "fd", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -606,10 +551,7 @@ const SEED_RAW: AppState = {
       title: "Вариант HLD 2.1. (Силами подрядчика) — 1C",
       type: "project",
       backlog: "Подарочные сертификаты",
-      assignments: [
-        { teamId: "1s-razrabotka", size: "L", workStartDate: START },
-        { teamId: "1s", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -626,9 +568,7 @@ const SEED_RAW: AppState = {
       title: "Mobile ID успешно внедрен на сайте.",
       type: "project",
       backlog: "Mobile ID (SIM Push)",
-      assignments: [
-        { teamId: "tbd", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -644,9 +584,7 @@ const SEED_RAW: AppState = {
       title: "Mobile ID успешно внедрен в мобильном приложении iOS.",
       type: "project",
       backlog: "Mobile ID (SIM Push)",
-      assignments: [
-        { teamId: "tbd", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -662,9 +600,7 @@ const SEED_RAW: AppState = {
       title: "Mobile ID успешно внедрен в мобильном приложении Android.",
       type: "project",
       backlog: "Mobile ID (SIM Push)",
-      assignments: [
-        { teamId: "tbd", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -680,9 +616,7 @@ const SEED_RAW: AppState = {
       title: "SMS используется только как резервный сценарий.",
       type: "project",
       backlog: "Mobile ID (SIM Push)",
-      assignments: [
-        { teamId: "tbd", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -698,9 +632,7 @@ const SEED_RAW: AppState = {
       title: "Получен прогнозируемый экономический эффект.",
       type: "project",
       backlog: "Mobile ID (SIM Push)",
-      assignments: [
-        { teamId: "tbd", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -716,9 +648,7 @@ const SEED_RAW: AppState = {
       title: "Не ухудшена текущая конверсия регистрации и авторизации.",
       type: "project",
       backlog: "Mobile ID (SIM Push)",
-      assignments: [
-        { teamId: "tbd", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -734,9 +664,7 @@ const SEED_RAW: AppState = {
       title: "Среднее время авторизации сокращено относительно текущего процесса.",
       type: "project",
       backlog: "Mobile ID (SIM Push)",
-      assignments: [
-        { teamId: "tbd", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -752,11 +680,7 @@ const SEED_RAW: AppState = {
       title: "Кнопка «Купить в кредит» отображается только у B2B-клиентов из выборки при выполнении условий банка и ВИ. В остальных случаях - скрыта или заблокирована",
       type: "project",
       backlog: "Кредитование Б2Б",
-      assignments: [
-        { teamId: "sayt-oformlenie-analitika", size: "M", workStartDate: START },
-        { teamId: "sayt-oformlenie-razrabotka", size: "XS", workStartDate: START },
-        { teamId: "sayt-oformlenie", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -773,11 +697,7 @@ const SEED_RAW: AppState = {
       title: "Создание кредитной заявки с уникальным ID и привязкой к заказу. Данные безопасно передаются банку, переход на сайт банка и возврат на ВИ (успешный/неуспешный) работают корректно.",
       type: "project",
       backlog: "Кредитование Б2Б",
-      assignments: [
-        { teamId: "sayt-oformlenie", size: "L", workStartDate: START },
-        { teamId: "fd", size: "M", workStartDate: START },
-        { teamId: "1s", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -794,11 +714,7 @@ const SEED_RAW: AppState = {
       title: "Банк самостоятельно проводит скоринг, информирование и подписание договора. ВИ информирует пользователя о роли банка.",
       type: "project",
       backlog: "Кредитование Б2Б",
-      assignments: [
-        { teamId: "sayt-oformlenie-analitika", size: "XS", workStartDate: START },
-        { teamId: "sayt-oformlenie-razrabotka", size: "XS", workStartDate: START },
-        { teamId: "sayt-oformlenie", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -815,11 +731,7 @@ const SEED_RAW: AppState = {
       title: "ВИ не признает заказ оплаченным до официального подтверждения от банка. После получения статуса заказ передается в стандартную доставку.",
       type: "project",
       backlog: "Кредитование Б2Б",
-      assignments: [
-        { teamId: "sayt-oformlenie-analitika", size: "M", workStartDate: START },
-        { teamId: "sayt-oformlenie-razrabotka", size: "XS", workStartDate: START },
-        { teamId: "sayt-oformlenie", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -836,11 +748,7 @@ const SEED_RAW: AppState = {
       title: "Корректная обработка ошибок, отказов и недоступности банка. Незавершенный заказ сохраняет возможность оплаты другим способом до истечения тайм-аута",
       type: "project",
       backlog: "Кредитование Б2Б",
-      assignments: [
-        { teamId: "sayt-oformlenie-analitika", size: "M", workStartDate: START },
-        { teamId: "sayt-oformlenie-razrabotka", size: "XS", workStartDate: START },
-        { teamId: "sayt-oformlenie", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -857,10 +765,7 @@ const SEED_RAW: AppState = {
       title: "[Q3 2026][Реализация][База] NPS + CSAT",
       type: "project",
       backlog: "B2b онлайн платформа",
-      assignments: [
-        { teamId: "crm", size: "M", workStartDate: START },
-        { teamId: "sayt-lk-b2b", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -877,10 +782,7 @@ const SEED_RAW: AppState = {
       title: "[Q32026 Реализация][База] Авто подтверждение постоплатных заказов",
       type: "project",
       backlog: "B2b онлайн платформа",
-      assignments: [
-        { teamId: "oms-arm", size: "M", workStartDate: START },
-        { teamId: "sayt-lk-b2b", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -897,9 +799,7 @@ const SEED_RAW: AppState = {
       title: "[Q32026 Реализация][База] Сохранение корзины по снэпшотам",
       type: "project",
       backlog: "B2b онлайн платформа",
-      assignments: [
-        { teamId: "sayt-oformlenie", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -915,9 +815,7 @@ const SEED_RAW: AppState = {
       title: "[Q42026 Реализация][База] Поиск товаров по списку. Аналоги",
       type: "project",
       backlog: "B2b онлайн платформа",
-      assignments: [
-        { teamId: "sayt-vybor-i-navigacia", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -933,9 +831,7 @@ const SEED_RAW: AppState = {
       title: "[Q42026 Реализация][База] [Фильтры] Фильтр по сроку доставки",
       type: "project",
       backlog: "B2b онлайн платформа",
-      assignments: [
-        { teamId: "sayt-vybor-i-navigacia", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -951,10 +847,7 @@ const SEED_RAW: AppState = {
       title: "[Q42026 Реализация][База][Заказы] Редактирование логистических данных",
       type: "project",
       backlog: "B2b онлайн платформа",
-      assignments: [
-        { teamId: "oms-arm", size: "M", workStartDate: START },
-        { teamId: "sayt-lk-b2b", size: "XS", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -971,10 +864,7 @@ const SEED_RAW: AppState = {
       title: "[Q42026 Реализация][База] Скачивание заказа в xlsx",
       type: "project",
       backlog: "B2b онлайн платформа",
-      assignments: [
-        { teamId: "sayt-lk-b2b", size: "XS", workStartDate: START },
-        { teamId: "sayt-lk-b2b-frontend", size: "XS", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -991,12 +881,7 @@ const SEED_RAW: AppState = {
       title: "[Q42026 Реализация][База] редактирования состава заказа при согласовании",
       type: "project",
       backlog: "B2b онлайн платформа",
-      assignments: [
-        { teamId: "sayt-lk-b2b", size: "S", workStartDate: START },
-        { teamId: "sayt-lk-b2b-sistemnyy-analitik", size: "S", workStartDate: START },
-        { teamId: "sayt-lk-b2b-frontend", size: "XS", workStartDate: START },
-        { teamId: "sayt-lk-b2b-backend", size: "S", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1013,11 +898,7 @@ const SEED_RAW: AppState = {
       title: "[Q42026 Реализация][База] Гибкое управление лимитами",
       type: "project",
       backlog: "B2b онлайн платформа",
-      assignments: [
-        { teamId: "sayt-lk-b2b", size: "S", workStartDate: START },
-        { teamId: "sayt-lk-b2b-backend", size: "S", workStartDate: START },
-        { teamId: "sayt-lk-b2b-frontend", size: "XS", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1034,9 +915,7 @@ const SEED_RAW: AppState = {
       title: "[Q42026 Реализация][Прорыв] Поиск товаров по списку. Конечная стоимость товаров в корзине",
       type: "project",
       backlog: "B2b онлайн платформа",
-      assignments: [
-        { teamId: "sayt-vybor-i-navigacia", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1052,11 +931,7 @@ const SEED_RAW: AppState = {
       title: "[Q42026 Реализация][Прорыв] Сервис уведомлений",
       type: "project",
       backlog: "B2b онлайн платформа",
-      assignments: [
-        { teamId: "crm", size: "M", workStartDate: START },
-        { teamId: "oms-arm", size: "M", workStartDate: START },
-        { teamId: "sayt-lk-b2b", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1073,10 +948,7 @@ const SEED_RAW: AppState = {
       title: "[Q42026 Реализация][Прорыв] Статусная модель",
       type: "project",
       backlog: "B2b онлайн платформа",
-      assignments: [
-        { teamId: "oms-arm", size: "M", workStartDate: START },
-        { teamId: "sayt-lk-b2b", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1093,10 +965,7 @@ const SEED_RAW: AppState = {
       title: "[Q42026 Реализация][Прорыв] Онбординг",
       type: "project",
       backlog: "B2b онлайн платформа",
-      assignments: [
-        { teamId: "sayt-lk-b2b", size: "M", workStartDate: START },
-        { teamId: "sayt-lk-b2b-frontend", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1113,11 +982,7 @@ const SEED_RAW: AppState = {
       title: "[Q42026 Реализация][Прорыв] Сквозная работа Ролевой Модели в ЮЛ",
       type: "project",
       backlog: "B2b онлайн платформа",
-      assignments: [
-        { teamId: "sayt-lk-b2b", size: "M", workStartDate: START },
-        { teamId: "sayt-lk-b2b-backend", size: "M", workStartDate: START },
-        { teamId: "sayt-lk-b2b-frontend", size: "XS", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1134,11 +999,7 @@ const SEED_RAW: AppState = {
       title: "Офферы: Автоматизация офферной политики Перевод 100% недельного планирования офферов на исполнителей в CRM - Критичные доработки систем",
       type: "project",
       backlog: "Активные продажи",
-      assignments: [
-        { teamId: "analitika", size: "XS", workStartDate: START },
-        { teamId: "crm", size: "S", workStartDate: START },
-        { teamId: "kb", size: "S", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1155,11 +1016,7 @@ const SEED_RAW: AppState = {
       title: "Офферы: Автоматизация офферной политики Перевод 100% недельного планирования офферов на исполнителей в CRM - Недельный планировщик офферов - Атоматическое исполнение недельного плана",
       type: "project",
       backlog: "Активные продажи",
-      assignments: [
-        { teamId: "analitika", size: "L", workStartDate: START },
-        { teamId: "crm", size: "L", workStartDate: START },
-        { teamId: "kb", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1176,12 +1033,7 @@ const SEED_RAW: AppState = {
       title: "Инициативы на КАМ (триг задачи, ОПС) Автоматическая постановка задач менеджерам по развитию клиентов (КАМ) на основе триггерных событий",
       type: "project",
       backlog: "Активные продажи",
-      assignments: [
-        { teamId: "analitika", size: "L", workStartDate: START },
-        { teamId: "crm", size: "M", workStartDate: START },
-        { teamId: "kb", size: "M", workStartDate: START },
-        { teamId: "dwh", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1198,10 +1050,7 @@ const SEED_RAW: AppState = {
       title: "CJM МПР - развитие точек роста Реализовать и внедрить целевой процесс работы МпР с точками роста",
       type: "project",
       backlog: "Активные продажи",
-      assignments: [
-        { teamId: "analitika", size: "L", workStartDate: START },
-        { teamId: "crm", size: "L", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1218,10 +1067,7 @@ const SEED_RAW: AppState = {
       title: "Отключить CRM от МПРов Повысить производительность МПРов на основе перехода на новое решение CRM МПР,",
       type: "project",
       backlog: "Активные продажи",
-      assignments: [
-        { teamId: "analitika", size: "M", workStartDate: START },
-        { teamId: "crm", size: "L", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1238,10 +1084,7 @@ const SEED_RAW: AppState = {
       title: "CJM БДМ Сформировать единый стандарт работы в CRM для BDM",
       type: "project",
       backlog: "Активные продажи",
-      assignments: [
-        { teamId: "analitika", size: "XS", workStartDate: START },
-        { teamId: "crm", size: "L", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1258,10 +1101,7 @@ const SEED_RAW: AppState = {
       title: "AO email: ЛИДЫ 1. Рост доли автооформленных заказов на 75% (с 20% до 35%)",
       type: "project",
       backlog: "Активные продажи",
-      assignments: [
-        { teamId: "analitika", size: "S", workStartDate: START },
-        { teamId: "crm", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1278,10 +1118,7 @@ const SEED_RAW: AppState = {
       title: "Маркировка писем, обработанных АО Среднее время отправки счета (СМБ) менее 15 минут при оценке от менеджеров более 4",
       type: "project",
       backlog: "Активные продажи",
-      assignments: [
-        { teamId: "analitika", size: "M", workStartDate: START },
-        { teamId: "crm", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1298,10 +1135,7 @@ const SEED_RAW: AppState = {
       title: "Автомаршрутизация 90% нелидовых обращений",
       type: "project",
       backlog: "Активные продажи",
-      assignments: [
-        { teamId: "analitika", size: "XS", workStartDate: START },
-        { teamId: "crm", size: "S", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1318,10 +1152,7 @@ const SEED_RAW: AppState = {
       title: "Сервис аналитики звонков - рост CR в оформленные со звонка с тематикой покупка на 5 п.п. - рост CR в отгруженные по заказам свыше 300 тыс. руб на 1 п.п.",
       type: "project",
       backlog: "Активные продажи",
-      assignments: [
-        { teamId: "analitika", size: "S", workStartDate: START },
-        { teamId: "crm", size: "L", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1338,9 +1169,7 @@ const SEED_RAW: AppState = {
       title: "Тендеры Разработано рабочее место тендерного отдела, сервис покрывает 90% требований тендерного отдела",
       type: "project",
       backlog: "Активные продажи",
-      assignments: [
-        { teamId: "crm", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1357,10 +1186,7 @@ const SEED_RAW: AppState = {
       title: "Офферы Альтернативные счета в расходке",
       type: "project",
       backlog: "Активные продажи",
-      assignments: [
-        { teamId: "analitika", size: "XS", workStartDate: START },
-        { teamId: "oms", size: "S", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1377,9 +1203,7 @@ const SEED_RAW: AppState = {
       title: "Доделать и отладить отчётность по атрибуции притока",
       type: "project",
       backlog: "ДКБ",
-      assignments: [
-        { teamId: "dwh", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1395,10 +1219,7 @@ const SEED_RAW: AppState = {
       title: "Запущен процесс работы отдела АНК через автоматические задачи 3х касаний",
       type: "project",
       backlog: "ДКБ",
-      assignments: [
-        { teamId: "crm", size: "M", workStartDate: START },
-        { teamId: "kb", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1415,11 +1236,7 @@ const SEED_RAW: AppState = {
       title: "Цифровой онбординг доступен для 100% новых b2b клиентов (часть уведомлений на сайте и email)",
       type: "project",
       backlog: "ДКБ",
-      assignments: [
-        { teamId: "sayt-lk-analitika", size: "XS", workStartDate: START },
-        { teamId: "sayt-lk-razrabotka", size: "M", workStartDate: START },
-        { teamId: "sayt-lk", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1436,10 +1253,7 @@ const SEED_RAW: AppState = {
       title: "Запущен процесс автоформирования ГБО на ОАП",
       type: "project",
       backlog: "ДКБ",
-      assignments: [
-        { teamId: "crm", size: "M", workStartDate: START },
-        { teamId: "kb", size: "S", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1456,10 +1270,7 @@ const SEED_RAW: AppState = {
       title: "Автоматизация пердачи лидов ОАП - АНК, Этап 0 и Этап 1",
       type: "project",
       backlog: "ДКБ",
-      assignments: [
-        { teamId: "crm", size: "M", workStartDate: START },
-        { teamId: "kb", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1476,10 +1287,7 @@ const SEED_RAW: AppState = {
       title: "Купер MVP",
       type: "project",
       backlog: "ДКБ",
-      assignments: [
-        { teamId: "oms-arhitektura", size: "M", workStartDate: START },
-        { teamId: "oms", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",
@@ -1496,10 +1304,7 @@ const SEED_RAW: AppState = {
       title: "Запущен MVP лояльности для b2b: 1. Лендинг программы 2. 2 акции и их механика 3. Баллы и обмен баллов на промики",
       type: "project",
       backlog: "ДКБ",
-      assignments: [
-        { teamId: "sayt-lk", size: "L", workStartDate: START },
-        { teamId: "sayt-oformlenie", size: "M", workStartDate: START }
-      ],
+      assignments: [],
       status: "ready",
       owner: "—",
       assignee: "",

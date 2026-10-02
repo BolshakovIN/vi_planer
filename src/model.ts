@@ -1035,7 +1035,47 @@ export interface AppState {
    * `xlsx-prio-2026-10-v4` — таблица приоритезации; `…-rolled-back` — откат.
    */
   portfolioPack?: string;
+  /**
+   * One-shot: unlink team assignments from all functionalities so they can be
+   * re-assigned on Потребность. `"v1"` after apply (`clearedDemandTeams-v1`).
+   */
+  clearedDemandTeams?: string;
   version: 3;
+}
+
+/** Persist flag: team rows removed from every functionality (catalog stays). */
+export const CLEARED_DEMAND_TEAMS_V1 = "v1";
+
+/** Wipe item.assignments once; Команды role—ФИО catalog is untouched. */
+export function applyClearedDemandTeams(current: AppState): {
+  state: AppState;
+  applied: boolean;
+} {
+  if (current.clearedDemandTeams === CLEARED_DEMAND_TEAMS_V1) {
+    return { state: current, applied: false };
+  }
+  const hadTeams = current.items.some((item) => item.assignments.length > 0);
+  return {
+    state: {
+      ...current,
+      items: hadTeams
+        ? current.items.map((item) =>
+            item.assignments.length ? { ...item, assignments: [] } : item
+          )
+        : current.items,
+      clearedDemandTeams: CLEARED_DEMAND_TEAMS_V1,
+      ...(hadTeams
+        ? {
+            changeLog: prependChangeLog(
+              current.changeLog,
+              "Сняты назначения команд со всех функциональностей — назначьте заново на вкладке «Потребность»",
+              "system"
+            ),
+          }
+        : {}),
+    },
+    applied: true,
+  };
 }
 
 /** Persist flags for demo monitoring (A shown by default; B retired / hidden). */
@@ -2185,16 +2225,6 @@ export function normalizeState(raw: unknown): AppState | null {
         },
       ];
     }
-    if (!assignments.length && teams[0]) {
-      assignments = [
-        {
-          teamId: teams[0].id,
-          size: "M",
-          workStartDate: planStart,
-          roles: makeAssignmentRolesForTeam(teams[0].roles),
-        },
-      ];
-    }
 
     return {
       id: String(r.id ?? uid("item")),
@@ -2293,6 +2323,11 @@ export function normalizeState(raw: unknown): AppState | null {
     portfolioPack:
       data.portfolioPack != null && String(data.portfolioPack).trim()
         ? String(data.portfolioPack).trim()
+        : undefined,
+    clearedDemandTeams:
+      data.clearedDemandTeams != null &&
+      String(data.clearedDemandTeams).trim()
+        ? String(data.clearedDemandTeams).trim()
         : undefined,
     items: ensureUniquePriorities(filledItems, parsedRanges),
   };

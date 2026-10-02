@@ -3896,14 +3896,7 @@ function editorHtml(item: WorkItem | null): string {
       title: "",
       type: "project",
       backlog: "",
-      assignments: [
-        {
-          teamId: state.teams[0]?.id ?? "",
-          size: "M",
-          workStartDate: state.startDate,
-          roles: teamAssignmentRoles(state.teams[0]),
-        },
-      ],
+      assignments: [],
       status: "ready",
       owner: "",
       assignee: "",

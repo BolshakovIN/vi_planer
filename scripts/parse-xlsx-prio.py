@@ -307,13 +307,6 @@ def write_seed_ts(team_rows: list[dict], items: list[dict]) -> None:
     item_blocks = []
     for it in items:
         rank = int(it["rank"])
-        assigns_lines = []
-        for a in it["assigns"]:
-            tid = name_to_id.get(a["team"]) or slug(a["team"])
-            assigns_lines.append(
-                f'        {{ teamId: {ts_str(tid)}, size: {ts_str(a["size"])}, workStartDate: START }}'
-            )
-        assigns_joined = ",\n".join(assigns_lines)
         notes = it.get("notes") or []
         note = notes[0] if notes else ""
         notes_line = f"      notes: {ts_str(note)},\n" if note else ""
@@ -323,9 +316,7 @@ def write_seed_ts(team_rows: list[dict], items: list[dict]) -> None:
             f"      title: {ts_str(it['title'])},\n"
             '      type: "project",\n'
             f"      backlog: {ts_str(it['project'])},\n"
-            "      assignments: [\n"
-            f"{assigns_joined}\n"
-            "      ],\n"
+            "      assignments: [],\n"
             f'      status: {ts_str(it.get("status") or "ready")},\n'
             '      owner: "—",\n'
             '      assignee: "",\n'
@@ -343,6 +334,7 @@ def write_seed_ts(team_rows: list[dict], items: list[dict]) -> None:
     items_joined = ",\n".join(item_blocks)
     body = f"""import {{
   AppState,
+  CLEARED_DEMAND_TEAMS_V1,
   ensureUniquePriorities,
   uniqCatalogNames,
   containerNameFromBacklog,
@@ -372,6 +364,7 @@ const SEED_RAW: AppState = {{
   demoVariantA: true,
   demoVariantB: false,
   portfolioPack: PORTFOLIO_PACK_ID,
+  clearedDemandTeams: CLEARED_DEMAND_TEAMS_V1,
   teams: [
 {teams_joined},
   ],

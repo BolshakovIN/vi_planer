@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   AppState,
+  applyClearedDemandTeams,
   ensureUniquePriorities,
   ensureStateAssignmentRoles,
   normalizeState,
@@ -230,8 +231,9 @@ export async function loadState(): Promise<AppState> {
     loadLocal() ??
     ensureStateAssignmentRoles(structuredClone(SEED));
 
-  const { state, applied } = applyCurrentPortfolioPack(remote);
-  if (applied) {
+  const packed = applyCurrentPortfolioPack(remote);
+  const { state, applied } = applyClearedDemandTeams(packed.state);
+  if (packed.applied || applied) {
     saveState(state);
   } else {
     saveLocal(state);

@@ -403,11 +403,6 @@ def normalize_state(raw: Any) -> dict[str, Any] | None:
                     "workStartDate": plan_start,
                 }
             ]
-        if not assignments and teams:
-            assignments = [
-                {"teamId": teams[0]["id"], "size": "M", "workStartDate": plan_start}
-            ]
-
         status = str(r.get("status") or "idea")
         if status not in ITEM_STATUSES:
             status = "idea"
