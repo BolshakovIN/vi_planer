@@ -4,6 +4,7 @@ import {
   applyClearedDemandTeams,
   applyComputedTeamCapacities,
   applySeededTeamRoster,
+  mergeMissingSeedItems,
   ensureUniquePriorities,
   ensureStateAssignmentRoles,
   normalizeState,
@@ -248,8 +249,9 @@ export async function loadState(): Promise<AppState> {
   const packed = applyCurrentPortfolioPack(remote);
   const cleared = applyClearedDemandTeams(packed.state);
   const roster = applySeededTeamRoster(cleared.state);
-  const state = roster.state;
-  if (packed.applied || cleared.applied || roster.applied) {
+  const merged = mergeMissingSeedItems(roster.state, SEED.items);
+  const state = merged.state;
+  if (packed.applied || cleared.applied || roster.applied || merged.applied) {
     saveState(state);
   } else {
     saveLocal(state);

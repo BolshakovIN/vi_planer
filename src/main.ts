@@ -53,6 +53,8 @@ import {
   calendarWeeksForSize,
   assignmentPlanDays,
   assignmentPlanWeeks,
+  itemFinishDate,
+  projectFinishDate,
   totalEstimateDays,
   uniqCatalogNames,
   containerNameFromBacklog,
@@ -1048,13 +1050,17 @@ function toggleSort(key: SortKey) {
   render();
 }
 
-function metricsHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string {
+function metricsHtml(_rollups: ItemSchedule[], slices: ScheduledSlice[]): string {
   const active = state.items.filter((i) => i.status !== "done");
   const products = active.filter((i) => i.type === "product").length;
   const projects = active.filter((i) => i.type === "project").length;
   const multi = active.filter((i) => i.assignments.length > 1).length;
-  const ends = rollups.map((s) => s.endWeek);
-  const horizon = ends.length ? Math.max(...ends) + 1 : 0;
+  const finishes = active
+    .map((item) => itemFinishDate(item, state.startDate, szRanges()))
+    .filter((iso): iso is string => Boolean(iso));
+  const horizon = finishes.length
+    ? Math.max(...finishes.map((iso) => weekIndex(state.startDate, iso))) + 1
+    : 0;
   const overloaded = state.teams.filter((t) => {
     const demandDays = teamQueuePw(slices, t.id);
     return demandDays > t.capacityPw * 8;
@@ -1070,7 +1076,7 @@ function metricsHtml(rollups: ItemSchedule[], slices: ScheduledSlice[]): string 
       <div class="metric">
         <div class="label">Горизонт портфеля</div>
         <div class="value">${horizon} нед.</div>
-        <div class="hint">до закрытия (по bottleneck-команде)</div>
+        <div class="hint">до самой поздней даты завершения</div>
       </div>
       <div class="metric">
         <div class="label">Команд под риском</div>
@@ -1116,7 +1122,7 @@ function columnsHelpHtml(): string {
         <div><span class="cols-help-k">ЧП, млрд ₽</span> — чистая прибыль за 12 мес. (сумма по проекту)</div>
         <div><span class="cols-help-k">ROI, %</span> — ROI за 12 мес.</div>
         <div><span class="cols-help-k">Маечная оценка</span> — XS / S / M / L / XL / XXL (дни в Настройках)</div>
-        <div><span class="cols-help-k">Дата завершения</span> — когда закончила последняя команда (bottleneck)</div>
+        <div><span class="cols-help-k">Дата завершения</span> — самая поздняя дата среди функциональностей и баров ролей</div>
       </div>
     </details>
   `;
@@ -1170,7 +1176,6 @@ function uniqueAssignments(items: WorkItem[]): TeamAssignment[] {
 }
 
 function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): string {
-  const byId = rollupById(rollups);
   const visible = filteredItems(rollups);
   const order = new Map(visible.map((it, i) => [it.id, i]));
   const groups = groupByProjectKey(visible).sort((a, b) => {
@@ -1219,12 +1224,10 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
         ),
       ].join("");
       const statusClass = statusVal ? `badge-status-${statusVal}` : "";
-      let latest: ItemSchedule | undefined;
-      for (const it of g.items) {
-        const r = byId.get(it.id);
-        if (!r) continue;
-        if (!latest || r.endDate > latest.endDate) latest = r;
-      }
+      const finish = projectFinishDate(g.items, state.startDate, szRanges());
+      const finishWait = finish
+        ? weekIndex(state.startDate, finish)
+        : 0;
       return `
         <tr class="clickable" data-project-card="${escapeAttr(g.key)}" data-row-id="${escapeAttr(g.key)}" title="Открыть карточку проекта">
           <td${tdAttrs("priority", "prio-cell")} data-stop-edit>
@@ -1246,8 +1249,8 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
             <span class="size-badge">${sizes || "—"}</span>
             <div class="meta">~${total} чел·нед</div>
           </td>
-          <td${tdAttrs("eta", `mono eta-cell ${latest && latest.waitWeeks > 4 ? "eta-late" : "eta-good"}`)}>
-            ${latest ? `<span class="eta-final">${formatDate(latest.endDate)}</span>` : "—"}
+          <td${tdAttrs("eta", `mono eta-cell ${finish && finishWait > 4 ? "eta-late" : "eta-good"}`)}>
+            ${finish ? `<span class="eta-final">${formatDate(finish)}</span>` : "—"}
           </td>
         </tr>
       `;
@@ -4959,7 +4962,7 @@ function render() {
         <h1>VI Planer — ${TAB_LABELS[ui.tab]}</h1>
         <p>Старт портфеля: ${state.startDate} · Экспорт: ${new Date().toLocaleString("ru-RU")}</p>
       </div>
-      ${metricsHtml(rollups, slices)}
+      ${ui.tab === "portfolio" ? metricsHtml(rollups, slices) : ""}
       <div class="tabs no-print">
         <button class="tab ${ui.tab === "portfolio" ? "active" : ""}" data-tab="portfolio">Реестр</button>
         <button class="tab ${ui.tab === "demand" ? "active" : ""}" data-tab="demand">Потребность</button>
@@ -7453,7 +7456,6 @@ function buildPlanerReportData(
   rollups: ItemSchedule[],
   slices: ScheduledSlice[],
 ): PlanerReportData {
-  const byId = rollupById(rollups);
   const active = state.items.filter((i) => i.status !== "done");
   const products = active.filter((i) => i.type === "product").length;
   const projects = active.filter((i) => i.type === "project").length;
@@ -7469,7 +7471,6 @@ function buildPlanerReportData(
   const items = filteredItems(rollups);
 
   const portfolioRows = items.map((item) => {
-    const r = byId.get(item.id);
     const container = productProjectName(item.backlog);
     const typeLabel =
       item.type === "product"
@@ -7495,7 +7496,10 @@ function buildPlanerReportData(
       cashFlow: formatMlrd(item.cashFlow12m),
       roi: formatPercent(item.roi12m),
       estimate: `${sizesSummary(item)} (~${totalEstimateWeeks(item, szRanges())} чел·нед)`,
-      eta: r ? formatDate(r.endDate) : "—",
+      eta: (() => {
+        const finish = itemFinishDate(item, state.startDate, szRanges());
+        return finish ? formatDate(finish) : "—";
+      })(),
     };
   });
 

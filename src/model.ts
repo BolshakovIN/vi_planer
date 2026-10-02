@@ -1099,6 +1099,68 @@ export function applySeededTeamRoster(current: AppState): {
   };
 }
 
+/**
+ * Re-insert seed portfolio rows missing from persist (by id).
+ * Keeps live items and their demand assignments; does not copy seed teams onto
+ * existing rows. Missing rows come back without assignments.
+ */
+export function mergeMissingSeedItems(
+  current: AppState,
+  seedItems: WorkItem[]
+): { state: AppState; applied: boolean } {
+  const seedById = new Map(seedItems.map((item) => [item.id, item]));
+  const have = new Set(current.items.map((item) => item.id));
+
+  let typeFixed = 0;
+  const kept = current.items.map((item) => {
+    const src = seedById.get(item.id);
+    if (!src || item.type === src.type) return item;
+    typeFixed += 1;
+    return { ...item, type: src.type };
+  });
+
+  const missing = seedItems
+    .filter((item) => !have.has(item.id))
+    .map((item) => {
+      const clone = structuredClone(item);
+      clone.assignments = [];
+      return clone;
+    });
+
+  if (!missing.length && !typeFixed) {
+    return { state: current, applied: false };
+  }
+
+  const items = ensureUniquePriorities(
+    [...kept, ...missing],
+    current.sizeRanges
+  );
+  const message = missing.length
+    ? `Восстановлены ${missing.length} проектов из таблицы приоритезации`
+    : `Тип ${typeFixed} записей возвращён к проектному портфелю`;
+
+  return {
+    state: {
+      ...current,
+      items,
+      projects: uniqCatalogNames([
+        ...current.projects,
+        ...seedItems
+          .filter((item) => item.type === "project")
+          .map((item) => containerNameFromBacklog(item.backlog)),
+      ]),
+      products: uniqCatalogNames([
+        ...current.products,
+        ...seedItems
+          .filter((item) => item.type === "product")
+          .map((item) => containerNameFromBacklog(item.backlog)),
+      ]),
+      changeLog: prependChangeLog(current.changeLog, message, "system"),
+    },
+    applied: true,
+  };
+}
+
 /** Wipe item.assignments once; Команды role—ФИО catalog is untouched. */
 export function applyClearedDemandTeams(current: AppState): {
   state: AppState;
@@ -1517,6 +1579,67 @@ export function migrateCashFlowToMlrd(n: number): number {
 export function migrateRoiToPercent(n: number): number | null {
   if (Math.abs(n) >= 500) return null;
   return n;
+}
+
+/** Calendar finish of a track: Monday-snapped start + planned days. */
+export function trackFinishDate(startIso: string, days: number): string {
+  const start = snapToMonday(startIso);
+  const span = Math.max(0, days);
+  return span > 0 ? addDays(start, span) : start;
+}
+
+/**
+ * Latest calendar end of one team assignment: max of role bars, else the
+ * assignment start + planned days. Not a queue/bottleneck schedule.
+ */
+export function assignmentFinishDate(
+  a: TeamAssignment,
+  planStart: string,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): string | undefined {
+  if (a.roles?.length) {
+    let latest: string | undefined;
+    for (const role of a.roles) {
+      const start = role.workStartDate || a.workStartDate || planStart;
+      const end = trackFinishDate(start, rolePlanDays(role, ranges));
+      if (!latest || end > latest) latest = end;
+    }
+    return latest;
+  }
+  const days = assignmentPlanDays(a, ranges);
+  if (!a.workStartDate && days <= 0) return undefined;
+  return trackFinishDate(a.workStartDate || planStart, days);
+}
+
+/** Latest finish among a functionality’s team/role tracks. */
+export function itemFinishDate(
+  item: WorkItem,
+  planStart: string,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): string | undefined {
+  let latest: string | undefined;
+  for (const a of item.assignments) {
+    const end = assignmentFinishDate(a, planStart, ranges);
+    if (end && (!latest || end > latest)) latest = end;
+  }
+  return latest;
+}
+
+/**
+ * Реестр «Дата завершения»: max end date of every functionality’s planned
+ * role/team bars in the project. Recomputed from live assignments — not cached.
+ */
+export function projectFinishDate(
+  items: WorkItem[],
+  planStart: string,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): string | undefined {
+  let latest: string | undefined;
+  for (const item of items) {
+    const end = itemFinishDate(item, planStart, ranges);
+    if (end && (!latest || end > latest)) latest = end;
+  }
+  return latest;
 }
 
 /** Calendar days for one assignment: sum of roles, else `days` or t-shirt midpoint. */
