@@ -4657,13 +4657,9 @@ function bindPortfolioDrag() {
   });
 }
 
-function brandMarkSvg(): string {
-  return `<svg class="brand-mark-svg" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <rect width="64" height="64" rx="16" fill="#d60000"/>
-    <text x="30" y="44" text-anchor="middle" fill="#fff" font-family="PT Serif, Times New Roman, Times, serif" font-size="30" font-weight="700">Ви</text>
-    <circle cx="50.5" cy="13.5" r="10.5" fill="#fff"/>
-    <text x="50.5" y="17.2" text-anchor="middle" fill="#d60000" font-family="PT Serif, Times New Roman, Times, serif" font-size="9" font-weight="700">ру</text>
-  </svg>`;
+function brandMarkSrc(): string {
+  const base = import.meta.env.BASE_URL || "./";
+  return new URL("vi-mark.png", new URL(base, window.location.href)).href;
 }
 
 function render() {
@@ -4689,7 +4685,9 @@ function render() {
       <div class="topbar">
         <div class="topbar-brand">
           <button type="button" class="brand-home" id="brandHomeBtn" title="На главную">
-            <span class="brand-mark" aria-hidden="true">${brandMarkSvg()}</span>
+            <span class="brand-mark" aria-hidden="true">
+              <img class="brand-mark-img" src="${brandMarkSrc()}" alt="" width="30" height="30" />
+            </span>
             <span class="brand-word">VI Planer</span>
           </button>
         </div>

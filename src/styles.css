@@ -102,23 +102,19 @@ textarea {
 }
 
 .brand-mark {
-  position: relative;
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  overflow: hidden;
   line-height: 0;
 }
 
-.brand-mark-svg {
+.brand-mark-img {
   display: block;
   width: 100%;
   height: 100%;
-  overflow: visible;
-}
-
-.brand-mark-svg text {
-  font-family: "PT Serif", "Times New Roman", Times, serif;
-  font-weight: 700;
+  object-fit: contain;
 }
 
 .brand-word {
@@ -194,8 +190,8 @@ textarea {
   }
 
   .brand-mark {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
   }
 
   .brand-word {
