@@ -123,7 +123,7 @@ function loadTeamsBackup(): Team[] | null {
 }
 
 function saveLocal(state: AppState) {
-  if (STORAGE_KEY === V1_STORAGE_KEY) {
+  if ((STORAGE_KEY as string) === V1_STORAGE_KEY) {
     throw new Error("v2 refused to write the v1 store");
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
