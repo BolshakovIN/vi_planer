@@ -101,6 +101,9 @@ const TAB_LABELS: Record<Tab, string> = {
   settings: "Настройки",
 };
 
+/** v1-only UI tab key — never share with v2 (`vi-planer-v2-ui-tab`). */
+const V1_UI_TAB_KEY = "vi-planer-v1-ui-tab";
+
 /** Legacy deep-link / tab ids: `teams` → Очередь команд. */
 function normalizeTab(tab: string | undefined | null): Tab {
   if (tab === "teams") return "queuesTest";
@@ -121,6 +124,27 @@ function normalizeTab(tab: string | undefined | null): Tab {
   return "portfolio";
 }
 
+function readStoredUiTab(): Tab {
+  try {
+    return normalizeTab(localStorage.getItem(V1_UI_TAB_KEY));
+  } catch {
+    return "portfolio";
+  }
+}
+
+function writeStoredUiTab(tab: Tab) {
+  try {
+    localStorage.setItem(V1_UI_TAB_KEY, tab);
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+function setActiveTab(next: string | undefined | null) {
+  ui.tab = normalizeTab(next);
+  writeStoredUiTab(ui.tab);
+}
+
 function isDemoVariantVisible(which: "A" | "B"): boolean {
   // Variant B retired — one monitoring tab (layout A) only.
   if (which === "B") return false;
@@ -128,8 +152,10 @@ function isDemoVariantVisible(which: "A" | "B"): boolean {
 }
 
 function ensureVisibleTab() {
+  const prev = ui.tab;
   if (ui.tab === "demoA" && !isDemoVariantVisible("A")) ui.tab = "portfolio";
   if (ui.tab === "demoB" && !isDemoVariantVisible("B")) ui.tab = "portfolio";
+  if (ui.tab !== prev) writeStoredUiTab(ui.tab);
 }
 
 function setDemoVariantVisible(which: "A" | "B", visible: boolean) {
@@ -141,11 +167,13 @@ function setDemoVariantVisible(which: "A" | "B", visible: boolean) {
     const tab: Tab = which === "A" ? "demoA" : "demoB";
     if (ui.tab === tab) {
       const other: "A" | "B" = which === "A" ? "B" : "A";
-      ui.tab = isDemoVariantVisible(other)
-        ? other === "A"
-          ? "demoA"
-          : "demoB"
-        : "portfolio";
+      setActiveTab(
+        isDemoVariantVisible(other)
+          ? other === "A"
+            ? "demoA"
+            : "demoB"
+          : "portfolio"
+      );
     }
     logChange(`Скрыт ${demoVariantChangeLabel(which)}`, "settings");
   } else {
@@ -4419,13 +4447,13 @@ function bind() {
 
 function bindUiRest() {
   document.querySelector("#brandHomeBtn")?.addEventListener("click", () => {
-    ui.tab = "portfolio";
+    setActiveTab("portfolio");
     render();
   });
 
   document.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      ui.tab = normalizeTab(btn.dataset.tab);
+      setActiveTab(btn.dataset.tab);
       render();
     });
   });
@@ -4914,7 +4942,7 @@ function bindUiRest() {
   document.querySelectorAll<HTMLAnchorElement | HTMLButtonElement>("[data-tab-jump]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.preventDefault();
-      ui.tab = normalizeTab(btn.dataset.tabJump);
+      setActiveTab(btn.dataset.tabJump);
       render();
     });
   });
@@ -5566,6 +5594,8 @@ async function bootstrap() {
   ui.hiddenCols = loadHiddenCols();
   ui.scheduleMode = loadScheduleMode();
   saveScheduleMode(ui.scheduleMode);
+  ui.tab = readStoredUiTab();
+  ensureVisibleTab();
   const before = state.items.map((i) => i.manualRank).join(",");
   state = { ...state, items: ensureUniquePriorities(state.items, szRanges()) };
   const after = state.items.map((i) => i.manualRank).join(",");
