@@ -253,11 +253,13 @@ function setDemoVariantVisible(which: "A" | "B", visible: boolean) {
     const tab: Tab = which === "A" ? "demoA" : "demoB";
     if (ui.tab === tab) {
       const other: "A" | "B" = which === "A" ? "B" : "A";
-      ui.tab = isDemoVariantVisible(other)
-        ? other === "A"
-          ? "demoA"
-          : "demoB"
-        : "portfolio";
+      setActiveTab(
+        isDemoVariantVisible(other)
+          ? other === "A"
+            ? "demoA"
+            : "demoB"
+          : "portfolio"
+      );
     }
     logChange(`Скрыт ${demoVariantChangeLabel(which)}`, "settings");
   } else {
