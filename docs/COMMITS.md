@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 03.10.2026, 10:18 GMT+3
+Сгенерировано: 03.10.2026, 10:19 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,7 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `8c3dff1` | 2026-10-03 | ivanbolsakov | Add commits history doc and refresh it on Pages deploy. |
 | `be74973` | 2026-10-03 | ivanbolsakov | Persist tab when monitoring demo is hidden on v2. |
 | `5c3adaf` | 2026-10-03 | ivanbolsakov | Publish tab restore for v1 and v2 to GitHub Pages. |
 | `520c6c4` | 2026-10-03 | ivanbolsakov | Remember the active UI tab across reloads on v2. |
@@ -370,7 +371,8 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `be74973` | 2026-10-03 | ivanbolsakov | HEAD -> master, origin/v2, origin/master, v2 | Persist tab when monitoring demo is hidden on v2. |
+| `8c3dff1` | 2026-10-03 | ivanbolsakov | HEAD -> master, origin/v2, origin/master, v2 | Add commits history doc and refresh it on Pages deploy. |
+| `be74973` | 2026-10-03 | ivanbolsakov |  | Persist tab when monitoring demo is hidden on v2. |
 | `5c3adaf` | 2026-10-03 | ivanbolsakov |  | Publish tab restore for v1 and v2 to GitHub Pages. |
 | `0880733` | 2026-10-03 | ivanbolsakov | origin/v1, v1 | Remember the active UI tab across reloads on v1. |
 | `520c6c4` | 2026-10-03 | ivanbolsakov |  | Remember the active UI tab across reloads on v2. |
