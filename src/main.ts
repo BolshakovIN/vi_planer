@@ -104,6 +104,7 @@ import {
   applyCurrentPortfolioPack,
   rollbackPortfolioPack,
 } from "./storage";
+import { V2_UI_TAB_KEY } from "./v2Store";
 import {
   downloadMarkdownAsPdf,
   downloadPlanerReportPdf,
@@ -198,6 +199,37 @@ function normalizeTab(tab: string | undefined | null): Tab {
   return "portfolio";
 }
 
+function readStoredUiTab(): Tab {
+  try {
+    return normalizeTab(localStorage.getItem(V2_UI_TAB_KEY));
+  } catch {
+    return "portfolio";
+  }
+}
+
+function writeStoredUiTab(tab: Tab) {
+  try {
+    localStorage.setItem(V2_UI_TAB_KEY, tab);
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+/** Switch tabs and remember the choice across reloads (v2 store key only). */
+function setActiveTab(next: string | undefined | null) {
+  const tab = normalizeTab(next);
+  if (tab !== "demand") {
+    ui.needAddItemId = null;
+    ui.needAddRoleKey = null;
+    ui.needCreatingFn = false;
+  }
+  if (tab !== "planning") {
+    ui.planTaskForm = null;
+  }
+  ui.tab = tab;
+  writeStoredUiTab(tab);
+}
+
 function isDemoVariantVisible(which: "A" | "B"): boolean {
   // Variant B retired — one monitoring tab (layout A) only.
   if (which === "B") return false;
@@ -205,9 +237,11 @@ function isDemoVariantVisible(which: "A" | "B"): boolean {
 }
 
 function ensureVisibleTab() {
+  const prev = ui.tab;
   if (ui.tab === "demoA" && !isDemoVariantVisible("A")) ui.tab = "portfolio";
   if (ui.tab === "demoB" && !isDemoVariantVisible("B")) ui.tab = "portfolio";
   if ((ui.tab as string) === "roles") ui.tab = "capacity";
+  if (ui.tab !== prev) writeStoredUiTab(ui.tab);
 }
 
 function setDemoVariantVisible(which: "A" | "B", visible: boolean) {
@@ -6234,22 +6268,13 @@ function bind() {
 
 function bindUiRest() {
   document.querySelector("#brandHomeBtn")?.addEventListener("click", () => {
-    ui.tab = "portfolio";
+    setActiveTab("portfolio");
     render();
   });
 
   document.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const next = normalizeTab(btn.dataset.tab);
-      if (next !== "demand") {
-        ui.needAddItemId = null;
-        ui.needAddRoleKey = null;
-        ui.needCreatingFn = false;
-      }
-      if (next !== "planning") {
-        ui.planTaskForm = null;
-      }
-      ui.tab = next;
+      setActiveTab(btn.dataset.tab);
       render();
     });
   });
@@ -6959,7 +6984,7 @@ function bindUiRest() {
   document.querySelectorAll<HTMLAnchorElement | HTMLButtonElement>("[data-tab-jump]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.preventDefault();
-      ui.tab = normalizeTab(btn.dataset.tabJump);
+      setActiveTab(btn.dataset.tabJump);
       render();
     });
   });
@@ -7630,6 +7655,8 @@ async function bootstrap() {
   ui.hiddenCols = loadHiddenCols();
   ui.scheduleMode = loadScheduleMode();
   saveScheduleMode(ui.scheduleMode);
+  ui.tab = readStoredUiTab();
+  ensureVisibleTab();
   const ranked = ensureUniquePriorities(state.items, szRanges());
   const ranksChanged = ranked.some(
     (item, i) => item.manualRank !== state.items[i]?.manualRank
