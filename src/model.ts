@@ -534,7 +534,7 @@ export function syncTeamRoster<T extends Team>(team: T): T {
 
 /** Catalog of Потребность roles the user can add to a team. */
 export const ASSIGNMENT_ROLE_CATALOG = [
-  "бизнес аналитик",
+  "бизнес-аналитик",
   "архитектор",
   "аналитик",
   "разработчик",
@@ -547,7 +547,10 @@ export const DEFAULT_ASSIGNMENT_ROLE_NAMES = [
   "разработчик",
 ] as const;
 
-/** Exact old catalog labels → person titles. «бизнес аналитик» is not «аналитика». */
+/**
+ * Exact old catalog labels → current titles.
+ * «бизнес аналитик» / «бизнес-аналитик» share a normalize key (hyphen → space).
+ */
 const LEGACY_ROLE_RENAMES: Record<string, string> = {
   архитектура: "архитектор",
   аналитика: "аналитик",
