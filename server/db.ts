@@ -150,8 +150,9 @@ function seedState(): AppState {
   return structuredClone(SEED);
 }
 
+/** Default edition is v2 — the live SPA. Frozen v1 uses `/api/state/v1` or `/api/state`. */
 export async function getState(
-  edition: StateEdition = "v1",
+  edition: StateEdition = "v2",
 ): Promise<AppState | null> {
   const stored = await readStored(edition);
   if (!stored) {
@@ -172,7 +173,7 @@ export async function getState(
 
 export async function setState(
   state: AppState,
-  edition: StateEdition = "v1",
+  edition: StateEdition = "v2",
 ): Promise<number> {
   const updatedAt = Date.now();
   await writeStored(edition, state, updatedAt);
@@ -180,7 +181,7 @@ export async function setState(
 }
 
 export async function getUpdatedAt(
-  edition: StateEdition = "v1",
+  edition: StateEdition = "v2",
 ): Promise<number> {
   const stored = await readStored(edition);
   return stored?.updatedAt ?? 0;

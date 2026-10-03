@@ -48,6 +48,7 @@ function parseEdition(value: string | undefined): StateEdition | null {
   return null;
 }
 
+/** Legacy unscoped path kept for frozen v1 API clients only — never used by v2 SPA. */
 app.get("/api/state", async (_req, res) => {
   try {
     const state = await getState("v1");

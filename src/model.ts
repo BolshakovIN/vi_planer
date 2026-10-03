@@ -1,3 +1,17 @@
+import {
+  CLEARED_DEMAND_TEAMS_V1,
+  MIGRATION_CLEARED_DEMAND_TEAMS,
+  MIGRATION_SEEDED_TEAM_ROSTER,
+  SEEDED_TEAM_ROSTER_V1,
+} from "./v2Store";
+
+export {
+  CLEARED_DEMAND_TEAMS_V1,
+  MIGRATION_CLEARED_DEMAND_TEAMS,
+  MIGRATION_SEEDED_TEAM_ROSTER,
+  SEEDED_TEAM_ROSTER_V1,
+};
+
 export type ItemType = "project" | "product";
 export type ItemStatus = "idea" | "ready" | "in_progress" | "blocked" | "done";
 export type TShirtSize = "XS" | "S" | "M" | "L" | "XL" | "XXL";
@@ -1182,12 +1196,6 @@ export function applyLocalDeletionTombstones(
   };
 }
 
-/** Persist flag: team rows removed from every functionality (catalog stays). */
-export const CLEARED_DEMAND_TEAMS_V1 = "v1";
-
-/** Persist flag: Команды role—ФИО catalog was seeded once (`teamRosterSeeded-v1`). */
-export const SEEDED_TEAM_ROSTER_V1 = "v1";
-
 /** True when at least one Команды row has a роль—ФИО seat. */
 export function teamCatalogHasRoster(teams: readonly Team[] | undefined): boolean {
   return (teams ?? []).some((t) => (t.members?.length ?? 0) > 0);
@@ -1201,11 +1209,11 @@ export function applySeededTeamRoster(current: AppState): {
   state: AppState;
   applied: boolean;
 } {
-  if (current.teamRosterSeeded === SEEDED_TEAM_ROSTER_V1) {
+  if (current.teamRosterSeeded === MIGRATION_SEEDED_TEAM_ROSTER) {
     return { state: current, applied: false };
   }
   return {
-    state: { ...current, teamRosterSeeded: SEEDED_TEAM_ROSTER_V1 },
+    state: { ...current, teamRosterSeeded: MIGRATION_SEEDED_TEAM_ROSTER },
     applied: true,
   };
 }
@@ -1311,11 +1319,11 @@ export function applyClearedDemandTeams(current: AppState): {
   state: AppState;
   applied: boolean;
 } {
-  if (current.clearedDemandTeams === CLEARED_DEMAND_TEAMS_V1) {
+  if (current.clearedDemandTeams === MIGRATION_CLEARED_DEMAND_TEAMS) {
     return { state: current, applied: false };
   }
   return {
-    state: { ...current, clearedDemandTeams: CLEARED_DEMAND_TEAMS_V1 },
+    state: { ...current, clearedDemandTeams: MIGRATION_CLEARED_DEMAND_TEAMS },
     applied: true,
   };
 }

@@ -176,7 +176,7 @@ def _seed_state() -> dict[str, Any]:
     return deepcopy(SEED)
 
 
-async def get_state(edition: StateEdition = "v1") -> Optional[dict[str, Any]]:
+async def get_state(edition: StateEdition = "v2") -> Optional[dict[str, Any]]:
     stored = await _read_stored(edition)
     if not stored:
         if edition == "v2":
@@ -194,13 +194,13 @@ async def get_state(edition: StateEdition = "v1") -> Optional[dict[str, Any]]:
     return normalized
 
 
-async def set_state(state: dict[str, Any], edition: StateEdition = "v1") -> int:
+async def set_state(state: dict[str, Any], edition: StateEdition = "v2") -> int:
     updated_at = int(time.time() * 1000)
     await _write_stored(edition, state, updated_at)
     return updated_at
 
 
-async def get_updated_at(edition: StateEdition = "v1") -> int:
+async def get_updated_at(edition: StateEdition = "v2") -> int:
     stored = await _read_stored(edition)
     if not stored:
         return 0

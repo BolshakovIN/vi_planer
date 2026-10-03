@@ -7,13 +7,11 @@ import {
   mergeMissingSeedItems,
   applyLocalDeletionTombstones,
   migrateLegacyCatalogRoles,
-  CLEARED_DEMAND_TEAMS_V1,
   ensureUniquePriorities,
   ensureStateAssignmentRoles,
   mergeLiveV2States,
   normalizeState,
   prependChangeLog,
-  SEEDED_TEAM_ROSTER_V1,
   syncTeamRoster,
   teamCatalogHasRoster,
   localV2BeatsRemote,
@@ -25,15 +23,27 @@ import {
   PORTFOLIO_PACK_ID,
   PORTFOLIO_PACK_ROLLED_BACK,
 } from "./seed";
+import {
+  APP_EDITION,
+  assertV2CloudRow,
+  assertV2LocalKey,
+  MIGRATION_CLEARED_DEMAND_TEAMS,
+  MIGRATION_SEEDED_TEAM_ROSTER,
+  V2_API_STATE_PATH,
+  V2_CLOUD_ROW_ID,
+  V2_LOCAL_STATE_KEY,
+  V2_PORTFOLIO_BACKUP_KEY,
+  V2_TEAMS_BACKUP_KEY,
+} from "./v2Store";
 
-/** v2-only snapshot. Frozen v1 keeps `vi-planer-v3` and never reads this key. */
-const STORAGE_KEY = "vi-planer-v2";
-/** v1 / pre-split shared key — v2 must not load or save it after bootstrap. */
-const V1_STORAGE_KEY = "vi-planer-v3";
-const SUPABASE_ROW_ID = "v2";
-const PORTFOLIO_BACKUP_KEY = "vi-planer-v2-pre-xlsx-prio";
-const TEAMS_BACKUP_KEY = "vi-planer-v2-teams";
-const API_STATE_PATH = "/api/state/v2";
+const STORAGE_KEY = V2_LOCAL_STATE_KEY;
+const SUPABASE_ROW_ID = V2_CLOUD_ROW_ID;
+const PORTFOLIO_BACKUP_KEY = V2_PORTFOLIO_BACKUP_KEY;
+const TEAMS_BACKUP_KEY = V2_TEAMS_BACKUP_KEY;
+const API_STATE_PATH = V2_API_STATE_PATH;
+
+assertV2LocalKey(STORAGE_KEY);
+assertV2CloudRow(SUPABASE_ROW_ID);
 
 export type SyncStatus = "idle" | "loading" | "saved" | "error" | "offline";
 
@@ -42,10 +52,19 @@ let syncListeners: Array<(status: SyncStatus) => void> = [];
 
 let supabase: SupabaseClient | null = null;
 
+function envFlag(name: string): string | undefined {
+  try {
+    const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
+    return env?.[name];
+  } catch {
+    return undefined;
+  }
+}
+
 function getSupabase(): SupabaseClient | null {
   if (supabase) return supabase;
-  const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+  const url = envFlag("VITE_SUPABASE_URL");
+  const key = envFlag("VITE_SUPABASE_ANON_KEY");
   if (!url || !key) return null;
   supabase = createClient(url, key);
   return supabase;
@@ -123,26 +142,31 @@ function loadTeamsBackup(): Team[] | null {
 }
 
 function saveLocal(state: AppState) {
-  if ((STORAGE_KEY as string) === V1_STORAGE_KEY) {
-    throw new Error("v2 refused to write the v1 store");
-  }
+  assertV2LocalKey(STORAGE_KEY);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   writeTeamsBackup(state);
 }
 
 function apiBase(): string {
-  const url = import.meta.env.VITE_API_URL as string | undefined;
+  const url = envFlag("VITE_API_URL");
   return url ? url.replace(/\/$/, "") : "";
 }
 
 function isPagesStandalone(): boolean {
-  const v = import.meta.env.VITE_LOCAL_STORAGE_ONLY;
+  const v = envFlag("VITE_LOCAL_STORAGE_ONLY");
   return v === "1" || v === "true";
 }
 
 function usesRemoteApi(): boolean {
   if (isPagesStandalone()) return false;
-  return Boolean(apiBase()) || import.meta.env.PROD;
+  if (apiBase()) return true;
+  try {
+    return Boolean(
+      (import.meta as ImportMeta & { env?: { PROD?: boolean } }).env?.PROD
+    );
+  } catch {
+    return false;
+  }
 }
 
 async function loadFromApi(): Promise<AppState | null> {
@@ -177,6 +201,7 @@ async function loadFromSupabase(): Promise<AppState | null> {
   const client = getSupabase();
   if (!client) return null;
   try {
+    assertV2CloudRow(SUPABASE_ROW_ID);
     const { data, error } = await client
       .from("app_state")
       .select("payload")
@@ -195,6 +220,7 @@ async function saveToSupabase(state: AppState): Promise<boolean> {
   const client = getSupabase();
   if (!client) return false;
   try {
+    assertV2CloudRow(SUPABASE_ROW_ID);
     const { error } = await client.from("app_state").upsert({
       id: SUPABASE_ROW_ID,
       payload: state,
@@ -316,26 +342,23 @@ export function rollbackPortfolioPack(): AppState | null {
 }
 
 /**
- * First v2 load after the store split: never read the live v1 cloud row.
- * Empty v2 restores the v2 teams backup only — never copies v1 items.
+ * First empty v2 load: never read the frozen v1 cloud row (`main`) or
+ * `vi-planer-v3`. Restore only the v2 teams backup when present.
  */
 function bootstrapV2State(local: AppState | null, remote: AppState | null): {
   base: AppState;
   tombstoneSource: AppState | null;
-  isolated: boolean;
 } {
   if (local && remote) {
     return {
       base: mergeLiveV2States(local, remote),
       tombstoneSource: local,
-      isolated: false,
     };
   }
   if (local || remote) {
     return {
       base: (local ?? remote) as AppState,
       tombstoneSource: local,
-      isolated: false,
     };
   }
 
@@ -343,15 +366,15 @@ function bootstrapV2State(local: AppState | null, remote: AppState | null): {
   const backedTeams = loadTeamsBackup();
   if (backedTeams) {
     seed.teams = backedTeams;
-    seed.teamRosterSeeded = SEEDED_TEAM_ROSTER_V1;
+    seed.teamRosterSeeded = MIGRATION_SEEDED_TEAM_ROSTER;
     seed.changeLog = prependChangeLog(
       seed.changeLog,
       "Восстановлен каталог команд роль—ФИО из резервной копии v2",
       "team"
     );
   }
-  seed.clearedDemandTeams = CLEARED_DEMAND_TEAMS_V1;
-  return { base: seed, tombstoneSource: null, isolated: true };
+  seed.clearedDemandTeams = MIGRATION_CLEARED_DEMAND_TEAMS;
+  return { base: seed, tombstoneSource: null };
 }
 
 function restoreTeamsBackupIfEmpty(state: AppState): AppState {
@@ -363,7 +386,7 @@ function restoreTeamsBackupIfEmpty(state: AppState): AppState {
   return {
     ...state,
     teams: backed,
-    teamRosterSeeded: SEEDED_TEAM_ROSTER_V1,
+    teamRosterSeeded: MIGRATION_SEEDED_TEAM_ROSTER,
   };
 }
 
@@ -390,6 +413,8 @@ export async function loadState(): Promise<AppState> {
   setSyncStatus("loading");
 
   const local = loadLocal();
+  // API then Supabase — both scoped to APP_EDITION /v2 only.
+  void APP_EDITION;
   const remote = (await loadFromApi()) ?? (await loadFromSupabase());
   const state = hydrateV2State(local, remote);
   if (v2StateWouldShrink(state, local)) {
@@ -452,6 +477,7 @@ async function flushPendingSave() {
   }
 }
 
+/** Persist user actions to v2 local + cloud. Never writes the v1 store. */
 export function saveState(state: AppState) {
   const payload = ensureStateAssignmentRoles({
     ...state,

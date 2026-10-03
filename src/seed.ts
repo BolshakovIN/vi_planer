@@ -1,7 +1,7 @@
 import {
   AppState,
-  CLEARED_DEMAND_TEAMS_V1,
-  SEEDED_TEAM_ROSTER_V1,
+  MIGRATION_CLEARED_DEMAND_TEAMS,
+  MIGRATION_SEEDED_TEAM_ROSTER,
   Team,
   applyComputedTeamCapacities,
   containerNameFromBacklog,
@@ -40,8 +40,8 @@ const SEED_RAW: AppState = {
   demoVariantA: true,
   demoVariantB: false,
   portfolioPack: PORTFOLIO_PACK_ID,
-  clearedDemandTeams: CLEARED_DEMAND_TEAMS_V1,
-  teamRosterSeeded: SEEDED_TEAM_ROSTER_V1,
+  clearedDemandTeams: MIGRATION_CLEARED_DEMAND_TEAMS,
+  teamRosterSeeded: MIGRATION_SEEDED_TEAM_ROSTER,
   teams: [
     {
       id: "data-office",

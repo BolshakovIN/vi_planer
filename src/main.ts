@@ -87,7 +87,7 @@ import {
   roleJobLabel,
   shortFio,
   TeamMember,
-  SEEDED_TEAM_ROSTER_V1,
+  MIGRATION_SEEDED_TEAM_ROSTER,
   ensureStateAssignmentRoles,
   weekIndex,
   WORKING_DAYS_PER_WEEK,
@@ -112,7 +112,6 @@ import {
 
 /** Release / deploy stamp in the header (DD.MM.YYYY) */
 const RELEASE_UPDATED = "03.10.2026";
-const EDITION_STORAGE_KEY = "vi-planer-edition";
 
 type Tab =
   | "portfolio"
@@ -4911,19 +4910,17 @@ function brandMarkSrc(): string {
   return new URL("vi-mark.png", new URL(base, window.location.href)).href;
 }
 
-function isV1Edition(): boolean {
-  return /\/v1(\/|$)/.test(window.location.pathname);
-}
-
+/**
+ * Navigation only — this bundle is always v2 and never shares localStorage
+ * or cloud rows with the frozen `/v1/` build.
+ */
 function editionSwitcherHtml(): string {
-  const isV1 = isV1Edition();
-  const v1Href = isV1 ? "./" : "./v1/";
-  const v2Href = isV1 ? "../" : "./";
-  const persist = (ed: "v1" | "v2") =>
-    `try{localStorage.setItem('${EDITION_STORAGE_KEY}','${ed}')}catch(e){}`;
+  const base = import.meta.env.BASE_URL || "./";
+  const v1Href = new URL("v1/", new URL(base, window.location.href)).pathname;
+  const v2Href = base.endsWith("/") ? base : `${base}/`;
   return `<nav class="edition-switch no-print" aria-label="Версия интерфейса">
-    <a class="edition-switch-btn${isV1 ? " is-on" : ""}" href="${v1Href}" data-edition="v1" onclick="${persist("v1")}">v1</a>
-    <a class="edition-switch-btn${!isV1 ? " is-on" : ""}" href="${v2Href}" data-edition="v2" onclick="${persist("v2")}">v2</a>
+    <a class="edition-switch-btn" href="${v1Href}" data-edition="v1">v1</a>
+    <a class="edition-switch-btn is-on" href="${v2Href}" data-edition="v2" aria-current="page">v2</a>
   </nav>`;
 }
 
@@ -6206,9 +6203,10 @@ function saveProjectCard() {
   run(false, false);
 }
 
+/** Write every user mutation to the isolated v2 store (local + cloud row `v2`). */
 function persist() {
   applyComputedTeamCapacities(state.teams);
-  if (!state.teamRosterSeeded) state.teamRosterSeeded = SEEDED_TEAM_ROSTER_V1;
+  if (!state.teamRosterSeeded) state.teamRosterSeeded = MIGRATION_SEEDED_TEAM_ROSTER;
   state = ensureStateAssignmentRoles(state);
   saveState(state);
   render();

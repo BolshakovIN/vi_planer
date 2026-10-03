@@ -62,6 +62,7 @@ async def health():
 
 @app.get("/api/state")
 async def read_state():
+    # Legacy unscoped path for frozen v1 API clients — v2 SPA uses /api/state/v2.
     try:
         state = await get_state("v1")
         updated_at = await get_updated_at("v1")

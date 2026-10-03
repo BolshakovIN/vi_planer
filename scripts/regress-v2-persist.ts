@@ -1,4 +1,9 @@
-import type { AppState } from "../src/model.ts";
+import type { AppState, AssignmentDemandStatus } from "../src/model.ts";
+import {
+  V2_CLOUD_ROW_ID,
+  V2_LOCAL_STATE_KEY,
+  V2_API_STATE_PATH,
+} from "../src/v2Store.ts";
 
 const store = new Map<string, string>();
 (globalThis as { localStorage?: Storage }).localStorage = {
@@ -16,10 +21,17 @@ const store = new Map<string, string>();
   },
 } as Storage;
 
-const { normalizeState, applyClearedDemandTeams, applySeededTeamRoster, mergeMissingSeedItems, v2StateFootprint } =
-  await import("../src/model.ts");
+const {
+  normalizeState,
+  applyClearedDemandTeams,
+  applySeededTeamRoster,
+  mergeMissingSeedItems,
+  v2StateFootprint,
+  rememberDeletedIds,
+} = await import("../src/model.ts");
 const { SEED } = await import("../src/seed.ts");
-const { applyCurrentPortfolioPack, hydrateV2State } = await import("../src/storage.ts");
+const { applyCurrentPortfolioPack, hydrateV2State, saveState, loadState } =
+  await import("../src/storage.ts");
 
 function fail(message: string): never {
   console.error(`FAIL: ${message}`);
@@ -29,6 +41,10 @@ function fail(message: string): never {
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) fail(message);
 }
+
+assert(V2_LOCAL_STATE_KEY === "vi-planer-v2", "v2 local key drifted");
+assert(V2_CLOUD_ROW_ID === "v2", "v2 cloud id drifted");
+assert(V2_API_STATE_PATH === "/api/state/v2", "v2 API path drifted");
 
 function userState(): AppState {
   const state = normalizeState({
@@ -68,9 +84,20 @@ function userState(): AppState {
             size: "M",
             workStartDate: "2026-10-05",
             days: 10,
+            demandStatus: "pending" as AssignmentDemandStatus,
             roles: [
-              { id: "r1", name: "аналитик", days: 4 },
-              { id: "r2", name: "разработчик", days: 6 },
+              {
+                id: "r1",
+                name: "аналитик",
+                days: 4,
+                demandStatus: "pending" as AssignmentDemandStatus,
+              },
+              {
+                id: "r2",
+                name: "разработчик",
+                days: 6,
+                demandStatus: "draft" as AssignmentDemandStatus,
+              },
             ],
           },
         ],
@@ -121,6 +148,33 @@ const persisted = normalizeState(JSON.parse(JSON.stringify(local)));
 assert(persisted, "persist snapshot failed to normalize");
 expectUserData(persisted, "persist→normalize");
 
+store.set(V2_LOCAL_STATE_KEY, JSON.stringify(persisted));
+const v1Poison = "__v1_poison__";
+store.set("vi-planer-v3", v1Poison); // poison v1 key — must stay untouched
+saveState({
+  ...persisted,
+  items: persisted.items.map((item) => ({
+    ...item,
+    assignments: item.assignments.map((a) => ({
+      ...a,
+      roles: (a.roles ?? []).map((r) =>
+        r.id === "r1" ? { ...r, demandStatus: "approved" as const } : r
+      ),
+    })),
+  })),
+});
+assert(store.has(V2_LOCAL_STATE_KEY), "saveState must write v2 key");
+assert(
+  store.get("vi-planer-v3") === v1Poison,
+  "saveState must not write or clear the frozen v1 local key"
+);
+const afterSave = JSON.parse(store.get(V2_LOCAL_STATE_KEY)!);
+const approvedRole = afterSave.items[0].assignments[0].roles.find(
+  (r: { id: string }) => r.id === "r1"
+);
+assert(approvedRole?.demandStatus === "approved", "approved status not saved");
+assert(!JSON.stringify(afterSave).includes("vi-planer-v3"), "payload ok");
+
 const staleRemote = structuredClone(SEED);
 staleRemote.savedAt = "2026-09-01T00:00:00.000Z";
 staleRemote.items = staleRemote.items.map((item) => ({
@@ -157,4 +211,23 @@ const merged = mergeMissingSeedItems(persisted, SEED.items);
 expectUserData(merged.state, "mergeMissingSeedItems");
 assert(merged.state.items.length === 1, "mergeMissingSeedItems added seed rows");
 
-console.log("ok: v2 persist keeps assignments, ranks, teams, roles");
+const withTombstone = {
+  ...persisted,
+  deletedItemIds: rememberDeletedIds(persisted.deletedItemIds, ["x002"]),
+  items: persisted.items,
+};
+const resurrect = mergeMissingSeedItems(withTombstone, SEED.items);
+assert(
+  !resurrect.state.items.some((i) => i.id === "x002"),
+  "tombstone x002 must not resurrect from seed"
+);
+
+// loadState with only v2 local — must ignore poisoned v1 key
+store.clear();
+store.set(V2_LOCAL_STATE_KEY, JSON.stringify(persisted));
+store.set("vi-planer-v3", v1Poison);
+const booted = await loadState();
+expectUserData(booted, "loadState ignores v1 local key");
+assert(store.get("vi-planer-v3") === v1Poison, "loadState must leave the v1 key alone");
+
+console.log("ok: v2 persist keeps assignments, ranks, teams, roles; isolated from v1");
