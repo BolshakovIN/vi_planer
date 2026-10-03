@@ -14,14 +14,15 @@
     "build:pages": "VITE_BASE_PATH=/vi_planer/ VITE_LOCAL_STORAGE_ONLY=1 tsc && VITE_BASE_PATH=/vi_planer/ VITE_LOCAL_STORAGE_ONLY=1 vite build --outDir dist-pages",
     "build:pages:shared": "tsc && VITE_BASE_PATH=/vi_planer/ vite build --outDir dist-pages",
     "build:pages:v1": "node scripts/build-pages-v1.mjs",
-    "deploy:pages": "npm run build:pages && npm run build:pages:v1 && rm -rf docs && mkdir -p docs && cp -R dist-pages/* docs/ && mkdir -p docs/v1 && cp -R dist-pages-v1/* docs/v1/ && npm run build",
-    "deploy:pages:shared": "npm run build:pages:shared && npm run build:pages:v1 && rm -rf docs && mkdir -p docs && cp -R dist-pages/* docs/ && mkdir -p docs/v1 && cp -R dist-pages-v1/* docs/v1/ && npm run build",
+    "deploy:pages": "npm run build:pages && npm run build:pages:v1 && rm -rf docs && mkdir -p docs && cp -R dist-pages/* docs/ && mkdir -p docs/v1 && cp -R dist-pages-v1/* docs/v1/ && npm run docs:commits && npm run build",
+    "deploy:pages:shared": "npm run build:pages:shared && npm run build:pages:v1 && rm -rf docs && mkdir -p docs && cp -R dist-pages/* docs/ && mkdir -p docs/v1 && cp -R dist-pages-v1/* docs/v1/ && npm run docs:commits && npm run build",
     "start": "tsx server/index.ts",
     "start:py": "python3 -m server_py",
     "preview": "npm run build && npm start",
     "preview:py": "npm run build && npm run start:py",
     "build:presentation": "node scripts/build-presentation-pdf.mjs",
     "build:gap-analysis": "node scripts/build-gap-analysis-pdf.mjs",
+    "docs:commits": "node scripts/update-commits-doc.mjs",
     "test:persist": "tsx scripts/regress-v2-persist.ts"
   },
   "dependencies": {
