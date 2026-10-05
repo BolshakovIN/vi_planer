@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 05.10.2026, 15:09 GMT+3
+Сгенерировано: 05.10.2026, 15:11 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,9 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `542fcdc` | 2026-10-05 | ivanbolsakov | Update v2 requirements doc for current tabs and edition split. |
+| `44c819f` | 2026-10-05 | ivanbolsakov | Remove demo badge from Monitoring tab. |
+| `4e0d622` | 2026-10-05 | ivanbolsakov | Publish v1 pill button styles to GitHub Pages. |
 | `9a1e96c` | 2026-10-05 | ivanbolsakov | Publish pill button styles to GitHub Pages. |
 | `5c71b1b` | 2026-10-05 | ivanbolsakov | Style v2 buttons as pill chips with solid red active state. |
 | `b86c38d` | 2026-10-03 | ivanbolsakov | Refresh commits history doc. |
@@ -217,6 +220,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `e3d968e` | 2026-10-05 | ivanbolsakov | Remove unused Monitoring demo badge CSS. |
+| `0fda1b4` | 2026-10-05 | ivanbolsakov | Remove demo badge from Monitoring tab. |
 | `3a78e56` | 2026-10-05 | ivanbolsakov | Update requirements doc for v1 edition. |
 | `6a78db0` | 2026-10-05 | ivanbolsakov | Style v1 buttons as pill chips with solid red active state. |
 | `0880733` | 2026-10-03 | ivanbolsakov | Remember the active UI tab across reloads on v1. |
@@ -376,9 +381,14 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `3a78e56` | 2026-10-05 | ivanbolsakov | origin/v1, v1 | Update requirements doc for v1 edition. |
+| `e3d968e` | 2026-10-05 | ivanbolsakov | origin/v1, v1 | Remove unused Monitoring demo badge CSS. |
+| `0fda1b4` | 2026-10-05 | ivanbolsakov |  | Remove demo badge from Monitoring tab. |
+| `542fcdc` | 2026-10-05 | ivanbolsakov | HEAD -> master | Update v2 requirements doc for current tabs and edition split. |
+| `44c819f` | 2026-10-05 | ivanbolsakov |  | Remove demo badge from Monitoring tab. |
+| `4e0d622` | 2026-10-05 | ivanbolsakov | origin/master | Publish v1 pill button styles to GitHub Pages. |
+| `3a78e56` | 2026-10-05 | ivanbolsakov |  | Update requirements doc for v1 edition. |
 | `6a78db0` | 2026-10-05 | ivanbolsakov |  | Style v1 buttons as pill chips with solid red active state. |
-| `9a1e96c` | 2026-10-05 | ivanbolsakov | HEAD -> master, origin/master | Publish pill button styles to GitHub Pages. |
+| `9a1e96c` | 2026-10-05 | ivanbolsakov |  | Publish pill button styles to GitHub Pages. |
 | `5c71b1b` | 2026-10-05 | ivanbolsakov |  | Style v2 buttons as pill chips with solid red active state. |
 | `b86c38d` | 2026-10-03 | ivanbolsakov | origin/v2, v2 | Refresh commits history doc. |
 | `8c3dff1` | 2026-10-03 | ivanbolsakov |  | Add commits history doc and refresh it on Pages deploy. |
