@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 05.10.2026, 12:33 GMT+3
+Сгенерировано: 05.10.2026, 15:09 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,7 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `9a1e96c` | 2026-10-05 | ivanbolsakov | Publish pill button styles to GitHub Pages. |
 | `5c71b1b` | 2026-10-05 | ivanbolsakov | Style v2 buttons as pill chips with solid red active state. |
 | `b86c38d` | 2026-10-03 | ivanbolsakov | Refresh commits history doc. |
 | `8c3dff1` | 2026-10-03 | ivanbolsakov | Add commits history doc and refresh it on Pages deploy. |
@@ -216,6 +217,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `3a78e56` | 2026-10-05 | ivanbolsakov | Update requirements doc for v1 edition. |
+| `6a78db0` | 2026-10-05 | ivanbolsakov | Style v1 buttons as pill chips with solid red active state. |
 | `0880733` | 2026-10-03 | ivanbolsakov | Remember the active UI tab across reloads on v1. |
 | `6ca2d95` | 2026-10-03 | ivanbolsakov | Fill sparse v1 portfolios with a deterministic random team and Gantt plan. |
 | `e8e81a4` | 2026-10-01 | ivanbolsakov | Add shared utilization mode toggles to Мониторинг and drop the in-tab dismiss button. |
@@ -373,12 +376,15 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `5c71b1b` | 2026-10-05 | ivanbolsakov | HEAD -> master | Style v2 buttons as pill chips with solid red active state. |
-| `b86c38d` | 2026-10-03 | ivanbolsakov | origin/v2, origin/master, v2 | Refresh commits history doc. |
+| `3a78e56` | 2026-10-05 | ivanbolsakov | origin/v1, v1 | Update requirements doc for v1 edition. |
+| `6a78db0` | 2026-10-05 | ivanbolsakov |  | Style v1 buttons as pill chips with solid red active state. |
+| `9a1e96c` | 2026-10-05 | ivanbolsakov | HEAD -> master, origin/master | Publish pill button styles to GitHub Pages. |
+| `5c71b1b` | 2026-10-05 | ivanbolsakov |  | Style v2 buttons as pill chips with solid red active state. |
+| `b86c38d` | 2026-10-03 | ivanbolsakov | origin/v2, v2 | Refresh commits history doc. |
 | `8c3dff1` | 2026-10-03 | ivanbolsakov |  | Add commits history doc and refresh it on Pages deploy. |
 | `be74973` | 2026-10-03 | ivanbolsakov |  | Persist tab when monitoring demo is hidden on v2. |
 | `5c3adaf` | 2026-10-03 | ivanbolsakov |  | Publish tab restore for v1 and v2 to GitHub Pages. |
-| `0880733` | 2026-10-03 | ivanbolsakov | origin/v1, v1 | Remember the active UI tab across reloads on v1. |
+| `0880733` | 2026-10-03 | ivanbolsakov |  | Remember the active UI tab across reloads on v1. |
 | `520c6c4` | 2026-10-03 | ivanbolsakov |  | Remember the active UI tab across reloads on v2. |
 | `53301d3` | 2026-10-03 | ivanbolsakov |  | Rename catalog role to бизнес-аналитик. |
 | `7168850` | 2026-10-03 | ivanbolsakov |  | Publish dependency refactor to GitHub Pages. |
