@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 05.10.2026, 15:20 GMT+3
+Сгенерировано: 05.10.2026, 16:21 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,10 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `443633d` | 2026-10-05 | ivanbolsakov | Polish plan team filter actions and move Settings size-range help under the estimate panel. |
+| `2812d55` | 2026-10-05 | ivanbolsakov | Publish requirements intro sync for always-on Monitoring. |
+| `f828c79` | 2026-10-05 | ivanbolsakov | Align v2 requirements intro with always-on Monitoring tab. |
+| `6557029` | 2026-10-05 | ivanbolsakov | Publish Settings Data removal and typography to GitHub Pages. |
 | `06cc07a` | 2026-10-05 | ivanbolsakov | Use the normal Monitoring tab button helper on v2. |
 | `802ef9a` | 2026-10-05 | ivanbolsakov | Remove Settings «Данные» reset UI and clarify Settings typography. |
 | `3c09801` | 2026-10-05 | ivanbolsakov | Publish Monitoring settings toggle removal to GitHub Pages. |
@@ -225,6 +229,7 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `17ea96f` | 2026-10-05 | ivanbolsakov | List Мониторинг as a normal v1 tab in requirements intro. |
 | `1677c24` | 2026-10-05 | ivanbolsakov | Remove Settings «Данные» reset UI and clarify Settings typography. |
 | `60e6440` | 2026-10-05 | ivanbolsakov | Remove obsolete Monitoring demo toggle from Settings. |
 | `e3d968e` | 2026-10-05 | ivanbolsakov | Remove unused Monitoring demo badge CSS. |
@@ -388,11 +393,16 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `06cc07a` | 2026-10-05 | ivanbolsakov | HEAD -> master | Use the normal Monitoring tab button helper on v2. |
-| `1677c24` | 2026-10-05 | ivanbolsakov | v1 | Remove Settings «Данные» reset UI and clarify Settings typography. |
+| `443633d` | 2026-10-05 | ivanbolsakov | HEAD -> master | Polish plan team filter actions and move Settings size-range help under the estimate panel. |
+| `17ea96f` | 2026-10-05 | ivanbolsakov | origin/v1, v1 | List Мониторинг as a normal v1 tab in requirements intro. |
+| `2812d55` | 2026-10-05 | ivanbolsakov | origin/master | Publish requirements intro sync for always-on Monitoring. |
+| `f828c79` | 2026-10-05 | ivanbolsakov |  | Align v2 requirements intro with always-on Monitoring tab. |
+| `6557029` | 2026-10-05 | ivanbolsakov |  | Publish Settings Data removal and typography to GitHub Pages. |
+| `06cc07a` | 2026-10-05 | ivanbolsakov |  | Use the normal Monitoring tab button helper on v2. |
+| `1677c24` | 2026-10-05 | ivanbolsakov |  | Remove Settings «Данные» reset UI and clarify Settings typography. |
 | `802ef9a` | 2026-10-05 | ivanbolsakov |  | Remove Settings «Данные» reset UI and clarify Settings typography. |
-| `3c09801` | 2026-10-05 | ivanbolsakov | origin/master | Publish Monitoring settings toggle removal to GitHub Pages. |
-| `60e6440` | 2026-10-05 | ivanbolsakov | origin/v1 | Remove obsolete Monitoring demo toggle from Settings. |
+| `3c09801` | 2026-10-05 | ivanbolsakov |  | Publish Monitoring settings toggle removal to GitHub Pages. |
+| `60e6440` | 2026-10-05 | ivanbolsakov |  | Remove obsolete Monitoring demo toggle from Settings. |
 | `7e661b4` | 2026-10-05 | ivanbolsakov |  | Remove obsolete Monitoring demo toggle from Settings. |
 | `08f987e` | 2026-10-05 | ivanbolsakov |  | Publish Monitoring demo-badge removal to GitHub Pages. |
 | `e3d968e` | 2026-10-05 | ivanbolsakov |  | Remove unused Monitoring demo badge CSS. |
