@@ -3231,6 +3231,8 @@ type PlanPersonPlacement = {
   key: string;
   /** Stable person key: member id, else normalized short FIO. */
   personKey: string;
+  projectTitle: string;
+  itemTitle: string;
   startWeek: number;
   endWeek: number;
 };
@@ -3304,6 +3306,8 @@ function collectPlanPersonPlacements(
         out.push({
           key: planPlacementKey(item.id, a.teamId, role.id),
           personKey: planPersonKey(a.teamId, role.assigneeId, member.name),
+          projectTitle: projectGroupKey(item),
+          itemTitle: item.title,
           startWeek,
           endWeek: startWeek + planDurationWeeks(days) - 1,
         });
@@ -3333,13 +3337,72 @@ const TREE_EXPAND_SVG = `<svg class="tree-expand-icon" viewBox="0 0 16 16" width
 /** Diagonal collapse-all: arrows point inward toward center. */
 const TREE_COLLAPSE_SVG = `<svg class="tree-expand-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M3.5 3.5H7V7M3.5 3.5 7.2 7.2M12.5 12.5H9V9M12.5 12.5 8.8 8.8"/></svg>`;
 
-/** Filled warning triangle with «!» — person/resource conflict mark on plan role rows. */
-const PLAN_CONFLICT_MARK_SVG = `<svg class="plan-conflict-mark-ico" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.14 1.7c.37-.66 1.35-.66 1.72 0l6.12 10.95c.38.68-.1 1.55-.86 1.55H1.88c-.76 0-1.24-.87-.86-1.55L7.14 1.7z"/><path fill="#fff" d="M7.4 5.15h1.2v4.25H7.4zm0 5.25h1.2v1.35H7.4z"/></svg>`;
+/** White-filled warning triangle, red stroke + «!» — person conflict mark on plan role rows. */
+const PLAN_CONFLICT_MARK_SVG = `<svg class="plan-conflict-mark-ico" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false"><path fill="var(--surface, #fff)" stroke="var(--accent)" stroke-width="1.2" stroke-linejoin="round" d="M7.14 1.7c.37-.66 1.35-.66 1.72 0l6.12 10.95c.38.68-.1 1.55-.86 1.55H1.88c-.76 0-1.24-.87-.86-1.55L7.14 1.7z"/><path fill="var(--accent)" d="M7.4 5.15h1.2v4.25H7.4zm0 5.25h1.2v1.35H7.4z"/></svg>`;
+
+/** Axis-style short date `dd.mm` for a plan week Monday. */
+function planWeekShortDate(week: number): string {
+  const monday = addWeeks(state.startDate, week);
+  const [, m, d] = monday.split("-");
+  return `${d}.${m}`;
+}
+
+/** e.g. `Н4–Н5 (12.10–19.10)` or `Н4 (12.10)` when single week. */
+function planWeekRangeLabel(startWeek: number, endWeek: number): string {
+  const weeks =
+    startWeek === endWeek
+      ? `Н${startWeek + 1}`
+      : `Н${startWeek + 1}–Н${endWeek + 1}`;
+  const dates =
+    startWeek === endWeek
+      ? planWeekShortDate(startWeek)
+      : `${planWeekShortDate(startWeek)}–${planWeekShortDate(endWeek)}`;
+  return `${weeks} (${dates})`;
+}
+
+function planPlacementDisplayTitle(p: PlanPersonPlacement): string {
+  if (p.itemTitle && p.itemTitle !== p.projectTitle) {
+    return `«${p.projectTitle}» · ${p.itemTitle}`;
+  }
+  return `«${p.projectTitle}»`;
+}
+
+/** Overlapping placements for the same person (excluding self). */
+function planConflictCounterparts(
+  placeKey: string,
+  placements: readonly PlanPersonPlacement[]
+): PlanPersonPlacement[] {
+  const self = placements.find((p) => p.key === placeKey);
+  if (!self?.personKey) return [];
+  return placements.filter(
+    (p) =>
+      p.key !== placeKey &&
+      p.personKey === self.personKey &&
+      planWeeksOverlap(self.startWeek, self.endWeek, p.startWeek, p.endWeek)
+  );
+}
+
+/**
+ * Tooltip listing conflicting projects/weeks, e.g.
+ * `Пересечение: «Сайт ЛК» · Функция A Н4–Н5 (12.10–19.10); «Активные продажи» Н4–Н8 (12.10–09.11)`
+ */
+function planPersonConflictTooltip(
+  placeKey: string,
+  placements: readonly PlanPersonPlacement[]
+): string {
+  const parts = planConflictCounterparts(placeKey, placements).map(
+    (p) =>
+      `${planPlacementDisplayTitle(p)} ${planWeekRangeLabel(p.startWeek, p.endWeek)}`
+  );
+  if (!parts.length) return "Пересечение по исполнителю";
+  return `Пересечение: ${parts.join("; ")}`;
+}
 
 function planConflictMarkHtml(
   title = "Пересечение по исполнителю"
 ): string {
   const t = escapeAttr(title);
+  // title on outer span (solid hit area); SVG is pointer-events:none so hover works reliably
   return `<span class="plan-conflict-mark" title="${t}" aria-label="${t}" role="img">${PLAN_CONFLICT_MARK_SVG}</span>`;
 }
 
@@ -3764,9 +3827,12 @@ function planningHtml(
     (n, id) => n + planConflictWeeks(id, overflowByTeam, weeks),
     0
   );
-  const personConflictKeys = findPersonConflictKeys(
-    collectPlanPersonPlacements(items, selectedSet, ranges)
+  const personPlacements = collectPlanPersonPlacements(
+    items,
+    selectedSet,
+    ranges
   );
+  const personConflictKeys = findPersonConflictKeys(personPlacements);
   const conflictCount = personConflictKeys.size || capacityConflictWeeks;
 
   const body = groups.length
@@ -3815,11 +3881,14 @@ function planningHtml(
                         role.id
                       );
                       const personConflict = personConflictKeys.has(placeKey);
+                      const conflictTip = personConflict
+                        ? planPersonConflictTooltip(placeKey, personPlacements)
+                        : "";
                       const label = member
                         ? `${shortFio(member.name)} · ${days} дн.`
                         : `${role.name} · ${days} дн.`;
                       const barTitle = personConflict
-                        ? `${label} — пересечение по исполнителю`
+                        ? `${label} — ${conflictTip}`
                         : label;
                       const bar = member
                         ? planBarHtml(
@@ -3842,7 +3911,7 @@ function planningHtml(
                         : " plan-role-row";
                       return `${planTaskFormHtml(item, a.teamId, role.id)}<div class="plan-row${rowCls}">
                         <div class="plan-cell">
-                          <span class="plan-exec-name plan-fio-name">${leftLabel}${personConflict ? planConflictMarkHtml() : ""}</span>
+                          <span class="plan-exec-name plan-fio-name">${leftLabel}${personConflict ? planConflictMarkHtml(conflictTip) : ""}</span>
                           ${planPlaceOpenBtnHtml(item.id, a.teamId, role.id, onTimeline)}
                         </div>
                         ${planTrackHtml(bar, weeks)}

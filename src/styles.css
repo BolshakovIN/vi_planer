@@ -4839,13 +4839,20 @@ body.pdf-capturing .gantt-page .plan-board {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 16px;
+  min-height: 16px;
+  padding: 1px;
   color: var(--accent);
   line-height: 1;
   cursor: help;
+  pointer-events: auto;
 }
 
 .plan-conflict-mark-ico {
   display: block;
+  pointer-events: none;
 }
 
 .plan-add-btn {
