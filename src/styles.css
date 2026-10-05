@@ -32,6 +32,8 @@
   --gantt-col-gap: 12px;
   --gantt-row-gap: 8px;
   --radius: 6px;
+  --control-radius: 12px;
+  --pill-radius: 999px;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   font-family: "IBM Plex Sans", system-ui, sans-serif;
   color: var(--ink);
@@ -123,8 +125,8 @@ textarea {
   flex: 0 1 auto;
   white-space: nowrap;
   font-size: clamp(10px, 1.05vw, 13px);
-  padding: clamp(4px, 0.55vw, 8px) clamp(6px, 0.85vw, 12px);
-  border-radius: 8px;
+  padding: clamp(4px, 0.55vw, 8px) clamp(8px, 0.95vw, 14px);
+  border-radius: var(--pill-radius);
   line-height: 1.2;
 }
 
@@ -165,8 +167,8 @@ textarea {
   .top-actions .btn,
   .top-actions .sync-badge {
     font-size: 9px;
-    padding: 3px 5px;
-    border-radius: 6px;
+    padding: 3px 8px;
+    border-radius: var(--pill-radius);
   }
 }
 
@@ -193,15 +195,18 @@ textarea {
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink);
-  border-radius: 10px;
-  padding: 8px 12px;
+  border-radius: var(--pill-radius);
+  padding: 7px 14px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
+  line-height: 1.25;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.btn:hover:not(.btn-primary):not(.btn-danger) {
+.btn:hover:not(.btn-primary):not(.btn-danger):not(:disabled) {
   background: var(--surface-2);
+  border-color: #dadcde;
 }
 
 .btn-primary {
@@ -210,14 +215,14 @@ textarea {
   color: #fff;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
   color: #fff;
 }
 
 .btn-ghost {
-  background: transparent;
+  background: var(--surface);
 }
 
 .btn-danger {
@@ -226,7 +231,7 @@ textarea {
   color: #fff;
 }
 
-.btn-danger:hover {
+.btn-danger:hover:not(:disabled) {
   background: var(--bad);
   border-color: var(--bad);
   color: #fff;
@@ -266,7 +271,7 @@ textarea {
 .reset-confirm-actions .btn {
   padding: 4px 10px;
   font-size: 12px;
-  border-radius: 8px;
+  border-radius: var(--pill-radius);
 }
 
 #resetBtn.reset-ask {
@@ -380,7 +385,7 @@ textarea {
   top: 0;
   z-index: 45;
   display: flex;
-  gap: 4px;
+  gap: 8px;
   flex-wrap: wrap;
   align-items: center;
   margin-bottom: 8px;
@@ -392,20 +397,27 @@ textarea {
 }
 
 .tab {
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--muted);
-  border-radius: 999px;
-  padding: 5px 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: var(--pill-radius);
+  padding: 6px 12px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
+  line-height: 1.25;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.tab:hover:not(.active) {
+  background: var(--surface-2);
+  border-color: #dadcde;
 }
 
 .tab.active {
-  background: var(--accent-soft);
+  background: var(--accent);
   border-color: var(--accent);
-  color: var(--accent);
+  color: #fff;
   box-shadow: none;
 }
 
@@ -464,9 +476,9 @@ textarea {
 .portfolio-sticky .filters input,
 .portfolio-sticky .filters .col-picker-toggle,
 .portfolio-sticky .filters .btn {
-  padding: 4px 8px;
+  padding: 4px 10px;
   font-size: 12px;
-  border-radius: 6px;
+  border-radius: var(--pill-radius);
 }
 
 .portfolio-sticky .table-scroll-top {
@@ -529,10 +541,14 @@ textarea {
 .field select,
 .field textarea {
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 7px 10px;
+  border-radius: var(--pill-radius);
+  padding: 7px 12px;
   background: #fff;
   font-size: 13px;
+}
+
+.field textarea {
+  border-radius: var(--control-radius);
 }
 
 table {
@@ -979,8 +995,8 @@ th.sortable.sorted {
   height: 36px;
   min-height: 36px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0 8px;
+  border-radius: var(--pill-radius);
+  padding: 0 12px;
   font-size: 13px;
   background: #fff;
   box-sizing: border-box;
@@ -998,7 +1014,7 @@ th.sortable.sorted {
   justify-content: center;
   min-width: 28px;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--pill-radius);
   background: var(--neutral-soft);
   color: var(--neutral-ink);
   font-weight: 700;
@@ -2319,41 +2335,41 @@ body.prio-dragging {
 .schedule-mode-seg {
   display: inline-flex;
   flex-wrap: wrap;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--surface, #fff);
+  gap: 6px;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
 }
 
 .schedule-mode-btn {
   appearance: none;
-  border: 0;
+  border: 1px solid var(--line);
   margin: 0;
-  padding: 7px 12px;
+  padding: 6px 12px;
   font: inherit;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-  background: transparent;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--surface);
   cursor: pointer;
   line-height: 1.25;
   text-align: left;
-  border-right: 1px solid var(--line);
-}
-
-.schedule-mode-btn:last-child {
-  border-right: 0;
+  border-radius: var(--pill-radius);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .schedule-mode-btn:hover {
   color: var(--ink);
-  background: var(--row-hover, #f5f5f5);
+  background: var(--surface-2);
+  border-color: #dadcde;
 }
 
 .schedule-mode-btn.is-active {
-  color: var(--accent, #d60000);
-  background: var(--accent-soft, #fff0f0);
-  box-shadow: inset 0 0 0 1px var(--accent-border, #f5c6c6);
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: none;
 }
 
 .gantt-dep-legend {
@@ -3403,7 +3419,7 @@ body.pdf-capturing .table-scroll-top {
 }
 
 .tab-demo.active .tab-demo-mark {
-  color: color-mix(in srgb, var(--accent) 55%, var(--muted));
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .demo-page {
