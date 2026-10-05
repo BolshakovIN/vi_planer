@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 03.10.2026, 10:19 GMT+3
+Сгенерировано: 05.10.2026, 12:33 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `5c71b1b` | 2026-10-05 | ivanbolsakov | Style v2 buttons as pill chips with solid red active state. |
+| `b86c38d` | 2026-10-03 | ivanbolsakov | Refresh commits history doc. |
 | `8c3dff1` | 2026-10-03 | ivanbolsakov | Add commits history doc and refresh it on Pages deploy. |
 | `be74973` | 2026-10-03 | ivanbolsakov | Persist tab when monitoring demo is hidden on v2. |
 | `5c3adaf` | 2026-10-03 | ivanbolsakov | Publish tab restore for v1 and v2 to GitHub Pages. |
@@ -371,7 +373,9 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `8c3dff1` | 2026-10-03 | ivanbolsakov | HEAD -> master, origin/v2, origin/master, v2 | Add commits history doc and refresh it on Pages deploy. |
+| `5c71b1b` | 2026-10-05 | ivanbolsakov | HEAD -> master | Style v2 buttons as pill chips with solid red active state. |
+| `b86c38d` | 2026-10-03 | ivanbolsakov | origin/v2, origin/master, v2 | Refresh commits history doc. |
+| `8c3dff1` | 2026-10-03 | ivanbolsakov |  | Add commits history doc and refresh it on Pages deploy. |
 | `be74973` | 2026-10-03 | ivanbolsakov |  | Persist tab when monitoring demo is hidden on v2. |
 | `5c3adaf` | 2026-10-03 | ivanbolsakov |  | Publish tab restore for v1 and v2 to GitHub Pages. |
 | `0880733` | 2026-10-03 | ivanbolsakov | origin/v1, v1 | Remember the active UI tab across reloads on v1. |
