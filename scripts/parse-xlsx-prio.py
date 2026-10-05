@@ -361,8 +361,6 @@ const SEED_RAW: AppState = {{
   }},
   portfolioNotes: "",
   changeLog: [],
-  demoVariantA: true,
-  demoVariantB: false,
   portfolioPack: PORTFOLIO_PACK_ID,
   clearedDemandTeams: CLEARED_DEMAND_TEAMS_V1,
   teams: [

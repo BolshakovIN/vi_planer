@@ -37,8 +37,6 @@ const SEED_RAW: AppState = {
   },
   portfolioNotes: "",
   changeLog: [],
-  demoVariantA: true,
-  demoVariantB: false,
   portfolioPack: PORTFOLIO_PACK_ID,
   clearedDemandTeams: MIGRATION_CLEARED_DEMAND_TEAMS,
   teamRosterSeeded: MIGRATION_SEEDED_TEAM_ROSTER,

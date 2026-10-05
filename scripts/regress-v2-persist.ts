@@ -110,8 +110,6 @@ function userState(): AppState {
     products: [],
     portfolioNotes: "",
     changeLog: [],
-    demoVariantA: true,
-    demoVariantB: false,
   });
   if (!state) fail("user fixture failed to normalize");
   return state;
