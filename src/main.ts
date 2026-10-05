@@ -3674,7 +3674,7 @@ function planningHtml(
         <div class="plan-team-chips" aria-label="Команды">${chips || `<span class="meta">Нет команд</span>`}</div>
         <div class="plan-team-filter-actions">
           <button type="button" class="plan-team-filter-btn" data-plan-teams-clear>Сбросить фильтр</button>
-          <button type="button" class="plan-team-filter-btn" data-plan-teams-all>Выбрать все</button>
+          <button type="button" class="plan-team-filter-btn is-primary" data-plan-teams-all>Выбрать все</button>
         </div>
       </div>
       <div class="need-stats plan-stats">
@@ -3797,10 +3797,6 @@ function settingsHtml(rollups: ItemSchedule[]): string {
           </p>
         </div>
       </div>
-      <div class="callout settings-callout">
-        Диапазоны маечной оценки — <strong>сколько дней</strong> заложено в оценке (XS–XXL). Для плана берётся середина диапазона и делится на 5 рабочих дней (не меньше 1 нед.).
-        Изменения сразу перестраивают дату реализации и Gantt.
-      </div>
       <div class="panel panel-sticky-host">
         <div class="panel-sticky">
           <div class="panel-header">
@@ -3808,6 +3804,10 @@ function settingsHtml(rollups: ItemSchedule[]): string {
             <button type="button" class="btn" id="resetSizeRanges">Сбросить по умолчанию</button>
           </div>
         </div>
+        <p class="settings-help settings-size-ranges-hint">
+          Сколько дней заложено в оценке. Для плана берётся середина диапазона и делится на 5 рабочих дней (не меньше 1 нед.).
+          Изменения сразу перестраивают дату реализации и Gantt.
+        </p>
         <div class="size-ranges-grid">${rows}</div>
         <div class="settings-preview" id="settingsSchedPreview">
           <div class="settings-preview-caption">Сейчас в плане</div>
