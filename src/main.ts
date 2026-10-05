@@ -108,7 +108,9 @@ import { V2_UI_TAB_KEY } from "./v2Store";
 import {
   downloadMarkdownAsPdf,
   downloadPlanerReportPdf,
+  downloadGanttSchematicPdf,
   type PlanerReportData,
+  type GanttPdfData,
 } from "./pdfExport";
 
 /** Release / deploy stamp in the header (DD.MM.YYYY) */
@@ -3211,6 +3213,103 @@ function planConflictWeeks(
   return n;
 }
 
+/** Inclusive week ranges intersect (same model as plan bars). */
+function planWeeksOverlap(
+  aStart: number,
+  aEnd: number,
+  bStart: number,
+  bEnd: number
+): boolean {
+  return aStart <= bEnd && bStart <= aEnd;
+}
+
+type PlanPersonPlacement = {
+  /** `${itemId}:${teamId}:${roleId}` */
+  key: string;
+  /** Stable person key: member id, else normalized short FIO. */
+  personKey: string;
+  startWeek: number;
+  endWeek: number;
+};
+
+function planPersonKey(
+  teamId: string,
+  assigneeId: string | undefined,
+  memberName: string
+): string {
+  if (assigneeId) return `id:${teamId}:${assigneeId}`;
+  const fio = shortFio(memberName).trim().toLowerCase();
+  return fio ? `fio:${fio}` : "";
+}
+
+function planPlacementKey(
+  itemId: string,
+  teamId: string,
+  roleId: string
+): string {
+  return `${itemId}:${teamId}:${roleId}`;
+}
+
+/** Keys of placements whose person overlaps another bar in time. */
+function findPersonConflictKeys(
+  placements: readonly PlanPersonPlacement[]
+): Set<string> {
+  const byPerson = new Map<string, PlanPersonPlacement[]>();
+  for (const p of placements) {
+    if (!p.personKey) continue;
+    const list = byPerson.get(p.personKey);
+    if (list) list.push(p);
+    else byPerson.set(p.personKey, [p]);
+  }
+  const conflict = new Set<string>();
+  for (const list of byPerson.values()) {
+    if (list.length < 2) continue;
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i]!;
+        const b = list[j]!;
+        if (
+          planWeeksOverlap(a.startWeek, a.endWeek, b.startWeek, b.endWeek)
+        ) {
+          conflict.add(a.key);
+          conflict.add(b.key);
+        }
+      }
+    }
+  }
+  return conflict;
+}
+
+function collectPlanPersonPlacements(
+  items: readonly WorkItem[],
+  teamFilter: Set<string> | null,
+  ranges: SizeRanges
+): PlanPersonPlacement[] {
+  const out: PlanPersonPlacement[] = [];
+  for (const item of items) {
+    if (item.status === "done") continue;
+    for (const a of item.assignments) {
+      if (teamFilter && !teamFilter.has(a.teamId)) continue;
+      for (const role of planningDemandRoles(a)) {
+        const member = teamMemberById(a.teamId, role.assigneeId);
+        if (!member) continue;
+        const days = rolePlanDays(role, ranges);
+        const startWeek = weekIndex(
+          state.startDate,
+          role.workStartDate || a.workStartDate
+        );
+        out.push({
+          key: planPlacementKey(item.id, a.teamId, role.id),
+          personKey: planPersonKey(a.teamId, role.assigneeId, member.name),
+          startWeek,
+          endWeek: startWeek + planDurationWeeks(days) - 1,
+        });
+      }
+    }
+  }
+  return out;
+}
+
 function planTrackBg(weeks: number): string {
   const weekPct = 100 / weeks;
   return `repeating-linear-gradient(90deg, transparent 0, transparent calc(${weekPct}% - 1px), var(--line) calc(${weekPct}% - 1px), var(--line) ${weekPct}%)`;
@@ -3223,6 +3322,59 @@ function planAxisHtml(weeks: number): string {
     const [, m, d] = monday.split("-");
     return `<div class="plan-axis-tick" style="width:${weekPct}%"><span>Н${w + 1}</span><span>${d}.${m}</span></div>`;
   }).join("");
+}
+
+/** Diagonal expand-all: arrows point outward (NW / SE). */
+const TREE_EXPAND_SVG = `<svg class="tree-expand-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M7 3.5H3.5V7M3.5 3.5 7.2 7.2M9 12.5h3.5V9M12.5 12.5 8.8 8.8"/></svg>`;
+
+/** Diagonal collapse-all: arrows point inward toward center. */
+const TREE_COLLAPSE_SVG = `<svg class="tree-expand-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M3.5 3.5H7V7M3.5 3.5 7.2 7.2M12.5 12.5H9V9M12.5 12.5 8.8 8.8"/></svg>`;
+
+function treeExpandControlsHtml(scope: "plan" | "gantt"): string {
+  return `<div class="tree-expand-controls" role="group" aria-label="Свернуть или развернуть дерево">
+    <button type="button" class="tree-expand-btn" data-tree-expand="${scope}" title="Развернуть все" aria-label="Развернуть все">${TREE_EXPAND_SVG}</button>
+    <button type="button" class="tree-expand-btn" data-tree-collapse="${scope}" title="Свернуть все" aria-label="Свернуть все">${TREE_COLLAPSE_SVG}</button>
+  </div>`;
+}
+
+function collectDatasetKeys(
+  selector: string,
+  attr: string
+): Record<string, true> {
+  const out: Record<string, true> = {};
+  document.querySelectorAll<HTMLElement>(selector).forEach((el) => {
+    const key = el.dataset[attr];
+    if (key) out[key] = true;
+  });
+  return out;
+}
+
+function setPlanTreeExpanded(expanded: boolean) {
+  if (expanded) {
+    ui.planCollapsedProjects = {};
+    ui.planCollapsedItems = {};
+  } else {
+    ui.planCollapsedProjects = collectDatasetKeys(
+      "[data-plan-project]",
+      "planProject"
+    );
+    ui.planCollapsedItems = collectDatasetKeys("[data-plan-fn]", "planFn");
+  }
+  render();
+}
+
+function setGanttTreeExpanded(expanded: boolean) {
+  if (expanded) {
+    ui.ganttCollapsedProjects = {};
+    ui.ganttCollapsedItems = {};
+  } else {
+    ui.ganttCollapsedProjects = collectDatasetKeys(
+      "[data-gantt-project]",
+      "ganttProject"
+    );
+    ui.ganttCollapsedItems = collectDatasetKeys("[data-gantt-fn]", "ganttFn");
+  }
+  render();
 }
 
 const PLAN_DURATION_CHIPS = [5, 10, 15, 20, 25, 30, 35, 40, 50, 60];
@@ -3257,6 +3409,35 @@ function teamMemberById(teamId: string, memberId?: string): TeamMember | undefin
   return teamById(teamId)?.members?.find((m) => m.id === memberId);
 }
 
+/** On timeline = role has a resolved assignee (plan bar shown). */
+function rolePlacedOnTimeline(
+  teamId: string,
+  role: AssignmentRole
+): TeamMember | undefined {
+  return teamMemberById(teamId, role.assigneeId);
+}
+
+/** Role row label: approved = role + surname; unapproved = role only. */
+function planRoleLeftLabel(
+  role: AssignmentRole,
+  member: TeamMember | undefined
+): string {
+  if (!member) return escapeHtml(role.name);
+  return `${escapeHtml(role.name)} <span class="plan-fio-label">${escapeHtml(shortFio(member.name))}</span>`;
+}
+
+function planPlaceOpenBtnHtml(
+  itemId: string,
+  teamId: string,
+  roleId: string,
+  onTimeline: boolean
+): string {
+  if (onTimeline) {
+    return `<button type="button" class="btn plan-place-btn plan-place-btn-edit" data-plan-task-open="${itemId}" data-team="${teamId}" data-role="${escapeAttr(roleId)}" title="Изменить назначение на таймлайне">Изменить</button>`;
+  }
+  return `<button type="button" class="btn btn-primary plan-place-btn" data-plan-task-open="${itemId}" data-team="${teamId}" data-role="${escapeAttr(roleId)}" title="Поставить на таймлайн">Поставить на таймлайн</button>`;
+}
+
 function planTaskFormHtml(item: WorkItem, teamId: string, roleId: string): string {
   const form = ui.planTaskForm;
   if (
@@ -3270,6 +3451,7 @@ function planTaskFormHtml(item: WorkItem, teamId: string, roleId: string): strin
   const team = teamById(teamId);
   const assign = item.assignments.find((a) => a.teamId === teamId);
   const role = assign?.roles?.find((r) => r.id === roleId);
+  const editing = role ? Boolean(rolePlacedOnTimeline(teamId, role)) : false;
   const job = roleJobLabel(role?.name ?? "");
   const allPeople = team?.members ?? [];
   const roleKey = role?.name ? normalizeAssignmentRoleName(role.name) : "";
@@ -3293,8 +3475,14 @@ function planTaskFormHtml(item: WorkItem, teamId: string, roleId: string): strin
     const on = form.days === d;
     return `<button type="button" class="plan-chip${on ? " is-on" : ""}" data-plan-form-days="${d}">${d}</button>`;
   }).join("");
+  const title = editing
+    ? `Изменить назначение на таймлайне: ${escapeHtml(item.title)}`
+    : `Новая задача на таймлайн: ${escapeHtml(item.title)}`;
+  const submit = editing
+    ? `<button type="button" class="btn plan-place-btn-edit" data-plan-form-submit>Изменить</button>`
+    : `<button type="button" class="btn btn-primary" data-plan-form-submit>Поставить на таймлайн</button>`;
   return `<div class="plan-task-form">
-    <div class="plan-task-form-title">Новая задача на таймлайн: ${escapeHtml(item.title)}</div>
+    <div class="plan-task-form-title">${title}</div>
     <div class="plan-task-label">Исполнитель</div>
     <div class="plan-chips">${people || `<span class="meta">Добавьте строки роль — ФИО на вкладке «Команды»</span>`}</div>
     <div class="plan-task-label">Дата старта</div>
@@ -3302,7 +3490,7 @@ function planTaskFormHtml(item: WorkItem, teamId: string, roleId: string): strin
     <div class="plan-task-label">Длительность, рабочих дней</div>
     <div class="plan-chips">${durs}</div>
     <div class="plan-task-actions">
-      <button type="button" class="btn btn-primary" data-plan-form-submit>Поставить на таймлайн</button>
+      ${submit}
       <button type="button" class="btn" data-plan-form-cancel>Отмена</button>
     </div>
   </div>`;
@@ -3485,10 +3673,13 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
           <h2>Гант — итоговый ресурсный план</h2>
           <p class="meta">Проект → функциональность → команда → роль. Полоски — назначения с вкладки «Планирование».</p>
         </div>
-        <div class="gantt-weeks-ctrl-right">
-          <label for="ganttWeeks">Горизонт</label>
-          <input id="ganttWeeks" type="range" min="4" max="52" step="1" value="${weeks}" />
-          <span class="mono" id="ganttWeeksLabel">${weeks} нед.</span>
+        <div class="gantt-head-actions">
+          ${treeExpandControlsHtml("gantt")}
+          <div class="gantt-weeks-ctrl-right">
+            <label for="ganttWeeks">Горизонт</label>
+            <input id="ganttWeeks" type="range" min="4" max="52" step="1" value="${weeks}" />
+            <span class="mono" id="ganttWeeksLabel">${weeks} нед.</span>
+          </div>
         </div>
       </div>
       <div class="need-stats gantt-stats">
@@ -3550,10 +3741,14 @@ function planningHtml(
   const plannedDays = slices
     .filter((s) => selectedSet.has(s.teamId) && items.some((it) => it.id === s.item.id))
     .reduce((s, sl) => s + planSliceDays(sl), 0);
-  const conflictCount = selected.reduce(
+  const capacityConflictWeeks = selected.reduce(
     (n, id) => n + planConflictWeeks(id, overflowByTeam, weeks),
     0
   );
+  const personConflictKeys = findPersonConflictKeys(
+    collectPlanPersonPlacements(items, selectedSet, ranges)
+  );
+  const conflictCount = personConflictKeys.size || capacityConflictWeeks;
 
   const body = groups.length
     ? groups
@@ -3578,8 +3773,6 @@ function planningHtml(
                 .map((a) => {
                   const team = teamById(a.teamId);
                   const roles = planningDemandRoles(a);
-                  const conflict =
-                    planConflictWeeks(a.teamId, overflowByTeam, weeks) > 0;
                   if (!roles.length) return "";
                   const head = `<div class="plan-row plan-exec-row plan-team-row">
                     <div class="plan-cell">
@@ -3589,24 +3782,34 @@ function planningHtml(
                   </div>`;
                   const roleRows = roles
                     .map((role) => {
-                      const member = teamMemberById(a.teamId, role.assigneeId);
+                      const member = rolePlacedOnTimeline(a.teamId, role);
+                      const onTimeline = Boolean(member);
                       const days = rolePlanDays(role, ranges);
                       const startWeek = weekIndex(
                         state.startDate,
                         role.workStartDate || a.workStartDate
                       );
                       const endWeek = startWeek + planDurationWeeks(days) - 1;
+                      const placeKey = planPlacementKey(
+                        item.id,
+                        a.teamId,
+                        role.id
+                      );
+                      const personConflict = personConflictKeys.has(placeKey);
                       const label = member
                         ? `${shortFio(member.name)} · ${days} дн.`
                         : `${role.name} · ${days} дн.`;
+                      const barTitle = personConflict
+                        ? `${label} — пересечение по исполнителю`
+                        : label;
                       const bar = member
                         ? planBarHtml(
                             startWeek,
                             endWeek,
                             weeks,
                             team?.color ?? "#484f55",
-                            label,
-                            conflict,
+                            barTitle,
+                            personConflict,
                             {
                               itemId: item.id,
                               teamId: a.teamId,
@@ -3614,13 +3817,14 @@ function planningHtml(
                             }
                           )
                         : `<button type="button" class="plan-bar-empty" data-plan-task-open="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" title="Поставить на таймлайн"></button>`;
-                      const leftLabel = member
-                        ? `<span class="plan-fio-label">${escapeHtml(shortFio(member.name))} <em class="plan-role-paren">(${escapeHtml(role.name)})</em></span>`
-                        : escapeHtml(role.name);
-                      return `${planTaskFormHtml(item, a.teamId, role.id)}<div class="plan-row plan-role-row">
+                      const leftLabel = planRoleLeftLabel(role, member);
+                      const rowCls = personConflict
+                        ? " plan-role-row is-person-conflict"
+                        : " plan-role-row";
+                      return `${planTaskFormHtml(item, a.teamId, role.id)}<div class="plan-row${rowCls}">
                         <div class="plan-cell">
-          <span class="plan-exec-name plan-fio-name">${leftLabel}${conflict && member ? " △" : ""}</span>
-                          <button type="button" class="plan-add-btn" data-plan-task-open="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" title="Поставить на таймлайн">+</button>
+                          <span class="plan-exec-name plan-fio-name">${leftLabel}${personConflict ? `<span class="plan-conflict-mark" title="Пересечение по исполнителю">△</span>` : ""}</span>
+                          ${planPlaceOpenBtnHtml(item.id, a.teamId, role.id, onTimeline)}
                         </div>
                         ${planTrackHtml(bar, weeks)}
                       </div>`;
@@ -3668,6 +3872,7 @@ function planningHtml(
           <h2>Планирование потребности</h2>
           <p class="meta">У тимлида несколько проектов с запросом на ресурс. Слева — проекты по функциональностям, справа — шкала назначений.</p>
         </div>
+        ${treeExpandControlsHtml("plan")}
       </div>
       <div class="plan-teams">
         <span class="plan-teams-label">Моя команда</span>
@@ -4919,7 +5124,7 @@ function render() {
           ${editionSwitcherHtml()}
           <span class="release-stamp" title="Дата релиза">updated ${RELEASE_UPDATED}</span>
           <span class="sync-badge" id="syncStatus" data-status="${getSyncStatus()}">${syncStatusLabel(getSyncStatus())}</span>
-          <button class="btn" id="exportPdfBtn">Экспорт PDF</button>
+          <button class="btn" id="exportPdfBtn">${ui.tab === "timeline" ? "Экспорт Ганта" : "Экспорт PDF"}</button>
         </div>
         <p class="subtitle">
           Единый портфель проектов и продуктов: сквозной RICE, несколько команд на функциональность
@@ -5688,6 +5893,13 @@ function bindPlanningTab() {
   const root = document.querySelector(".plan-page");
   if (!root) return;
 
+  root
+    .querySelector("[data-tree-expand='plan']")
+    ?.addEventListener("click", () => setPlanTreeExpanded(true));
+  root
+    .querySelector("[data-tree-collapse='plan']")
+    ?.addEventListener("click", () => setPlanTreeExpanded(false));
+
   root.querySelectorAll<HTMLButtonElement>("[data-plan-team]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const id = btn.dataset.planTeam;
@@ -5852,6 +6064,14 @@ function bindPlanningTab() {
 function bindGanttTab() {
   const root = document.querySelector(".gantt-page");
   if (!root) return;
+
+  root
+    .querySelector("[data-tree-expand='gantt']")
+    ?.addEventListener("click", () => setGanttTreeExpanded(true));
+  root
+    .querySelector("[data-tree-collapse='gantt']")
+    ?.addEventListener("click", () => setGanttTreeExpanded(false));
+
   root.querySelectorAll<HTMLDetailsElement>("[data-gantt-project]").forEach((el) => {
     el.addEventListener("toggle", () => {
       const key = el.dataset.ganttProject;
@@ -7437,6 +7657,105 @@ function buildPlanerReportData(
   };
 }
 
+function ganttPdfWeekLabelStep(weeks: number): number {
+  if (weeks <= 16) return 1;
+  if (weeks <= 28) return 2;
+  return 4;
+}
+
+function buildGanttPdfData(): GanttPdfData {
+  const ranges = szRanges();
+  const bars = collectGanttRoleBars(ranges);
+  const contentWeeks =
+    bars.length === 0
+      ? 0
+      : Math.max(...bars.map((b) => b.endWeek)) + 1;
+  const weeks = Math.max(
+    4,
+    Math.min(52, Math.max(Math.round(ui.ganttWeeks) || 16, contentWeeks))
+  );
+  const prioMap = projectPrioMap();
+  const step = ganttPdfWeekLabelStep(weeks);
+
+  const weekTicks = Array.from({ length: weeks }, (_, w) => {
+    const monday = addWeeks(state.startDate, w);
+    const [, m, d] = monday.split("-");
+    const showLabel = w === 0 || w === weeks - 1 || w % step === 0;
+    return {
+      index: w,
+      weekLabel: `Н${w + 1}`,
+      dateLabel: `${d}.${m}`,
+      showLabel,
+    };
+  });
+
+  const monthBands: GanttPdfData["monthBands"] = [];
+  for (let w = 0; w < weeks; w++) {
+    const monday = addWeeks(state.startDate, w);
+    const label = new Date(`${monday}T12:00:00`).toLocaleDateString("ru-RU", {
+      month: "short",
+      year: "numeric",
+    });
+    const last = monthBands[monthBands.length - 1];
+    if (last && last.label === label) last.weekCount += 1;
+    else monthBands.push({ label, startWeek: w, weekCount: 1 });
+  }
+
+  const barsByItem = new Map<string, typeof bars>();
+  for (const bar of bars) {
+    const list = barsByItem.get(bar.item.id);
+    if (list) list.push(bar);
+    else barsByItem.set(bar.item.id, [bar]);
+  }
+
+  const items = sortByPriority(
+    demandProjectItems().filter(
+      (it) => it.status !== "done" && barsByItem.has(it.id)
+    ),
+    ranges
+  );
+  const groups = groupByProjectKey(items).sort((a, b) => {
+    const pa = prioMap.get(a.key) ?? 9999;
+    const pb = prioMap.get(b.key) ?? 9999;
+    return pa - pb;
+  });
+
+  const teamIds = new Set(bars.map((b) => b.teamId));
+  const teams = state.teams
+    .filter((t) => teamIds.has(t.id))
+    .map((t) => ({ name: t.name, color: t.color }));
+
+  const projects = groups.map((g) => ({
+    title: g.title,
+    priority: String(prioMap.get(g.key) ?? ""),
+    functions: g.items.map((item) => {
+      const itemBars = barsByItem.get(item.id) ?? [];
+      return {
+        title: item.title,
+        bars: itemBars.map((b) => {
+          const team = teamById(b.teamId);
+          return {
+            label: `${shortFio(b.memberName)} · ${b.role.name}`,
+            color: team?.color ?? "#484f55",
+            startWeek: b.startWeek,
+            endWeek: b.endWeek,
+          };
+        }),
+      };
+    }),
+  }));
+
+  return {
+    generatedAt: new Date().toLocaleString("ru-RU"),
+    planStart: formatDate(state.startDate),
+    weeks,
+    monthBands,
+    weekTicks,
+    teams,
+    projects,
+  };
+}
+
 async function exportPortfolioReportPdf() {
   const btn = document.querySelector<HTMLButtonElement>("#exportPdfBtn");
   const prevLabel = btn?.textContent ?? "Экспорт PDF";
@@ -7446,12 +7765,19 @@ async function exportPortfolioReportPdf() {
   }
 
   const stamp = new Date().toISOString().slice(0, 10);
-  const filename = `VI-Planer-report-${stamp}.pdf`;
+  const exportGantt = ui.tab === "timeline";
+  const filename = exportGantt
+    ? `VI-Planer-gantt-${stamp}.pdf`
+    : `VI-Planer-report-${stamp}.pdf`;
 
   try {
-    const { slices, rollups } = scheduleState();
-    const data = buildPlanerReportData(rollups, slices);
-    await downloadPlanerReportPdf(data, filename);
+    if (exportGantt) {
+      await downloadGanttSchematicPdf(buildGanttPdfData(), filename);
+    } else {
+      const { slices, rollups } = scheduleState();
+      const data = buildPlanerReportData(rollups, slices);
+      await downloadPlanerReportPdf(data, filename);
+    }
   } catch (err) {
     console.error(err);
     alert("Не удалось создать PDF. Попробуйте ещё раз или обновите страницу.");

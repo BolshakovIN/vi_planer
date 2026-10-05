@@ -723,3 +723,404 @@ export async function downloadPlanerReportPdf(
     host.remove();
   }
 }
+
+/** Schematic Gantt PDF (project → functionality → bars), not a live-UI screenshot. */
+export type GanttPdfTeamLegend = {
+  name: string;
+  color: string;
+};
+
+export type GanttPdfBar = {
+  label: string;
+  color: string;
+  startWeek: number;
+  endWeek: number;
+};
+
+export type GanttPdfFn = {
+  title: string;
+  bars: GanttPdfBar[];
+};
+
+export type GanttPdfProject = {
+  title: string;
+  priority: string;
+  functions: GanttPdfFn[];
+};
+
+export type GanttPdfWeekTick = {
+  index: number;
+  weekLabel: string;
+  dateLabel: string;
+  showLabel: boolean;
+};
+
+export type GanttPdfMonthBand = {
+  label: string;
+  startWeek: number;
+  weekCount: number;
+};
+
+export type GanttPdfData = {
+  generatedAt: string;
+  planStart: string;
+  weeks: number;
+  monthBands: GanttPdfMonthBand[];
+  weekTicks: GanttPdfWeekTick[];
+  teams: GanttPdfTeamLegend[];
+  projects: GanttPdfProject[];
+};
+
+const GANTT_PDF_CAPTURE_WIDTH_PX = 1400;
+
+const GANTT_PDF_STYLES = `
+  .gantt-pdf-root {
+    box-sizing: border-box;
+    width: ${GANTT_PDF_CAPTURE_WIDTH_PX}px;
+    padding: 4px 0 16px;
+    background: #ffffff;
+    color: #1c2126;
+    font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .gantt-pdf-root * { box-sizing: border-box; }
+  .gantt-pdf-brand {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 10px;
+    border-bottom: 3px solid #d60000;
+    margin-bottom: 12px;
+  }
+  .gantt-pdf-brand h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .gantt-pdf-brand .meta {
+    margin: 0;
+    font-size: 12px;
+    color: #737373;
+    text-align: right;
+  }
+  .gantt-pdf-lead {
+    margin: 0 0 10px;
+    color: #737373;
+    font-size: 12px;
+  }
+  .gantt-pdf-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    margin: 0 0 14px;
+    padding: 0;
+    list-style: none;
+  }
+  .gantt-pdf-legend li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #484f55;
+  }
+  .gantt-pdf-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .gantt-pdf-chart {
+    border: 1px solid #e5e7e8;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .gantt-pdf-row {
+    display: grid;
+    grid-template-columns: minmax(220px, 28%) 1fr;
+    align-items: stretch;
+    min-height: 28px;
+    border-bottom: 1px solid #eef0f1;
+  }
+  .gantt-pdf-row:last-child { border-bottom: none; }
+  .gantt-pdf-axis-row {
+    min-height: 36px;
+    background: #fafbfb;
+    border-bottom: 1px solid #e5e7e8;
+  }
+  .gantt-pdf-months-row {
+    min-height: 22px;
+    background: #f5f6f7;
+    border-bottom: 1px solid #e5e7e8;
+  }
+  .gantt-pdf-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 4px 12px;
+  }
+  .gantt-pdf-head-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: #93999e;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .gantt-pdf-months,
+  .gantt-pdf-weeks,
+  .gantt-pdf-track {
+    position: relative;
+    min-width: 0;
+    display: flex;
+    align-items: stretch;
+  }
+  .gantt-pdf-months { align-items: center; }
+  .gantt-pdf-month {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    font-size: 10px;
+    font-weight: 600;
+    color: #737373;
+    border-right: 1px solid #e5e7e8;
+    text-transform: capitalize;
+  }
+  .gantt-pdf-month:last-child { border-right: none; }
+  .gantt-pdf-week {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 1px;
+    padding: 2px 0 2px 2px;
+    font-variant-numeric: tabular-nums;
+    border-right: 1px solid #eef0f1;
+  }
+  .gantt-pdf-week:last-child { border-right: none; }
+  .gantt-pdf-week .w {
+    font-size: 9px;
+    font-weight: 650;
+    color: #484f55;
+    line-height: 1.1;
+  }
+  .gantt-pdf-week .d {
+    font-size: 8px;
+    color: #93999e;
+    line-height: 1.1;
+  }
+  .gantt-pdf-week.is-quiet .w,
+  .gantt-pdf-week.is-quiet .d { visibility: hidden; }
+  .gantt-pdf-project {
+    background: #f7f8f9;
+    min-height: 30px;
+  }
+  .gantt-pdf-project .gantt-pdf-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1c2126;
+  }
+  .gantt-pdf-prio {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 4px;
+    background: #fae0e0;
+    color: #d60000;
+    font-size: 10px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+  .gantt-pdf-fn {
+    background: #fff;
+    min-height: 26px;
+  }
+  .gantt-pdf-fn .gantt-pdf-label {
+    padding-left: 22px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #37474f;
+  }
+  .gantt-pdf-bar-row .gantt-pdf-label {
+    padding-left: 34px;
+    font-size: 11px;
+    color: #484f55;
+  }
+  .gantt-pdf-track {
+    background-image: linear-gradient(
+      90deg,
+      transparent 0,
+      transparent calc(var(--week-pct) - 1px),
+      #eef0f1 calc(var(--week-pct) - 1px),
+      #eef0f1 var(--week-pct)
+    );
+    background-size: var(--week-pct) 100%;
+  }
+  .gantt-pdf-bar {
+    position: absolute;
+    top: 6px;
+    bottom: 6px;
+    border-radius: 4px;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1.2;
+    padding: 0 6px;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+  }
+  .gantt-pdf-empty {
+    margin: 0;
+    padding: 28px 16px;
+    text-align: center;
+    color: #737373;
+    font-style: italic;
+  }
+  .gantt-pdf-foot {
+    margin-top: 12px;
+    font-size: 10px;
+    color: #737373;
+  }
+`;
+
+function buildGanttSchematicHtml(data: GanttPdfData): string {
+  const weekPct = `${100 / Math.max(1, data.weeks)}%`;
+  const legend =
+    data.teams.length === 0
+      ? ""
+      : `<ul class="gantt-pdf-legend">${data.teams
+          .map(
+            (t) =>
+              `<li><span class="gantt-pdf-swatch" style="background:${escapeHtml(t.color)}"></span>${escapeHtml(t.name)}</li>`,
+          )
+          .join("")}</ul>`;
+
+  const months = data.monthBands
+    .map((m) => {
+      const width = (m.weekCount / Math.max(1, data.weeks)) * 100;
+      return `<div class="gantt-pdf-month" style="width:${width}%">${escapeHtml(m.label)}</div>`;
+    })
+    .join("");
+
+  const weeks = data.weekTicks
+    .map((t) => {
+      const quiet = t.showLabel ? "" : " is-quiet";
+      return `<div class="gantt-pdf-week${quiet}" style="width:${weekPct}">
+        <span class="w">${escapeHtml(t.weekLabel)}</span>
+        <span class="d">${escapeHtml(t.dateLabel)}</span>
+      </div>`;
+    })
+    .join("");
+
+  const body =
+    data.projects.length === 0
+      ? `<p class="gantt-pdf-empty">Нет назначений на шкале. Поставьте роли на таймлайн во вкладке «Планирование».</p>`
+      : data.projects
+          .map((project) => {
+            const prio = project.priority
+              ? `<span class="gantt-pdf-prio">${escapeHtml(project.priority)}</span>`
+              : "";
+            const projectRow = `<div class="gantt-pdf-row gantt-pdf-project">
+              <div class="gantt-pdf-label">${prio}<span>${escapeHtml(project.title)}</span></div>
+              <div class="gantt-pdf-track" style="--week-pct:${weekPct}"></div>
+            </div>`;
+            const fnBlocks = project.functions
+              .map((fn) => {
+                const fnRow = `<div class="gantt-pdf-row gantt-pdf-fn">
+                  <div class="gantt-pdf-label">${escapeHtml(fn.title)}</div>
+                  <div class="gantt-pdf-track" style="--week-pct:${weekPct}"></div>
+                </div>`;
+                const barRows = fn.bars
+                  .map((bar) => {
+                    const left =
+                      (Math.max(0, bar.startWeek) / Math.max(1, data.weeks)) *
+                      100;
+                    const span = Math.max(1, bar.endWeek - bar.startWeek + 1);
+                    const width = (span / Math.max(1, data.weeks)) * 100;
+                    return `<div class="gantt-pdf-row gantt-pdf-bar-row">
+                      <div class="gantt-pdf-label">${escapeHtml(bar.label)}</div>
+                      <div class="gantt-pdf-track" style="--week-pct:${weekPct}">
+                        <div class="gantt-pdf-bar" style="left:${left}%;width:${Math.max(width, 2.2)}%;background:${escapeHtml(bar.color)}" title="${escapeHtml(bar.label)}">${escapeHtml(bar.label)}</div>
+                      </div>
+                    </div>`;
+                  })
+                  .join("");
+                return `${fnRow}${barRows}`;
+              })
+              .join("");
+            return `${projectRow}${fnBlocks}`;
+          })
+          .join("");
+
+  return `
+    <div class="gantt-pdf-brand">
+      <h1>VI Planer</h1>
+      <p class="meta">Гант · ресурсный план<br/>${escapeHtml(data.generatedAt)}</p>
+    </div>
+    <p class="gantt-pdf-lead">
+      Старт шкалы: <strong>${escapeHtml(data.planStart)}</strong>
+      · горизонт <strong>${data.weeks} нед.</strong>
+      · схема проект → функциональность → назначения
+    </p>
+    ${legend}
+    <div class="gantt-pdf-chart">
+      <div class="gantt-pdf-row gantt-pdf-months-row">
+        <div class="gantt-pdf-label gantt-pdf-head-label">Месяц</div>
+        <div class="gantt-pdf-months">${months}</div>
+      </div>
+      <div class="gantt-pdf-row gantt-pdf-axis-row">
+        <div class="gantt-pdf-label gantt-pdf-head-label">Проект / функциональность</div>
+        <div class="gantt-pdf-weeks">${weeks}</div>
+      </div>
+      ${body}
+    </div>
+    <p class="gantt-pdf-foot">VI Planer · схематичный экспорт Ганта · не скриншот интерфейса</p>
+  `;
+}
+
+/**
+ * Build a calm schematic Gantt HTML (off-screen) and download landscape A4 PDF.
+ */
+export async function downloadGanttSchematicPdf(
+  data: GanttPdfData,
+  filename: string,
+): Promise<void> {
+  const host = document.createElement("div");
+  host.setAttribute("aria-hidden", "true");
+  Object.assign(host.style, {
+    position: "fixed",
+    left: "-10000px",
+    top: "0",
+    width: `${GANTT_PDF_CAPTURE_WIDTH_PX}px`,
+    opacity: "0",
+    pointerEvents: "none",
+    zIndex: "-1",
+  });
+  host.innerHTML = `<style>${GANTT_PDF_STYLES}</style><div class="gantt-pdf-root">${buildGanttSchematicHtml(data)}</div>`;
+  document.body.appendChild(host);
+
+  try {
+    await waitTwoFrames();
+    const root = host.querySelector<HTMLElement>(".gantt-pdf-root");
+    if (!root) throw new Error("Gantt PDF root missing");
+    await downloadElementPdf(root, filename, "", {
+      orientation: "landscape",
+      backgroundColor: "#ffffff",
+      marginMm: 10,
+    });
+  } finally {
+    host.remove();
+  }
+}
