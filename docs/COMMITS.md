@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 05.10.2026, 15:11 GMT+3
+Сгенерировано: 05.10.2026, 15:15 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `7e661b4` | 2026-10-05 | ivanbolsakov | Remove obsolete Monitoring demo toggle from Settings. |
+| `08f987e` | 2026-10-05 | ivanbolsakov | Publish Monitoring demo-badge removal to GitHub Pages. |
 | `542fcdc` | 2026-10-05 | ivanbolsakov | Update v2 requirements doc for current tabs and edition split. |
 | `44c819f` | 2026-10-05 | ivanbolsakov | Remove demo badge from Monitoring tab. |
 | `4e0d622` | 2026-10-05 | ivanbolsakov | Publish v1 pill button styles to GitHub Pages. |
@@ -220,6 +222,7 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `60e6440` | 2026-10-05 | ivanbolsakov | Remove obsolete Monitoring demo toggle from Settings. |
 | `e3d968e` | 2026-10-05 | ivanbolsakov | Remove unused Monitoring demo badge CSS. |
 | `0fda1b4` | 2026-10-05 | ivanbolsakov | Remove demo badge from Monitoring tab. |
 | `3a78e56` | 2026-10-05 | ivanbolsakov | Update requirements doc for v1 edition. |
@@ -381,11 +384,14 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `e3d968e` | 2026-10-05 | ivanbolsakov | origin/v1, v1 | Remove unused Monitoring demo badge CSS. |
+| `60e6440` | 2026-10-05 | ivanbolsakov | v1 | Remove obsolete Monitoring demo toggle from Settings. |
+| `7e661b4` | 2026-10-05 | ivanbolsakov | HEAD -> master | Remove obsolete Monitoring demo toggle from Settings. |
+| `08f987e` | 2026-10-05 | ivanbolsakov | origin/master | Publish Monitoring demo-badge removal to GitHub Pages. |
+| `e3d968e` | 2026-10-05 | ivanbolsakov | origin/v1 | Remove unused Monitoring demo badge CSS. |
 | `0fda1b4` | 2026-10-05 | ivanbolsakov |  | Remove demo badge from Monitoring tab. |
-| `542fcdc` | 2026-10-05 | ivanbolsakov | HEAD -> master | Update v2 requirements doc for current tabs and edition split. |
+| `542fcdc` | 2026-10-05 | ivanbolsakov |  | Update v2 requirements doc for current tabs and edition split. |
 | `44c819f` | 2026-10-05 | ivanbolsakov |  | Remove demo badge from Monitoring tab. |
-| `4e0d622` | 2026-10-05 | ivanbolsakov | origin/master | Publish v1 pill button styles to GitHub Pages. |
+| `4e0d622` | 2026-10-05 | ivanbolsakov |  | Publish v1 pill button styles to GitHub Pages. |
 | `3a78e56` | 2026-10-05 | ivanbolsakov |  | Update requirements doc for v1 edition. |
 | `6a78db0` | 2026-10-05 | ivanbolsakov |  | Style v1 buttons as pill chips with solid red active state. |
 | `9a1e96c` | 2026-10-05 | ivanbolsakov |  | Publish pill button styles to GitHub Pages. |
