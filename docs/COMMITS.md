@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 06.10.2026, 00:41 GMT+3
+Сгенерировано: 06.10.2026, 01:03 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `f08c2dc` | 2026-10-06 | ivanbolsakov | Improve plan/Gantt UX: sticky date headers, team expand, conflict mark, and filter actions in the head. |
+| `62df82d` | 2026-10-06 | ivanbolsakov | Publish plan expand/collapse, place/edit, person overlap, and schematic Gantt PDF to GitHub Pages. |
 | `1025b67` | 2026-10-06 | ivanbolsakov | Add plan tree expand/collapse, place/edit buttons, person overlap highlight, and schematic Gantt PDF export. |
 | `4d6f96c` | 2026-10-05 | ivanbolsakov | Publish plan filter prominence and Settings size-range help to GitHub Pages. |
 | `443633d` | 2026-10-05 | ivanbolsakov | Polish plan team filter actions and move Settings size-range help under the estimate panel. |
@@ -395,8 +397,10 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `1025b67` | 2026-10-06 | ivanbolsakov | HEAD -> master | Add plan tree expand/collapse, place/edit buttons, person overlap highlight, and schematic Gantt PDF export. |
-| `4d6f96c` | 2026-10-05 | ivanbolsakov | origin/master | Publish plan filter prominence and Settings size-range help to GitHub Pages. |
+| `f08c2dc` | 2026-10-06 | ivanbolsakov | HEAD -> master | Improve plan/Gantt UX: sticky date headers, team expand, conflict mark, and filter actions in the head. |
+| `62df82d` | 2026-10-06 | ivanbolsakov | origin/master | Publish plan expand/collapse, place/edit, person overlap, and schematic Gantt PDF to GitHub Pages. |
+| `1025b67` | 2026-10-06 | ivanbolsakov |  | Add plan tree expand/collapse, place/edit buttons, person overlap highlight, and schematic Gantt PDF export. |
+| `4d6f96c` | 2026-10-05 | ivanbolsakov |  | Publish plan filter prominence and Settings size-range help to GitHub Pages. |
 | `443633d` | 2026-10-05 | ivanbolsakov |  | Polish plan team filter actions and move Settings size-range help under the estimate panel. |
 | `17ea96f` | 2026-10-05 | ivanbolsakov | origin/v1, v1 | List Мониторинг as a normal v1 tab in requirements intro. |
 | `2812d55` | 2026-10-05 | ivanbolsakov |  | Publish requirements intro sync for always-on Monitoring. |
