@@ -238,15 +238,6 @@ function ensureVisibleTab() {
   if (ui.tab !== prev) writeStoredUiTab(ui.tab);
 }
 
-function demoTabButtonHtml(id: "demoA" | "demoB", name: string): string {
-  return `<button type="button" class="tab tab-demo ${
-    ui.tab === id ? "active" : ""
-  }" data-tab="${id}" aria-label="${escapeAttr(name)}">
-    ${tabIconHtml(id)}
-    <span class="tab-demo-name">${escapeHtml(name)}</span>
-  </button>`;
-}
-
 interface UiState {
   tab: Tab;
   typeFilter: "all" | ItemType;
@@ -4945,7 +4936,7 @@ function render() {
         ${tabButtonHtml("demand")}
         ${tabButtonHtml("planning")}
         ${tabButtonHtml("timeline")}
-        ${demoTabButtonHtml("demoA", "Мониторинг")}
+        ${tabButtonHtml("demoA")}
         ${tabButtonHtml("queuesTest")}
         ${tabButtonHtml("capacity", "tab-end")}
         ${tabButtonHtml("changelog")}
