@@ -278,10 +278,6 @@ export interface AppState {
   portfolioNotes: string;
   /** In-app журнал изменений (newest first). */
   changeLog: ChangeLogEntry[];
-  /** Demo monitoring tab (layout A, labelled «Мониторинг»); default shown. */
-  demoVariantA: boolean;
-  /** Retired second demo tab; always hidden. Kept for load compatibility. */
-  demoVariantB: boolean;
   /**
    * Which portfolio data pack is loaded.
    * `xlsx-prio-2026-10-v4` — таблица приоритезации; `…-rolled-back` — откат.
@@ -293,23 +289,6 @@ export interface AppState {
    */
   v1RandomPlan?: string;
   version: 3;
-}
-
-/** Persist flags for demo monitoring (A shown by default; B retired / hidden). */
-export function parseDemoVariantShown(
-  data: Record<string, unknown>,
-  which: "A" | "B"
-): boolean {
-  if (which === "B") return false;
-  const key = "demoVariantA";
-  const raw = data[key];
-  if (raw === false || raw === 0 || raw === "false") return false;
-  if (raw === true || raw === 1 || raw === "true") return true;
-  const hidden = data.hiddenDemoVariants;
-  if (Array.isArray(hidden)) {
-    return !hidden.map((x) => String(x).toUpperCase()).includes(which);
-  }
-  return true;
 }
 
 /** Prepend a log entry and trim to CHANGE_LOG_MAX. Mutates nothing — returns new array. */
@@ -1426,8 +1405,6 @@ export function normalizeState(raw: unknown): AppState | null {
     portfolioNotes:
       data.portfolioNotes != null ? String(data.portfolioNotes) : "",
     changeLog: parseChangeLog(data.changeLog),
-    demoVariantA: parseDemoVariantShown(data, "A"),
-    demoVariantB: false,
     portfolioPack:
       data.portfolioPack != null && String(data.portfolioPack).trim()
         ? String(data.portfolioPack).trim()

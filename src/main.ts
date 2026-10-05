@@ -152,14 +152,6 @@ function ensureVisibleTab() {
   if (ui.tab !== prev) writeStoredUiTab(ui.tab);
 }
 
-function demoTabButtonHtml(id: "demoA" | "demoB", name: string): string {
-  return `<button type="button" class="tab tab-demo ${
-    ui.tab === id ? "active" : ""
-  }" data-tab="${id}" aria-label="${escapeAttr(name)}">
-    <span class="tab-demo-name">${escapeHtml(name)}</span>
-  </button>`;
-}
-
 interface UiState {
   tab: Tab;
   typeFilter: "all" | ItemType;
@@ -3085,7 +3077,7 @@ function settingsHtml(rollups: ItemSchedule[]): string {
         <span class="size-range-caption">${sizePillCaption(sz, r)}</span>
       </div>
       <label class="size-range-field">
-        <span class="meta">от, дн.</span>
+        <span class="settings-label">от, дн.</span>
         <input
           type="number"
           id="set_${sz}_min"
@@ -3098,7 +3090,7 @@ function settingsHtml(rollups: ItemSchedule[]): string {
         />
       </label>
       <label class="size-range-field">
-        <span class="meta">до, дн.</span>
+        <span class="settings-label">до, дн.</span>
         <input
           type="number"
           id="set_${sz}_max"
@@ -3111,8 +3103,8 @@ function settingsHtml(rollups: ItemSchedule[]): string {
         />
       </label>
       <div class="size-range-plan">
-        <span class="meta">для плана</span>
-        <strong class="mono" data-plan="${sz}">${sizePlanDays(sz, r)} дн. → ${sizePlanWeeks(sz, r)} нед.</strong>
+        <span class="settings-label">для плана</span>
+        <strong class="mono settings-plan-value" data-plan="${sz}">${sizePlanDays(sz, r)} дн. → ${sizePlanWeeks(sz, r)} нед.</strong>
       </div>
     </div>
   `
@@ -3120,13 +3112,17 @@ function settingsHtml(rollups: ItemSchedule[]): string {
 
   return `
     <div class="settings-stack">
+      <header class="settings-page-head">
+        <h2 class="settings-page-title">Настройки</h2>
+        <p class="settings-page-lead">Параметры планирования и исходный портфель.</p>
+      </header>
       <div class="panel">
         <div class="panel-header">
-          <h2>Старт планирования</h2>
+          <h3 class="settings-section-title">Старт планирования</h3>
         </div>
         <div class="settings-plan-start">
           <label class="settings-plan-start-field plan-start-anchor">
-            <span class="meta">Дата (понедельник)</span>
+            <span class="settings-label">Дата (понедельник)</span>
             <input
               type="date"
               class="plan-start-date-input settings-plan-start-input"
@@ -3134,46 +3130,46 @@ function settingsHtml(rollups: ItemSchedule[]): string {
               aria-label="Старт планирования"
             />
           </label>
-          <p class="meta settings-plan-start-hint">
+          <p class="settings-help settings-plan-start-hint">
             Якорь шкалы недель Gantt. При смене шкала сдвигается; абсолютные даты работ сохраняются.
             Дата округляется к понедельнику.
           </p>
         </div>
       </div>
-      <div class="callout">
+      <div class="callout settings-callout">
         Диапазоны маечной оценки — <strong>сколько дней</strong> заложено в оценке (XS–XXL). Для плана берётся середина диапазона и делится на 5 рабочих дней (не меньше 1 нед.).
         Изменения сразу перестраивают дату реализации и Gantt.
       </div>
       <div class="panel panel-sticky-host">
         <div class="panel-sticky">
           <div class="panel-header">
-            <h2>Маечная оценка (XS–XXL)</h2>
+            <h3 class="settings-section-title">Маечная оценка (XS–XXL)</h3>
             <button type="button" class="btn" id="resetSizeRanges">Сбросить по умолчанию</button>
           </div>
         </div>
         <div class="size-ranges-grid">${rows}</div>
         <div class="settings-preview" id="settingsSchedPreview">
-          <div><span class="meta">Сейчас в плане</span></div>
+          <div class="settings-preview-caption">Сейчас в плане</div>
           <div class="settings-preview-row">
-            <span>Горизонт портфеля</span>
-            <strong class="mono" id="settingsHorizon">${horizon} нед.</strong>
+            <span class="settings-preview-key">Горизонт портфеля</span>
+            <strong class="mono settings-preview-value" id="settingsHorizon">${horizon} нед.</strong>
           </div>
           <div class="settings-preview-row">
-            <span>Активных функциональностей</span>
-            <strong class="mono">${active.length}</strong>
+            <span class="settings-preview-key">Активных функциональностей</span>
+            <strong class="mono settings-preview-value">${active.length}</strong>
           </div>
           <div class="settings-preview-row">
-            <span>Шкала маечной оценки</span>
-            <strong id="settingsRangesSummary">${sizeRangesSummary(r)}</strong>
+            <span class="settings-preview-key">Шкала маечной оценки</span>
+            <strong class="settings-preview-value" id="settingsRangesSummary">${sizeRangesSummary(r)}</strong>
           </div>
         </div>
       </div>
       <div class="panel">
         <div class="panel-header">
-          <h2>Портфель из таблицы</h2>
+          <h3 class="settings-section-title">Портфель из таблицы</h3>
         </div>
-        <div class="settings-danger-body">
-          <p class="settings-danger-warn">
+        <div class="settings-panel-body">
+          <p class="settings-help">
             Текущий набор: приоритезация доп. проектов, старт у всех
             <strong>01.10.2026</strong>, оценка — из таблицы (XS–XXL как в исходнике).
             ${
@@ -3190,18 +3186,6 @@ function settingsHtml(rollups: ItemSchedule[]): string {
             }>Откатить загрузку</button>
             <button type="button" class="btn" id="reapplyPrioBtn">Загрузить таблицу снова</button>
           </div>
-        </div>
-      </div>
-      <div class="panel settings-danger-zone">
-        <div class="panel-header">
-          <h2>Данные</h2>
-        </div>
-        <div class="settings-danger-body">
-          <p class="settings-danger-warn">
-            Сброс заменит весь текущий портфель демо-набором. Несохранённые изменения
-            и правки команд пропадут без возможности отменить.
-          </p>
-          <button type="button" class="btn btn-danger" id="resetBtn">Сбросить демо</button>
         </div>
       </div>
     </div>
@@ -4131,7 +4115,6 @@ function bindPortfolioDrag() {
 
 function render() {
   closePrioPop();
-  closeResetPop();
   closeColPickerOutside();
   closeOverloadPop();
   ensureVisibleTab();
@@ -4173,7 +4156,7 @@ function render() {
         <button class="tab ${ui.tab === "portfolio" ? "active" : ""}" data-tab="portfolio">Портфель</button>
         <button class="tab ${ui.tab === "timeline" ? "active" : ""}" data-tab="timeline">Gantt/Сроки</button>
         <button class="tab ${ui.tab === "queuesTest" ? "active" : ""}" data-tab="queuesTest">Очередь команд</button>
-        ${demoTabButtonHtml("demoA", "Мониторинг")}
+        <button class="tab ${ui.tab === "demoA" ? "active" : ""}" data-tab="demoA">Мониторинг</button>
         <button class="tab tab-end ${ui.tab === "capacity" ? "active" : ""}" data-tab="capacity">Команды</button>
         <button class="tab ${ui.tab === "roles" ? "active" : ""}" data-tab="roles">Роли</button>
         <button class="tab ${ui.tab === "projects" ? "active" : ""}" data-tab="projects">Проекты</button>
@@ -5137,11 +5120,6 @@ function bindUiRest() {
     );
   });
 
-  document.querySelector("#resetBtn")?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    askResetConfirm(e.currentTarget as HTMLElement);
-  });
-
   document.querySelector("#clearChangeLogBtn")?.addEventListener("click", (e) => {
     const btn = e.currentTarget as HTMLElement;
     askAppConfirm(
@@ -5154,107 +5132,6 @@ function bindUiRest() {
       () => undefined
     );
   });
-}
-
-function closeResetPop() {
-  document.querySelector("#resetPop")?.remove();
-  document.querySelector("#resetBtn")?.classList.remove("reset-ask");
-}
-
-function askResetConfirm(anchor: HTMLElement, step: 1 | 2 | 3 = 1) {
-  closeResetPop();
-  closePrioPop();
-  anchor.classList.add("reset-ask");
-
-  const pop = document.createElement("div");
-  pop.id = "resetPop";
-  pop.className = `reset-confirm${step >= 2 ? " reset-confirm-step2" : ""}`;
-  pop.innerHTML =
-    step === 1
-      ? `
-    <div class="reset-confirm-text">Сбросить к демо?<br>Текущие данные пропадут.</div>
-    <div class="reset-confirm-actions">
-      <button type="button" class="btn" id="resetCancelBtn">Нет</button>
-      <button type="button" class="btn btn-danger" id="resetConfirmBtn">Да</button>
-    </div>
-  `
-      : step === 2
-        ? `
-    <div class="reset-confirm-text">Подумай еще раз, уверен?</div>
-    <div class="reset-confirm-actions">
-      <button type="button" class="btn btn-danger" id="resetFinalBtn">Ок, напишу разработчику</button>
-    </div>
-  `
-        : `
-    <div class="reset-confirm-text">Спасибо тебе</div>
-    <div class="reset-confirm-actions">
-      <button type="button" class="btn" id="resetThanksBtn">Ок</button>
-    </div>
-  `;
-  document.body.appendChild(pop);
-
-  const place = () => {
-    const r = anchor.getBoundingClientRect();
-    const pw = pop.offsetWidth;
-    const ph = pop.offsetHeight;
-    let left = r.right - pw;
-    let top = r.bottom + 6;
-    if (left < 8) left = 8;
-    if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
-    if (top + ph > window.innerHeight - 8) top = r.top - ph - 6;
-    pop.style.left = `${Math.max(8, left)}px`;
-    pop.style.top = `${Math.max(8, top)}px`;
-  };
-  place();
-
-  const onScroll = () => place();
-  window.addEventListener("scroll", onScroll, true);
-  window.addEventListener("resize", onScroll);
-
-  const cleanup = () => {
-    window.removeEventListener("scroll", onScroll, true);
-    window.removeEventListener("resize", onScroll);
-    window.removeEventListener("keydown", onKey);
-    document.removeEventListener("mousedown", onDoc);
-  };
-
-  const onKey = (ev: KeyboardEvent) => {
-    if (ev.key !== "Escape") return;
-    cleanup();
-    closeResetPop();
-  };
-
-  const onDoc = (ev: MouseEvent) => {
-    const t = ev.target as Node;
-    if (pop.contains(t) || anchor.contains(t)) return;
-    cleanup();
-    closeResetPop();
-  };
-
-  pop.querySelector("#resetCancelBtn")?.addEventListener("click", () => {
-    cleanup();
-    closeResetPop();
-  });
-
-  pop.querySelector("#resetConfirmBtn")?.addEventListener("click", () => {
-    cleanup();
-    closeResetPop();
-    askResetConfirm(anchor, 2);
-  });
-
-  pop.querySelector("#resetFinalBtn")?.addEventListener("click", () => {
-    cleanup();
-    closeResetPop();
-    askResetConfirm(anchor, 3);
-  });
-
-  pop.querySelector("#resetThanksBtn")?.addEventListener("click", () => {
-    cleanup();
-    closeResetPop();
-  });
-
-  window.addEventListener("keydown", onKey);
-  window.setTimeout(() => document.addEventListener("mousedown", onDoc), 0);
 }
 
 function bindStickyTabsOffset() {
