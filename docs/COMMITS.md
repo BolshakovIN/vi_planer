@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 05.10.2026, 16:21 GMT+3
+Сгенерировано: 06.10.2026, 00:41 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `1025b67` | 2026-10-06 | ivanbolsakov | Add plan tree expand/collapse, place/edit buttons, person overlap highlight, and schematic Gantt PDF export. |
+| `4d6f96c` | 2026-10-05 | ivanbolsakov | Publish plan filter prominence and Settings size-range help to GitHub Pages. |
 | `443633d` | 2026-10-05 | ivanbolsakov | Polish plan team filter actions and move Settings size-range help under the estimate panel. |
 | `2812d55` | 2026-10-05 | ivanbolsakov | Publish requirements intro sync for always-on Monitoring. |
 | `f828c79` | 2026-10-05 | ivanbolsakov | Align v2 requirements intro with always-on Monitoring tab. |
@@ -393,9 +395,11 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `443633d` | 2026-10-05 | ivanbolsakov | HEAD -> master | Polish plan team filter actions and move Settings size-range help under the estimate panel. |
+| `1025b67` | 2026-10-06 | ivanbolsakov | HEAD -> master | Add plan tree expand/collapse, place/edit buttons, person overlap highlight, and schematic Gantt PDF export. |
+| `4d6f96c` | 2026-10-05 | ivanbolsakov | origin/master | Publish plan filter prominence and Settings size-range help to GitHub Pages. |
+| `443633d` | 2026-10-05 | ivanbolsakov |  | Polish plan team filter actions and move Settings size-range help under the estimate panel. |
 | `17ea96f` | 2026-10-05 | ivanbolsakov | origin/v1, v1 | List Мониторинг as a normal v1 tab in requirements intro. |
-| `2812d55` | 2026-10-05 | ivanbolsakov | origin/master | Publish requirements intro sync for always-on Monitoring. |
+| `2812d55` | 2026-10-05 | ivanbolsakov |  | Publish requirements intro sync for always-on Monitoring. |
 | `f828c79` | 2026-10-05 | ivanbolsakov |  | Align v2 requirements intro with always-on Monitoring tab. |
 | `6557029` | 2026-10-05 | ivanbolsakov |  | Publish Settings Data removal and typography to GitHub Pages. |
 | `06cc07a` | 2026-10-05 | ivanbolsakov |  | Use the normal Monitoring tab button helper on v2. |
