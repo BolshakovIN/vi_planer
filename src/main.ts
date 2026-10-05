@@ -230,46 +230,12 @@ function setActiveTab(next: string | undefined | null) {
   writeStoredUiTab(tab);
 }
 
-function isDemoVariantVisible(which: "A" | "B"): boolean {
-  // Variant B retired — one monitoring tab (layout A) only.
-  if (which === "B") return false;
-  return state.demoVariantA !== false;
-}
-
 function ensureVisibleTab() {
   const prev = ui.tab;
-  if (ui.tab === "demoA" && !isDemoVariantVisible("A")) ui.tab = "portfolio";
-  if (ui.tab === "demoB" && !isDemoVariantVisible("B")) ui.tab = "portfolio";
+  // Variant B retired — bounce leftover demoB bookmarks to portfolio.
+  if (ui.tab === "demoB") ui.tab = "portfolio";
   if ((ui.tab as string) === "roles") ui.tab = "capacity";
   if (ui.tab !== prev) writeStoredUiTab(ui.tab);
-}
-
-function setDemoVariantVisible(which: "A" | "B", visible: boolean) {
-  const prev = isDemoVariantVisible(which);
-  if (prev === visible) return;
-  if (which === "A") state.demoVariantA = visible;
-  else state.demoVariantB = visible;
-  if (!visible) {
-    const tab: Tab = which === "A" ? "demoA" : "demoB";
-    if (ui.tab === tab) {
-      const other: "A" | "B" = which === "A" ? "B" : "A";
-      setActiveTab(
-        isDemoVariantVisible(other)
-          ? other === "A"
-            ? "demoA"
-            : "demoB"
-          : "portfolio"
-      );
-    }
-    logChange(`Скрыт ${demoVariantChangeLabel(which)}`, "settings");
-  } else {
-    logChange(`Показан ${demoVariantChangeLabel(which)}`, "settings");
-  }
-  persist();
-}
-
-function demoVariantChangeLabel(_which: "A" | "B"): string {
-  return "Мониторинг";
 }
 
 function demoTabButtonHtml(id: "demoA" | "demoB", name: string): string {
@@ -3836,23 +3802,6 @@ function settingsHtml(rollups: ItemSchedule[]): string {
           </p>
         </div>
       </div>
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Демо-вкладка мониторинга</h2>
-        </div>
-        <div class="settings-demo-body">
-          <p class="meta">
-            Мониторинг — черновой макет статистики (загрузка команд и комплектация).
-            Можно скрыть вкладку; вернуть — этим флажком.
-          </p>
-          <label class="settings-check">
-            <input type="checkbox" id="showDemoA" ${
-              isDemoVariantVisible("A") ? "checked" : ""
-            } />
-            Показывать Мониторинг
-          </label>
-        </div>
-      </div>
       <div class="callout">
         Диапазоны маечной оценки — <strong>сколько дней</strong> заложено в оценке (XS–XXL). Для плана берётся середина диапазона и делится на 5 рабочих дней (не меньше 1 нед.).
         Изменения сразу перестраивают дату реализации и Gantt.
@@ -5005,7 +4954,7 @@ function render() {
         ${tabButtonHtml("demand")}
         ${tabButtonHtml("planning")}
         ${tabButtonHtml("timeline")}
-        ${isDemoVariantVisible("A") ? demoTabButtonHtml("demoA", "Мониторинг") : ""}
+        ${demoTabButtonHtml("demoA", "Мониторинг")}
         ${tabButtonHtml("queuesTest")}
         ${tabButtonHtml("capacity", "tab-end")}
         ${tabButtonHtml("changelog")}
@@ -6278,14 +6227,6 @@ function bindUiRest() {
   bindDemandTab();
   bindPlanningTab();
   bindGanttTab();
-
-  document.querySelector<HTMLInputElement>("#showDemoA")?.addEventListener(
-    "change",
-    (ev) => {
-      const on = (ev.currentTarget as HTMLInputElement).checked;
-      setDemoVariantVisible("A", on);
-    }
-  );
 
   document.querySelectorAll<HTMLInputElement>(".set-range").forEach((input) => {
     input.addEventListener("input", () => applySizeRangesFromInputs());
