@@ -3401,9 +3401,10 @@ function planPersonConflictTooltip(
 function planConflictMarkHtml(
   title = "Пересечение по исполнителю"
 ): string {
-  const t = escapeAttr(title);
-  // title on outer span (solid hit area); SVG is pointer-events:none so hover works reliably
-  return `<span class="plan-conflict-mark" title="${t}" aria-label="${t}" role="img">${PLAN_CONFLICT_MARK_SVG}</span>`;
+  const label = escapeAttr(title);
+  const tip = escapeHtml(title);
+  // CSS tip (not native title): appears immediately; survives overflow:hidden ancestors via fixed JS
+  return `<span class="plan-conflict-mark" tabindex="0" aria-label="${label}">${PLAN_CONFLICT_MARK_SVG}<span class="plan-conflict-tip" role="tooltip">${tip}</span></span>`;
 }
 
 function treeExpandControlsHtml(scope: "plan" | "gantt"): string {
@@ -4766,6 +4767,45 @@ function showOverloadExplain(
     if (overloadPinned) return;
     overloadHoverTimer = window.setTimeout(() => dismiss(), 180);
   });
+}
+
+/** Position conflict tip with position:fixed so overflow:hidden / sticky ancestors cannot clip it. */
+function placePlanConflictTip(mark: HTMLElement, tip: HTMLElement) {
+  tip.classList.add("is-fixed");
+  tip.style.left = "0px";
+  tip.style.top = "0px";
+  const markRect = mark.getBoundingClientRect();
+  const tipRect = tip.getBoundingClientRect();
+  const gap = 8;
+  let left = markRect.left + markRect.width / 2 - tipRect.width / 2;
+  let top = markRect.top - tipRect.height - gap;
+  left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
+  if (top < 8) top = markRect.bottom + gap;
+  tip.style.left = `${Math.round(left)}px`;
+  tip.style.top = `${Math.round(top)}px`;
+  mark.classList.add("is-tip-open");
+}
+
+function clearPlanConflictTip(mark: HTMLElement, tip: HTMLElement) {
+  mark.classList.remove("is-tip-open");
+  tip.classList.remove("is-fixed");
+  tip.style.left = "";
+  tip.style.top = "";
+}
+
+function bindPlanConflictTips() {
+  document
+    .querySelectorAll<HTMLElement>(".plan-conflict-mark")
+    .forEach((mark) => {
+      const tip = mark.querySelector<HTMLElement>(".plan-conflict-tip");
+      if (!tip) return;
+      const show = () => placePlanConflictTip(mark, tip);
+      const hide = () => clearPlanConflictTip(mark, tip);
+      mark.addEventListener("mouseenter", show);
+      mark.addEventListener("mouseleave", hide);
+      mark.addEventListener("focus", show);
+      mark.addEventListener("blur", hide);
+    });
 }
 
 function bindOverloadExplain() {
@@ -6577,6 +6617,7 @@ function bindUiRest() {
     });
 
   bindOverloadExplain();
+  bindPlanConflictTips();
 
   document.querySelector("#resetFilters")?.addEventListener("click", () => {
     ui.typeFilter = "all";

@@ -4835,7 +4835,22 @@ body.pdf-capturing .gantt-page .plan-board {
   background: color-mix(in srgb, var(--warn-soft) 55%, transparent);
 }
 
+/* Allow conflict tip to paint outside ellipsis clip on the name */
+.plan-exec-name:has(.plan-conflict-mark),
+.plan-fio-name:has(.plan-conflict-mark),
+.plan-cell:has(.plan-conflict-mark) {
+  overflow: visible;
+}
+
+.plan-row:has(.plan-conflict-mark:hover),
+.plan-row:has(.plan-conflict-mark:focus-visible),
+.plan-row:has(.plan-conflict-mark.is-tip-open) {
+  position: relative;
+  z-index: 40;
+}
+
 .plan-conflict-mark {
+  position: relative;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -4848,11 +4863,59 @@ body.pdf-capturing .gantt-page .plan-board {
   line-height: 1;
   cursor: help;
   pointer-events: auto;
+  outline: none;
+}
+
+.plan-conflict-mark:focus-visible {
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .plan-conflict-mark-ico {
   display: block;
   pointer-events: none;
+}
+
+.plan-conflict-tip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  z-index: 50;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #1c2126;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0;
+  text-align: left;
+  white-space: normal;
+  text-overflow: unset;
+  overflow: visible;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.28);
+  transition: opacity 0.06s ease, visibility 0.06s ease;
+}
+
+.plan-conflict-tip.is-fixed {
+  position: fixed;
+  bottom: auto;
+  transform: none;
+  z-index: 80;
+}
+
+.plan-conflict-mark:hover .plan-conflict-tip,
+.plan-conflict-mark:focus-visible .plan-conflict-tip,
+.plan-conflict-mark.is-tip-open .plan-conflict-tip {
+  opacity: 1;
+  visibility: visible;
 }
 
 .plan-add-btn {
