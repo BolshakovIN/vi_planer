@@ -287,6 +287,8 @@ interface UiState {
   planCollapsedItems: Record<string, true>;
   ganttCollapsedProjects: Record<string, true>;
   ganttCollapsedItems: Record<string, true>;
+  /** Collapsed team rows under a Gantt functionality (`itemId:teamId`). */
+  ganttCollapsedTeams: Record<string, true>;
   /** Inline «Новая задача на таймлайн» */
   planTaskForm: {
     itemId: string;
@@ -347,6 +349,7 @@ const ui: UiState = {
   planCollapsedItems: {},
   ganttCollapsedProjects: {},
   ganttCollapsedItems: {},
+  ganttCollapsedTeams: {},
   planTaskForm: null,
 };
 
@@ -3330,6 +3333,16 @@ const TREE_EXPAND_SVG = `<svg class="tree-expand-icon" viewBox="0 0 16 16" width
 /** Diagonal collapse-all: arrows point inward toward center. */
 const TREE_COLLAPSE_SVG = `<svg class="tree-expand-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M3.5 3.5H7V7M3.5 3.5 7.2 7.2M12.5 12.5H9V9M12.5 12.5 8.8 8.8"/></svg>`;
 
+/** Filled warning triangle with «!» — person/resource conflict mark on plan role rows. */
+const PLAN_CONFLICT_MARK_SVG = `<svg class="plan-conflict-mark-ico" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.14 1.7c.37-.66 1.35-.66 1.72 0l6.12 10.95c.38.68-.1 1.55-.86 1.55H1.88c-.76 0-1.24-.87-.86-1.55L7.14 1.7z"/><path fill="#fff" d="M7.4 5.15h1.2v4.25H7.4zm0 5.25h1.2v1.35H7.4z"/></svg>`;
+
+function planConflictMarkHtml(
+  title = "Пересечение по исполнителю"
+): string {
+  const t = escapeAttr(title);
+  return `<span class="plan-conflict-mark" title="${t}" aria-label="${t}" role="img">${PLAN_CONFLICT_MARK_SVG}</span>`;
+}
+
 function treeExpandControlsHtml(scope: "plan" | "gantt"): string {
   return `<div class="tree-expand-controls" role="group" aria-label="Свернуть или развернуть дерево">
     <button type="button" class="tree-expand-btn" data-tree-expand="${scope}" title="Развернуть все" aria-label="Развернуть все">${TREE_EXPAND_SVG}</button>
@@ -3367,12 +3380,17 @@ function setGanttTreeExpanded(expanded: boolean) {
   if (expanded) {
     ui.ganttCollapsedProjects = {};
     ui.ganttCollapsedItems = {};
+    ui.ganttCollapsedTeams = {};
   } else {
     ui.ganttCollapsedProjects = collectDatasetKeys(
       "[data-gantt-project]",
       "ganttProject"
     );
     ui.ganttCollapsedItems = collectDatasetKeys("[data-gantt-fn]", "ganttFn");
+    ui.ganttCollapsedTeams = collectDatasetKeys(
+      "[data-gantt-team]",
+      "ganttTeam"
+    );
   }
   render();
 }
@@ -3478,9 +3496,6 @@ function planTaskFormHtml(item: WorkItem, teamId: string, roleId: string): strin
   const title = editing
     ? `Изменить назначение на таймлайне: ${escapeHtml(item.title)}`
     : `Новая задача на таймлайн: ${escapeHtml(item.title)}`;
-  const submit = editing
-    ? `<button type="button" class="btn plan-place-btn-edit" data-plan-form-submit>Изменить</button>`
-    : `<button type="button" class="btn btn-primary" data-plan-form-submit>Поставить на таймлайн</button>`;
   return `<div class="plan-task-form">
     <div class="plan-task-form-title">${title}</div>
     <div class="plan-task-label">Исполнитель</div>
@@ -3490,7 +3505,7 @@ function planTaskFormHtml(item: WorkItem, teamId: string, roleId: string): strin
     <div class="plan-task-label">Длительность, рабочих дней</div>
     <div class="plan-chips">${durs}</div>
     <div class="plan-task-actions">
-      ${submit}
+      <button type="button" class="btn btn-primary" data-plan-form-submit>Поставить на таймлайн</button>
       <button type="button" class="btn" data-plan-form-cancel>Отмена</button>
     </div>
   </div>`;
@@ -3602,12 +3617,8 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
                   const conflict =
                     planConflictWeeks(a.teamId, overflowByTeam, weeks) > 0;
                   if (!roles.length) return "";
-                  const head = `<div class="plan-row plan-exec-row plan-team-row">
-                    <div class="plan-cell">
-                      <span class="plan-exec-name"><span class="team-dot" style="background:${team?.color ?? "#93999e"}"></span>${escapeHtml(team?.name ?? a.teamId)}</span>
-                    </div>
-                    ${planTrackHtml("", weeks)}
-                  </div>`;
+                  const teamKey = `${item.id}:${a.teamId}`;
+                  const teamOpen = !ui.ganttCollapsedTeams[teamKey];
                   const roleRows = roles
                     .map((role) => {
                       const member = teamMemberById(a.teamId, role.assigneeId);
@@ -3632,13 +3643,21 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
                         : `<div class="plan-bar-empty"></div>`;
                       return `<div class="plan-row plan-role-row">
                         <div class="plan-cell">
-                          <span class="plan-exec-name plan-fio-name">${escapeHtml(left)}${conflict && member ? " △" : ""}</span>
+                          <span class="plan-exec-name plan-fio-name">${escapeHtml(left)}${conflict && member ? planConflictMarkHtml("Конфликт ресурса") : ""}</span>
                         </div>
                         ${planTrackHtml(bar, weeks)}
                       </div>`;
                     })
                     .join("");
-                  return `${head}${roleRows}`;
+                  return `<details class="plan-team" data-gantt-team="${escapeAttr(teamKey)}"${teamOpen ? " open" : ""}>
+                    <summary class="plan-row plan-exec-row plan-team-sum">
+                      <div class="plan-cell">
+                        <span class="plan-exec-name">${escapeHtml(team?.name ?? a.teamId)}</span>
+                      </div>
+                      ${planTrackHtml("", weeks)}
+                    </summary>
+                    ${roleRows}
+                  </details>`;
                 })
                 .join("");
               return `<details class="plan-fn" data-gantt-fn="${item.id}"${fnOpen ? " open" : ""}>
@@ -3823,7 +3842,7 @@ function planningHtml(
                         : " plan-role-row";
                       return `${planTaskFormHtml(item, a.teamId, role.id)}<div class="plan-row${rowCls}">
                         <div class="plan-cell">
-                          <span class="plan-exec-name plan-fio-name">${leftLabel}${personConflict ? `<span class="plan-conflict-mark" title="Пересечение по исполнителю">△</span>` : ""}</span>
+                          <span class="plan-exec-name plan-fio-name">${leftLabel}${personConflict ? planConflictMarkHtml() : ""}</span>
                           ${planPlaceOpenBtnHtml(item.id, a.teamId, role.id, onTimeline)}
                         </div>
                         ${planTrackHtml(bar, weeks)}
@@ -3872,15 +3891,17 @@ function planningHtml(
           <h2>Планирование потребности</h2>
           <p class="meta">У тимлида несколько проектов с запросом на ресурс. Слева — проекты по функциональностям, справа — шкала назначений.</p>
         </div>
-        ${treeExpandControlsHtml("plan")}
+        <div class="plan-head-actions">
+          ${treeExpandControlsHtml("plan")}
+          <div class="plan-team-filter-actions">
+            <button type="button" class="plan-team-filter-btn" data-plan-teams-clear>Сбросить фильтр</button>
+            <button type="button" class="plan-team-filter-btn is-primary" data-plan-teams-all>Выбрать все</button>
+          </div>
+        </div>
       </div>
       <div class="plan-teams">
         <span class="plan-teams-label">Моя команда</span>
         <div class="plan-team-chips" aria-label="Команды">${chips || `<span class="meta">Нет команд</span>`}</div>
-        <div class="plan-team-filter-actions">
-          <button type="button" class="plan-team-filter-btn" data-plan-teams-clear>Сбросить фильтр</button>
-          <button type="button" class="plan-team-filter-btn is-primary" data-plan-teams-all>Выбрать все</button>
-        </div>
       </div>
       <div class="need-stats plan-stats">
         <div class="need-stat"><div class="label">Проектов команды</div><div class="value">${groups.length}</div></div>
@@ -6086,6 +6107,14 @@ function bindGanttTab() {
       if (!id) return;
       if (el.open) delete ui.ganttCollapsedItems[id];
       else ui.ganttCollapsedItems[id] = true;
+    });
+  });
+  root.querySelectorAll<HTMLDetailsElement>("[data-gantt-team]").forEach((el) => {
+    el.addEventListener("toggle", () => {
+      const key = el.dataset.ganttTeam;
+      if (!key) return;
+      if (el.open) delete ui.ganttCollapsedTeams[key];
+      else ui.ganttCollapsedTeams[key] = true;
     });
   });
 }

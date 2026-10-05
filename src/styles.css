@@ -2580,11 +2580,15 @@ body.prio-dragging {
 .gantt-weeks-ctrl-right {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  font-size: 12px;
+  gap: 8px;
+  flex-wrap: nowrap;
   flex-shrink: 0;
-  padding-top: 4px;
+  padding: 5px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-size: 12px;
 }
 
 .gantt-head-actions {
@@ -2593,10 +2597,6 @@ body.prio-dragging {
   gap: 12px;
   flex-shrink: 0;
   flex-wrap: wrap;
-}
-
-.gantt-head-actions .gantt-weeks-ctrl-right {
-  padding-top: 0;
 }
 
 .tree-expand-controls {
@@ -3195,7 +3195,16 @@ a.req-dl-btn {
 }
 
 .plan-page .need-page-head {
-  align-items: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.plan-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .need-project-chip .prio-mini,
@@ -3356,7 +3365,8 @@ body.pdf-capturing .gantt-rows {
 }
 
 body.pdf-capturing .panel-sticky,
-body.pdf-capturing .portfolio-sticky {
+body.pdf-capturing .portfolio-sticky,
+body.pdf-capturing .plan-board-head {
   position: static !important;
   top: auto !important;
   box-shadow: none !important;
@@ -3382,7 +3392,8 @@ body.pdf-capturing .plan-task-form {
 
 /* Schematic Gantt / plan board capture: hide expand chevrons and empty chrome. */
 body.pdf-capturing .plan-project-sum .plan-cell::before,
-body.pdf-capturing .plan-fn-sum .plan-cell::before {
+body.pdf-capturing .plan-fn-sum .plan-cell::before,
+body.pdf-capturing .plan-team-sum .plan-cell::before {
   display: none !important;
 }
 
@@ -3435,7 +3446,8 @@ body.pdf-capturing .gantt-page .plan-board {
   }
 
   .plan-project-sum .plan-cell::before,
-  .plan-fn-sum .plan-cell::before {
+  .plan-fn-sum .plan-cell::before,
+  .plan-team-sum .plan-cell::before {
     display: none !important;
   }
 
@@ -3508,7 +3520,8 @@ body.pdf-capturing .gantt-page .plan-board {
   }
 
   .panel-sticky,
-  .portfolio-sticky {
+  .portfolio-sticky,
+  .plan-board-head {
     position: static !important;
     top: auto !important;
   }
@@ -4510,10 +4523,7 @@ body.pdf-capturing .gantt-page .plan-board {
   flex-wrap: nowrap;
   flex-shrink: 0;
   align-items: center;
-  align-self: flex-start;
   gap: 8px;
-  margin-left: auto;
-  padding-top: 1px;
 }
 
 .plan-team-filter-btn {
@@ -4615,12 +4625,13 @@ body.pdf-capturing .gantt-page .plan-board {
   font-weight: 400;
 }
 
+/* overflow:visible so .plan-board-head can stick to the page (window) scroll */
 .plan-board {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .plan-row {
@@ -4632,9 +4643,13 @@ body.pdf-capturing .gantt-page .plan-board {
 }
 
 .plan-board-head {
+  position: sticky;
+  top: var(--tabs-sticky-h, 42px);
+  z-index: 30;
   min-height: 32px;
   background: var(--surface-2);
   border-bottom-color: var(--line);
+  box-shadow: 0 1px 0 var(--line);
 }
 
 .plan-cell {
@@ -4673,23 +4688,27 @@ body.pdf-capturing .gantt-page .plan-board {
 }
 
 .plan-project,
-.plan-fn {
+.plan-fn,
+.plan-team {
   display: block;
 }
 
 .plan-project-sum,
-.plan-fn-sum {
+.plan-fn-sum,
+.plan-team-sum {
   cursor: pointer;
   list-style: none;
 }
 
 .plan-project-sum::-webkit-details-marker,
-.plan-fn-sum::-webkit-details-marker {
+.plan-fn-sum::-webkit-details-marker,
+.plan-team-sum::-webkit-details-marker {
   display: none;
 }
 
 .plan-project-sum .plan-cell::before,
-.plan-fn-sum .plan-cell::before {
+.plan-fn-sum .plan-cell::before,
+.plan-team-sum .plan-cell::before {
   content: "";
   width: 0;
   height: 0;
@@ -4701,7 +4720,8 @@ body.pdf-capturing .gantt-page .plan-board {
 }
 
 .plan-project[open] > .plan-project-sum .plan-cell::before,
-.plan-fn[open] > .plan-fn-sum .plan-cell::before {
+.plan-fn[open] > .plan-fn-sum .plan-cell::before,
+.plan-team[open] > .plan-team-sum .plan-cell::before {
   transform: rotate(90deg);
 }
 
@@ -4713,7 +4733,8 @@ body.pdf-capturing .gantt-page .plan-board {
   padding-left: 20px;
 }
 
-.plan-team-row .plan-cell {
+.plan-team-row .plan-cell,
+.plan-team-sum .plan-cell {
   padding-left: 32px;
 }
 
@@ -4816,10 +4837,15 @@ body.pdf-capturing .gantt-page .plan-board {
 
 .plan-conflict-mark {
   flex-shrink: 0;
-  color: var(--warn);
-  font-size: 10px;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
   line-height: 1;
+  cursor: help;
+}
+
+.plan-conflict-mark-ico {
+  display: block;
 }
 
 .plan-add-btn {
