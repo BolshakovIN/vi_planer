@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 06.10.2026, 01:12 GMT+3
+Сгенерировано: 06.10.2026, 01:17 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `e09f920` | 2026-10-06 | ivanbolsakov | Replace native title with a visible CSS conflict tooltip. |
+| `67b2771` | 2026-10-06 | ivanbolsakov | Publish conflict tooltips and white conflict mark to GitHub Pages. |
 | `384f773` | 2026-10-06 | ivanbolsakov | Show project/week conflict tooltips and invert the plan conflict mark. |
 | `ed51a03` | 2026-10-06 | ivanbolsakov | Publish plan/Gantt UX polish to GitHub Pages. |
 | `f08c2dc` | 2026-10-06 | ivanbolsakov | Improve plan/Gantt UX: sticky date headers, team expand, conflict mark, and filter actions in the head. |
@@ -399,8 +401,10 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `384f773` | 2026-10-06 | ivanbolsakov | HEAD -> master | Show project/week conflict tooltips and invert the plan conflict mark. |
-| `ed51a03` | 2026-10-06 | ivanbolsakov | origin/master | Publish plan/Gantt UX polish to GitHub Pages. |
+| `e09f920` | 2026-10-06 | ivanbolsakov | HEAD -> master | Replace native title with a visible CSS conflict tooltip. |
+| `67b2771` | 2026-10-06 | ivanbolsakov | origin/master | Publish conflict tooltips and white conflict mark to GitHub Pages. |
+| `384f773` | 2026-10-06 | ivanbolsakov |  | Show project/week conflict tooltips and invert the plan conflict mark. |
+| `ed51a03` | 2026-10-06 | ivanbolsakov |  | Publish plan/Gantt UX polish to GitHub Pages. |
 | `f08c2dc` | 2026-10-06 | ivanbolsakov |  | Improve plan/Gantt UX: sticky date headers, team expand, conflict mark, and filter actions in the head. |
 | `62df82d` | 2026-10-06 | ivanbolsakov |  | Publish plan expand/collapse, place/edit, person overlap, and schematic Gantt PDF to GitHub Pages. |
 | `1025b67` | 2026-10-06 | ivanbolsakov |  | Add plan tree expand/collapse, place/edit buttons, person overlap highlight, and schematic Gantt PDF export. |
