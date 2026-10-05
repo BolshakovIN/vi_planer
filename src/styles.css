@@ -3567,19 +3567,6 @@ body.pdf-capturing .table-scroll-top {
   font-weight: 600;
 }
 
-.tab-demo-mark {
-  font-size: 9px;
-  font-style: italic;
-  font-weight: 400;
-  color: var(--muted);
-  line-height: 1.1;
-  white-space: nowrap;
-}
-
-.tab-demo.active .tab-demo-mark {
-  color: color-mix(in srgb, var(--accent) 55%, var(--muted));
-}
-
 .demo-page {
   display: flex;
   flex-direction: column;

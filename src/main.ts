@@ -272,18 +272,12 @@ function demoVariantChangeLabel(_which: "A" | "B"): string {
   return "Мониторинг";
 }
 
-function demoTabButtonHtml(
-  id: "demoA" | "demoB",
-  name: string,
-  mark = "*демо"
-): string {
-  const ariaMark = mark.replace(/^\*/, "").trim();
+function demoTabButtonHtml(id: "demoA" | "demoB", name: string): string {
   return `<button type="button" class="tab tab-demo ${
     ui.tab === id ? "active" : ""
-  }" data-tab="${id}" aria-label="${escapeAttr(name)}, ${escapeAttr(ariaMark)}">
+  }" data-tab="${id}" aria-label="${escapeAttr(name)}">
     ${tabIconHtml(id)}
     <span class="tab-demo-name">${escapeHtml(name)}</span>
-    <span class="tab-demo-mark">${escapeHtml(mark)}</span>
   </button>`;
 }
 
