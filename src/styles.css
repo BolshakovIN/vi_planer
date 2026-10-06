@@ -5104,6 +5104,18 @@ body.pdf-capturing .gantt-page .plan-board {
   pointer-events: none;
   box-shadow: var(--shadow);
   transition: opacity 0.06s ease, visibility 0.06s ease;
+  /* Tip is not a disclosure control — kill any inherited marker/chevron paint */
+  list-style: none;
+  isolation: isolate;
+}
+
+.plan-conflict-tip::before,
+.plan-conflict-tip::after,
+.plan-conflict-tip *::before,
+.plan-conflict-tip *::after {
+  content: none !important;
+  display: none !important;
+  border: none !important;
 }
 
 .plan-conflict-tip.is-fixed {

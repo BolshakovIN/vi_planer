@@ -3626,23 +3626,48 @@ function planConflictCounterparts(
  * Tooltip listing conflicting projects/weeks, e.g.
  * `Пересечение: «Сайт ЛК» · Функция A Н4–Н5 (12.10–19.10); «Активные продажи» Н4–Н8 (12.10–09.11)`
  */
-function planPersonConflictTooltip(
+function planPersonConflictAriaLabel(
   placeKey: string,
   placements: readonly PlanPersonPlacement[]
 ): string {
+  const self = placements.find((p) => p.key === placeKey);
   const parts = planConflictCounterparts(placeKey, placements).map(
     (p) =>
       `${planPlacementDisplayTitle(p)} ${planWeekRangeLabel(p.startWeek, p.endWeek)}`
   );
-  if (!parts.length) return "Пересечение по исполнителю";
-  return `Пересечение: ${parts.join("; ")}`;
+  if (!self?.personKey || !parts.length) return "Пересечение по исполнителю";
+  return `Пересечение · ${planWeekRangeLabel(self.startWeek, self.endWeek)}. ${self.memberName}: ${parts.join("; ")}`;
+}
+
+/** Structured tip HTML for a person-conflict mark — same classes as week-header tips. */
+function planPersonConflictTipHtml(
+  placeKey: string,
+  placements: readonly PlanPersonPlacement[]
+): string {
+  const self = placements.find((p) => p.key === placeKey);
+  const others = planConflictCounterparts(placeKey, placements);
+  if (!self?.personKey) {
+    return `<div class="plan-conflict-tip-title">Пересечение по исполнителю</div>`;
+  }
+  const listed = [self, ...others];
+  const startWeek = Math.min(...listed.map((p) => p.startWeek));
+  const endWeek = Math.max(...listed.map((p) => p.endWeek));
+  const title = `Пересечение · ${planWeekRangeLabel(startWeek, endWeek)}`;
+  const projects = listed
+    .map(
+      (p) =>
+        `<div class="plan-conflict-tip-proj">• ${escapeHtml(planWeekConflictProjectLine(p))} · ${escapeHtml(planWeekRangeLabel(p.startWeek, p.endWeek))}</div>`
+    )
+    .join("");
+  return `<div class="plan-conflict-tip-title">${escapeHtml(title)}</div><div class="plan-conflict-tip-group"><div class="plan-conflict-tip-person">${escapeHtml(self.memberName)}</div>${projects}</div>`;
 }
 
 function planConflictMarkHtml(
-  title = "Пересечение по исполнителю"
+  ariaLabel = "Пересечение по исполнителю",
+  tipHtml?: string
 ): string {
-  const label = escapeAttr(title);
-  const tip = escapeHtml(title);
+  const label = escapeAttr(ariaLabel);
+  const tip = tipHtml ?? escapeHtml(ariaLabel);
   // CSS tip (not native title): appears immediately; survives overflow:hidden ancestors via fixed JS
   return `<span class="plan-conflict-mark" tabindex="0" aria-label="${label}">${PLAN_CONFLICT_MARK_SVG}<span class="plan-conflict-tip" role="tooltip">${tip}</span></span>`;
 }
@@ -4256,14 +4281,17 @@ function planningHtml(
                         role.id
                       );
                       const personConflict = personConflictKeys.has(placeKey);
-                      const conflictTip = personConflict
-                        ? planPersonConflictTooltip(placeKey, personPlacements)
+                      const conflictAria = personConflict
+                        ? planPersonConflictAriaLabel(placeKey, personPlacements)
+                        : "";
+                      const conflictTipHtml = personConflict
+                        ? planPersonConflictTipHtml(placeKey, personPlacements)
                         : "";
                       const label = member
                         ? `${shortFio(member.name)} · ${days} дн.`
                         : `${role.name} · ${days} дн.`;
                       const barTitle = personConflict
-                        ? `${label} — ${conflictTip}`
+                        ? `${label} — ${conflictAria}`
                         : label;
                       const bar = member
                         ? planBarHtml(
@@ -4286,7 +4314,7 @@ function planningHtml(
                         : " plan-role-row";
                       return `${planTaskFormHtml(item, a.teamId, role.id)}<div class="plan-row${rowCls}">
                         <div class="plan-cell">
-                          <span class="plan-exec-name plan-fio-name">${leftLabel}${personConflict ? planConflictMarkHtml(conflictTip) : ""}</span>
+                          <span class="plan-exec-name plan-fio-name">${leftLabel}${personConflict ? planConflictMarkHtml(conflictAria, conflictTipHtml) : ""}</span>
                           ${planPlaceOpenBtnHtml(item.id, a.teamId, role.id, onTimeline)}
                         </div>
                         ${planTrackHtml(bar, weeks)}
