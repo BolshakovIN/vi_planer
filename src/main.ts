@@ -386,6 +386,8 @@ interface UiState {
   planTeamFilterCleared: boolean;
   /** Last-clicked team chip (stronger highlight) */
   planFocusTeamId: string | null;
+  /** Планирование: show only person-conflict rows */
+  planConflictsOnly: boolean;
   planCollapsedProjects: Record<string, true>;
   planCollapsedItems: Record<string, true>;
   ganttCollapsedProjects: Record<string, true>;
@@ -448,6 +450,7 @@ const ui: UiState = {
   planTeamIds: [],
   planTeamFilterCleared: false,
   planFocusTeamId: null,
+  planConflictsOnly: false,
   planCollapsedProjects: {},
   planCollapsedItems: {},
   ganttCollapsedProjects: {},
@@ -3378,11 +3381,16 @@ type PlanWeekPersonConflict = {
 };
 
 function planPersonKey(
-  teamId: string,
+  _teamId: string,
   assigneeId: string | undefined,
   memberName: string
 ): string {
-  if (assigneeId) return `id:${teamId}:${assigneeId}`;
+  // Prefer global member id (ids are unique across teams). Do not scope by
+  // teamId — the same person on two teams must still collide.
+  if (assigneeId) return `id:${assigneeId}`;
+  // Full name before short FIO: «Морозова Екатерина» ≠ «Морозова Елена».
+  const full = memberName.trim().toLowerCase();
+  if (full) return `name:${full}`;
   const fio = shortFio(memberName).trim().toLowerCase();
   return fio ? `fio:${fio}` : "";
 }
@@ -3973,6 +3981,8 @@ function collectGanttRoleBars(ranges = szRanges()): GanttRoleBar[] {
 }
 
 function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
+  /** Resource-intersection UI belongs on Планирование only. */
+  const showConflicts = false;
   const weeks = Math.max(4, Math.min(52, Math.round(ui.ganttWeeks) || 16));
   ui.ganttWeeks = weeks;
   const ranges = szRanges();
@@ -3989,22 +3999,18 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
   });
   const placedKeys = new Set(bars.map((b) => demandProjectKey(b.item)));
   const assignees = new Set(bars.map((b) => `${b.teamId}:${b.role.assigneeId}`));
-  const conflictCount = state.teams.reduce(
-    (n, t) => n + planConflictWeeks(t.id, overflowByTeam, weeks),
-    0
-  );
+  const conflictCount = showConflicts
+    ? state.teams.reduce(
+        (n, t) => n + planConflictWeeks(t.id, overflowByTeam, weeks),
+        0
+      )
+    : 0;
 
   const body = groups.length
     ? groups
-        .map((g, gi) => {
+        .map((g) => {
           const open = !ui.ganttCollapsedProjects[g.key];
           const projectSpans: { startWeek: number; endWeek: number }[] = [];
-          const demoAttr =
-            gi === 0
-              ? ' data-project-demo="a"'
-              : gi === 1
-                ? ' data-project-demo="b"'
-                : "";
           const fnRows = g.items
             .map((item) => {
               const fnOpen = !ui.ganttCollapsedItems[item.id];
@@ -4016,6 +4022,7 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
                   const team = teamById(a.teamId);
                   const roles = planningDemandRoles(a);
                   const conflict =
+                    showConflicts &&
                     planConflictWeeks(a.teamId, overflowByTeam, weeks) > 0;
                   if (!roles.length) return "";
                   const teamKey = `${item.id}:${a.teamId}`;
@@ -4123,7 +4130,7 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
                 `${g.title}${projectStatus ? ` · ${statusLabel(projectStatus)}` : ""} · ${planWeekRangeLabel(projectAgg.startWeek, projectAgg.endWeek)}`
               )
             : "";
-          return `<details class="plan-project" data-gantt-project="${escapeAttr(g.key)}"${demoAttr}${open ? " open" : ""}>
+          return `<details class="plan-project" data-gantt-project="${escapeAttr(g.key)}"${open ? " open" : ""}>
             <summary class="plan-row plan-project-sum">
               <div class="plan-cell">
                 <span class="plan-project-title">${prioBadgeHtml(prioMap.get(g.key))}${escapeHtml(g.title)}</span>
@@ -4158,7 +4165,11 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
         <div class="need-stat"><div class="label">Расположено</div><div class="value">${placedKeys.size}</div></div>
         <div class="need-stat"><div class="label">Задач</div><div class="value">${bars.length}</div></div>
         <div class="need-stat"><div class="label">Исполнителей</div><div class="value">${assignees.size}</div></div>
-        <div class="need-stat"><div class="label">Конфликтов ресурса</div><div class="value${conflictCount ? " is-pending" : ""}">${conflictCount}</div></div>
+        ${
+          showConflicts
+            ? `<div class="need-stat"><div class="label">Конфликтов ресурса</div><div class="value${conflictCount ? " is-pending" : ""}">${conflictCount}</div></div>`
+            : ""
+        }
       </div>
       <div class="plan-board gantt-board">
         <div class="plan-row plan-board-head">
@@ -4228,17 +4239,12 @@ function planningHtml(
     weeks
   );
   const conflictCount = personConflictKeys.size || capacityConflictWeeks;
+  const conflictsOnly = ui.planConflictsOnly;
 
-  const body = groups.length
+  const bodyHtml = groups.length
     ? groups
-        .map((g, gi) => {
-          const open = !ui.planCollapsedProjects[g.key];
-          const demoAttr =
-            gi === 0
-              ? ' data-project-demo="a"'
-              : gi === 1
-                ? ' data-project-demo="b"'
-                : "";
+        .map((g) => {
+          const open = conflictsOnly || !ui.planCollapsedProjects[g.key];
           const fnRows = g.items
             .map((item) => {
               const assigns = item.assignments.filter((a) =>
@@ -4253,18 +4259,12 @@ function planningHtml(
                 selectedSet.has(s.teamId)
               );
               const agreed = agreedRolePlanDays(assigns, ranges);
-              const fnOpen = !ui.planCollapsedItems[item.id];
+              const fnOpen = conflictsOnly || !ui.planCollapsedItems[item.id];
               const execRows = assigns
                 .map((a) => {
                   const team = teamById(a.teamId);
                   const roles = planningDemandRoles(a);
                   if (!roles.length) return "";
-                  const head = `<div class="plan-row plan-exec-row plan-team-row">
-                    <div class="plan-cell">
-                      <span class="plan-exec-name"><span class="team-dot" style="background:${team?.color ?? "#93999e"}"></span>${escapeHtml(team?.name ?? a.teamId)}</span>
-                    </div>
-                    ${planTrackHtml("", weeks)}
-                  </div>`;
                   const roleRows = roles
                     .map((role) => {
                       const member = rolePlacedOnTimeline(a.teamId, role);
@@ -4281,6 +4281,7 @@ function planningHtml(
                         role.id
                       );
                       const personConflict = personConflictKeys.has(placeKey);
+                      if (conflictsOnly && !personConflict) return "";
                       const conflictAria = personConflict
                         ? planPersonConflictAriaLabel(placeKey, personPlacements)
                         : "";
@@ -4321,9 +4322,17 @@ function planningHtml(
                       </div>`;
                     })
                     .join("");
+                  if (conflictsOnly && !roleRows) return "";
+                  const head = `<div class="plan-row plan-exec-row plan-team-row">
+                    <div class="plan-cell">
+                      <span class="plan-exec-name"><span class="team-dot" style="background:${team?.color ?? "#93999e"}"></span>${escapeHtml(team?.name ?? a.teamId)}</span>
+                    </div>
+                    ${planTrackHtml("", weeks)}
+                  </div>`;
                   return `${head}${roleRows}`;
                 })
                 .join("");
+              if (conflictsOnly && !execRows) return "";
               const fnBar =
                 itemSlices.length === 0
                   ? `<div class="plan-bar-empty"></div>`
@@ -4340,7 +4349,8 @@ function planningHtml(
               </details>`;
             })
             .join("");
-          return `<details class="plan-project" data-plan-project="${escapeAttr(g.key)}"${demoAttr}${open ? " open" : ""}>
+          if (conflictsOnly && !fnRows) return "";
+          return `<details class="plan-project" data-plan-project="${escapeAttr(g.key)}"${open ? " open" : ""}>
             <summary class="plan-row plan-project-sum">
               <div class="plan-cell">
                 <span class="plan-project-title">${prioBadgeHtml(projectPrioMap().get(g.key))}${escapeHtml(g.title)}</span>
@@ -4352,9 +4362,15 @@ function planningHtml(
           </details>`;
         })
         .join("")
+    : "";
+
+  const body = bodyHtml
+    ? bodyHtml
     : selected.length === 0
       ? `<div class="plan-empty meta">Команды не выбраны. Отметьте команду сверху или нажмите «Выбрать все».</div>`
-      : `<div class="plan-empty meta">Нет проектов у выбранных команд. Отметьте команду сверху или назначьте её на вкладке «Потребность».</div>`;
+      : conflictsOnly
+        ? `<div class="plan-empty meta">Нет пересечений по исполнителям у выбранных команд.</div>`
+        : `<div class="plan-empty meta">Нет проектов у выбранных команд. Отметьте команду сверху или назначьте её на вкладке «Потребность».</div>`;
 
   return `
     <div class="plan-page">
@@ -4366,6 +4382,7 @@ function planningHtml(
         <div class="plan-head-actions">
           ${treeExpandControlsHtml("plan")}
           <div class="plan-team-filter-actions">
+            <button type="button" class="plan-team-filter-btn${conflictsOnly ? " is-on" : ""}" data-plan-conflicts-only title="Показать только пересечения по исполнителям" aria-pressed="${conflictsOnly ? "true" : "false"}">Конфликты</button>
             <button type="button" class="plan-team-filter-btn" data-plan-teams-clear>Сбросить фильтр</button>
             <button type="button" class="plan-team-filter-btn is-primary" data-plan-teams-all>Выбрать все</button>
           </div>
@@ -6681,6 +6698,7 @@ function bindPlanningTab() {
     ui.planTeamIds = [];
     ui.planTeamFilterCleared = true;
     ui.planFocusTeamId = null;
+    ui.planConflictsOnly = false;
     render();
   });
   root.querySelector("[data-plan-teams-all]")?.addEventListener("click", () => {
@@ -6689,6 +6707,12 @@ function bindPlanningTab() {
     ui.planFocusTeamId = ui.planTeamIds[0] ?? null;
     render();
   });
+  root
+    .querySelector("[data-plan-conflicts-only]")
+    ?.addEventListener("click", () => {
+      ui.planConflictsOnly = !ui.planConflictsOnly;
+      render();
+    });
 
   const openTaskForm = (itemId: string, teamId: string, roleId: string) => {
     const item = state.items.find((i) => i.id === itemId);
