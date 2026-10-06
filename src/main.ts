@@ -3336,20 +3336,6 @@ function agreedRolePlanDays(
   }, 0);
 }
 
-function planConflictWeeks(
-  teamId: string,
-  overflowByTeam: Record<string, Set<number>>,
-  weeks: number
-): number {
-  const set = overflowByTeam[teamId];
-  if (!set) return 0;
-  let n = 0;
-  for (const w of set) {
-    if (w >= 0 && w < weeks) n++;
-  }
-  return n;
-}
-
 /** Inclusive week ranges intersect (same model as plan bars). */
 function planWeeksOverlap(
   aStart: number,
@@ -3980,7 +3966,7 @@ function collectGanttRoleBars(ranges = szRanges()): GanttRoleBar[] {
   return out;
 }
 
-function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
+function ganttPlanHtml(): string {
   /** Resource-intersection UI belongs on Планирование only. */
   const showConflicts = false;
   const weeks = Math.max(4, Math.min(52, Math.round(ui.ganttWeeks) || 16));
@@ -3999,12 +3985,7 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
   });
   const placedKeys = new Set(bars.map((b) => demandProjectKey(b.item)));
   const assignees = new Set(bars.map((b) => `${b.teamId}:${b.role.assigneeId}`));
-  const conflictCount = showConflicts
-    ? state.teams.reduce(
-        (n, t) => n + planConflictWeeks(t.id, overflowByTeam, weeks),
-        0
-      )
-    : 0;
+  const conflictCount = 0;
 
   const body = groups.length
     ? groups
@@ -4021,9 +4002,7 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
                 .map((a) => {
                   const team = teamById(a.teamId);
                   const roles = planningDemandRoles(a);
-                  const conflict =
-                    showConflicts &&
-                    planConflictWeeks(a.teamId, overflowByTeam, weeks) > 0;
+                  const conflict = false;
                   if (!roles.length) return "";
                   const teamKey = `${item.id}:${a.teamId}`;
                   const teamOpen = !ui.ganttCollapsedTeams[teamKey];
@@ -4184,8 +4163,7 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
 
 function planningHtml(
   rollups: ItemSchedule[],
-  _slices: ScheduledSlice[],
-  overflowByTeam: Record<string, Set<number>>
+  _slices: ScheduledSlice[]
 ): string {
   const weeks = PLAN_WEEKS;
   const selected = planSelectedTeamIds();
@@ -4224,10 +4202,6 @@ function planningHtml(
     selectedAssigns.map((x) => x.a),
     ranges
   );
-  const capacityConflictWeeks = selected.reduce(
-    (n, id) => n + planConflictWeeks(id, overflowByTeam, weeks),
-    0
-  );
   const personPlacements = collectPlanPersonPlacements(
     items,
     selectedSet,
@@ -4238,7 +4212,8 @@ function planningHtml(
     personPlacements,
     weeks
   );
-  const conflictCount = personConflictKeys.size || capacityConflictWeeks;
+  /** Bars with person-overlap (same keys as hatch / triangle marks). */
+  const conflictCount = personConflictKeys.size;
   const conflictsOnly = ui.planConflictsOnly;
 
   const bodyHtml = groups.length
@@ -4421,11 +4396,11 @@ function tabContentHtml(
     case "demand":
       return demandHtml();
     case "planning":
-      return planningHtml(rollups, slices, overflowByTeam);
+      return planningHtml(rollups, slices);
     case "queuesTest":
       return queuesTestHtml(slices, load, overflowByTeam);
     case "timeline":
-      return ganttPlanHtml(overflowByTeam);
+      return ganttPlanHtml();
     case "demoA":
       return demoVariantAHtml(load, overflowByTeam);
     case "demoB":
