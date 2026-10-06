@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 06.10.2026, 01:17 GMT+3
+Сгенерировано: 06.10.2026, 16:09 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `b9d651b` | 2026-10-06 | ivanbolsakov | Add Gantt hierarchy bars, project statuses, and soft conflict week highlights. |
+| `d09ef88` | 2026-10-06 | ivanbolsakov | Publish CSS conflict tooltips to GitHub Pages. |
 | `e09f920` | 2026-10-06 | ivanbolsakov | Replace native title with a visible CSS conflict tooltip. |
 | `67b2771` | 2026-10-06 | ivanbolsakov | Publish conflict tooltips and white conflict mark to GitHub Pages. |
 | `384f773` | 2026-10-06 | ivanbolsakov | Show project/week conflict tooltips and invert the plan conflict mark. |
@@ -401,8 +403,10 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `e09f920` | 2026-10-06 | ivanbolsakov | HEAD -> master | Replace native title with a visible CSS conflict tooltip. |
-| `67b2771` | 2026-10-06 | ivanbolsakov | origin/master | Publish conflict tooltips and white conflict mark to GitHub Pages. |
+| `b9d651b` | 2026-10-06 | ivanbolsakov | HEAD -> master | Add Gantt hierarchy bars, project statuses, and soft conflict week highlights. |
+| `d09ef88` | 2026-10-06 | ivanbolsakov | origin/master | Publish CSS conflict tooltips to GitHub Pages. |
+| `e09f920` | 2026-10-06 | ivanbolsakov |  | Replace native title with a visible CSS conflict tooltip. |
+| `67b2771` | 2026-10-06 | ivanbolsakov |  | Publish conflict tooltips and white conflict mark to GitHub Pages. |
 | `384f773` | 2026-10-06 | ivanbolsakov |  | Show project/week conflict tooltips and invert the plan conflict mark. |
 | `ed51a03` | 2026-10-06 | ivanbolsakov |  | Publish plan/Gantt UX polish to GitHub Pages. |
 | `f08c2dc` | 2026-10-06 | ivanbolsakov |  | Improve plan/Gantt UX: sticky date headers, team expand, conflict mark, and filter actions in the head. |
