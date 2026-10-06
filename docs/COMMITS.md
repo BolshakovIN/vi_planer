@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 06.10.2026, 17:19 GMT+3
+Сгенерировано: 06.10.2026, 20:07 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `bb61a83` | 2026-10-06 | ivanbolsakov | Improve Planning conflicts: filter, cross-team keys, uniform project highlight. |
+| `1fcf671` | 2026-10-06 | ivanbolsakov | Publish Planning A/B highlights and conflict tip polish to GitHub Pages. |
 | `6c8c9e5` | 2026-10-06 | ivanbolsakov | Structure person-conflict tips like week-header tips. |
 | `da7c664` | 2026-10-06 | ivanbolsakov | Restyle Planning conflict bars with thinner VI-red border and hatching. |
 | `e7ab6b5` | 2026-10-06 | ivanbolsakov | A/B-test project row emphasis on Planning and Gantt. |
@@ -411,10 +413,12 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `6c8c9e5` | 2026-10-06 | ivanbolsakov | HEAD -> master | Structure person-conflict tips like week-header tips. |
+| `bb61a83` | 2026-10-06 | ivanbolsakov | HEAD -> master | Improve Planning conflicts: filter, cross-team keys, uniform project highlight. |
+| `1fcf671` | 2026-10-06 | ivanbolsakov | origin/master | Publish Planning A/B highlights and conflict tip polish to GitHub Pages. |
+| `6c8c9e5` | 2026-10-06 | ivanbolsakov |  | Structure person-conflict tips like week-header tips. |
 | `da7c664` | 2026-10-06 | ivanbolsakov |  | Restyle Planning conflict bars with thinner VI-red border and hatching. |
 | `e7ab6b5` | 2026-10-06 | ivanbolsakov |  | A/B-test project row emphasis on Planning and Gantt. |
-| `c4085f2` | 2026-10-06 | ivanbolsakov | origin/master | Publish capacity removal and ETA column polish to GitHub Pages. |
+| `c4085f2` | 2026-10-06 | ivanbolsakov |  | Publish capacity removal and ETA column polish to GitHub Pages. |
 | `f2ecc9f` | 2026-10-06 | ivanbolsakov |  | Remove team capacity model and center the completion-date column. |
 | `602d379` | 2026-10-06 | ivanbolsakov |  | Publish app roles and planning agreed-days metric to GitHub Pages. |
 | `8c2cb8e` | 2026-10-06 | ivanbolsakov |  | Add app roles, fix planning agreed-days metric, and polish staffing/tooltips. |
