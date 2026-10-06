@@ -4395,22 +4395,12 @@ body.pdf-capturing .gantt-page .plan-board {
 
 .need-page .need-add-btn,
 .need-page .need-send-btn,
-.need-page .need-change-btn,
-.need-page .need-edit-days {
+.need-page .need-change-btn {
   font-size: 12px;
   font-weight: 500;
   padding: 5px 12px;
   border-radius: var(--pill-radius);
   flex-shrink: 0;
-}
-
-.need-edit-days {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 .need-change-btn {
@@ -4504,6 +4494,23 @@ body.pdf-capturing .gantt-page .plan-board {
 .need-row-days-val {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.need-row-days-val {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 2px;
+}
+
+.need-row-days-val:hover {
+  text-decoration-color: currentColor;
 }
 
 .need-days-input {
@@ -5226,27 +5233,27 @@ body.pdf-capturing .gantt-page .plan-board {
 }
 
 .gantt-board .plan-bar-project {
-  top: 3px;
-  height: 18px;
-  border-radius: 9px;
-}
-
-.gantt-board .plan-bar-fn {
   top: 5px;
   height: 14px;
   border-radius: 7px;
 }
 
-.gantt-board .plan-bar-team {
+.gantt-board .plan-bar-fn {
   top: 6px;
-  height: 12px;
+  height: 11px;
   border-radius: 6px;
 }
 
-.gantt-board .plan-bar-role {
+.gantt-board .plan-bar-team {
   top: 8px;
-  height: 10px;
+  height: 9px;
   border-radius: 5px;
+}
+
+.gantt-board .plan-bar-role {
+  top: 9px;
+  height: 8px;
+  border-radius: 4px;
 }
 
 .plan-bar.is-dragging {

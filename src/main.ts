@@ -3043,7 +3043,7 @@ function demandRoleRowHtml(
   const editing = ui.needDaysEdit === editKey;
   const daysCell = editing
     ? `<input type="number" class="need-days-input" min="1" step="1" inputmode="numeric" value="${days}" data-need-days="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" aria-label="Дни" /> <span class="meta">дн.</span>`
-    : `<span class="need-row-days-val">${days} дн.</span>`;
+    : `<button type="button" class="need-row-days-val" data-need-edit-days="${editKey}" title="Изменить дни">${days} дн.</button>`;
   const statusOpts = ASSIGNMENT_DEMAND_STATUSES.map(
     (s) =>
       `<option value="${s}"${s === st ? " selected" : ""}>${ASSIGNMENT_DEMAND_LABELS[s]}</option>`
@@ -3059,7 +3059,6 @@ function demandRoleRowHtml(
     </span>
     <span class="need-row-right">
       <select class="need-st-select ${demandStatusClass(st)}" data-need-status="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}">${statusOpts}</select>
-      <button type="button" class="need-edit-days" data-need-edit-days="${editKey}">Изменить дни</button>
       ${action}
       <button type="button" class="need-role-del" data-need-role-del="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" title="Удалить роль" aria-label="Удалить роль ${escapeAttr(role.name)}">×</button>
     </span>
@@ -6468,7 +6467,9 @@ function bindDemandTab() {
   });
 
   root.querySelectorAll<HTMLInputElement>("[data-need-days]").forEach((input) => {
+    let cancelled = false;
     const commit = () => {
+      if (cancelled) return;
       const itemId = input.dataset.needDays;
       const teamId = input.dataset.team;
       const roleId = input.dataset.role;
@@ -6485,7 +6486,10 @@ function bindDemandTab() {
         : assignmentPlanDays(assign, szRanges());
       const days = Number.isFinite(raw) && raw >= 1 ? raw : fallback;
       input.value = String(days);
-      if (role && role.days === days) {
+      const prevDays = role
+        ? rolePlanDays(role, szRanges())
+        : assignmentPlanDays(assign, szRanges());
+      if (days === prevDays) {
         ui.needDaysEdit = null;
         render();
         return;
@@ -6508,11 +6512,16 @@ function bindDemandTab() {
       ui.needDaysEdit = null;
       persist();
     };
-    input.addEventListener("change", commit);
+    input.addEventListener("blur", commit);
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
         input.blur();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        cancelled = true;
+        ui.needDaysEdit = null;
+        render();
       }
     });
     input.focus();
