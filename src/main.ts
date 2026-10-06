@@ -94,6 +94,17 @@ import {
   weekIndex,
   WORKING_DAYS_PER_WEEK,
   rememberDeletedIds,
+  AppRole,
+  AppPermission,
+  APP_ROLES,
+  APP_ROLE_LABELS,
+  canApp,
+  collectAppPeople,
+  findRoleAssignment,
+  parseAppRole,
+  resolveAppRole,
+  resolveLeadTeamIds,
+  upsertRoleAssignment,
 } from "./model";
 import { SEED, PORTFOLIO_PACK_ID } from "./seed";
 import {
@@ -106,7 +117,7 @@ import {
   applyCurrentPortfolioPack,
   rollbackPortfolioPack,
 } from "./storage";
-import { V2_UI_TAB_KEY } from "./v2Store";
+import { V2_UI_TAB_KEY, V2_CURRENT_USER_KEY } from "./v2Store";
 import {
   downloadMarkdownAsPdf,
   downloadPlanerReportPdf,
@@ -146,6 +157,82 @@ const TAB_LABELS: Record<Tab, string> = {
   settings: "Настройки",
 };
 
+const TAB_APP_PERMISSION: Partial<Record<Tab, AppPermission>> = {
+  portfolio: "tab.portfolio",
+  demand: "tab.demand",
+  planning: "tab.planning",
+  timeline: "tab.timeline",
+  queuesTest: "tab.queuesTest",
+  demoA: "tab.demoA",
+  capacity: "tab.capacity",
+  changelog: "tab.changelog",
+  settings: "tab.settings",
+};
+
+function readStoredCurrentUserId(): string {
+  try {
+    return String(localStorage.getItem(V2_CURRENT_USER_KEY) ?? "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function writeStoredCurrentUserId(personId: string) {
+  try {
+    const id = personId.trim();
+    if (!id) localStorage.removeItem(V2_CURRENT_USER_KEY);
+    else localStorage.setItem(V2_CURRENT_USER_KEY, id);
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+function appPeopleDirectory() {
+  return collectAppPeople(state.teams, state.roleAssignments);
+}
+
+function ensureCurrentUserId(): string {
+  const people = appPeopleDirectory();
+  if (!people.length) return "";
+  const stored = readStoredCurrentUserId();
+  if (stored && people.some((p) => p.id === stored)) return stored;
+  const pm = (state.roleAssignments ?? []).find((a) => a.role === "pm_pmo");
+  const fallback =
+    (pm && people.find((p) => p.id === pm.personId)?.id) || people[0]!.id;
+  writeStoredCurrentUserId(fallback);
+  return fallback;
+}
+
+function currentAppRole(): AppRole {
+  return resolveAppRole(state.roleAssignments, ensureCurrentUserId());
+}
+
+function currentLeadTeamIds(): string[] {
+  const personId = ensureCurrentUserId();
+  const person = appPeopleDirectory().find((p) => p.id === personId);
+  return resolveLeadTeamIds(
+    findRoleAssignment(state.roleAssignments, personId),
+    person
+  );
+}
+
+function currentCan(
+  permission: AppPermission,
+  teamId?: string
+): boolean {
+  return canApp(currentAppRole(), permission, {
+    teamId,
+    leadTeamIds: currentLeadTeamIds(),
+  });
+}
+
+function canAccessTab(tab: Tab): boolean {
+  if (tab === "demoB") return canAccessTab("portfolio");
+  const perm = TAB_APP_PERMISSION[tab];
+  if (!perm) return true;
+  return currentCan(perm);
+}
+
 const TAB_ICON_SVG: Record<Tab, string> = {
   portfolio:
     '<rect x="2" y="3.1" width="2" height="2" rx="0.4"/><rect x="5.5" y="3.1" width="8.5" height="2" rx="0.4"/><rect x="2" y="7" width="2" height="2" rx="0.4"/><rect x="5.5" y="7" width="8.5" height="2" rx="0.4"/><rect x="2" y="10.9" width="2" height="2" rx="0.4"/><rect x="5.5" y="10.9" width="8.5" height="2" rx="0.4"/>',
@@ -174,6 +261,7 @@ function tabIconHtml(tab: Tab, quiet = false): string {
 }
 
 function tabButtonHtml(id: Tab, extraClass = ""): string {
+  if (!canAccessTab(id)) return "";
   const quiet = id === "capacity" || id === "changelog" || id === "settings";
   const cls = ["tab", extraClass, ui.tab === id ? "active" : ""]
     .filter(Boolean)
@@ -239,6 +327,19 @@ function ensureVisibleTab() {
   // Variant B retired — bounce leftover demoB bookmarks to portfolio.
   if (ui.tab === "demoB") ui.tab = "portfolio";
   if ((ui.tab as string) === "roles") ui.tab = "capacity";
+  if (!canAccessTab(ui.tab)) {
+    const fallback: Tab[] = [
+      "portfolio",
+      "timeline",
+      "demoA",
+      "changelog",
+      "demand",
+      "planning",
+      "capacity",
+      "settings",
+    ];
+    ui.tab = fallback.find((t) => canAccessTab(t)) ?? "portfolio";
+  }
   if (ui.tab !== prev) writeStoredUiTab(ui.tab);
 }
 
@@ -1320,7 +1421,11 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
             </select>
             ${portfolioColPickerHtml()}
             <button class="btn" id="resetFilters" title="Сбросить фильтры, сортировку и колонки">Сбросить фильтры</button>
-            <button class="btn btn-primary" id="addItem">+ Добавить</button>
+            ${
+              currentCan("portfolio.edit")
+                ? `<button class="btn btn-primary" id="addItem">+ Добавить</button>`
+                : ""
+            }
           </div>
         </div>
         <div class="table-scroll-top" aria-hidden="true"><div class="table-scroll-top-inner"></div></div>
@@ -1881,6 +1986,7 @@ function applyGanttBarPreview(
 }
 
 function bindGanttBarEdit() {
+  if (!currentCan("gantt.edit")) return;
   const weeks = Math.max(4, Math.min(52, Math.round(ui.ganttWeeks) || 16));
 
   document.querySelectorAll<HTMLElement>(".gantt-bar").forEach((bar) => {
@@ -2131,16 +2237,17 @@ function newTeamColor(): string {
 
 function teamColorBtnHtml(
   color: string,
-  opts: { teamId?: string; id?: string }
+  opts: { teamId?: string; id?: string; disabled?: boolean }
 ): string {
   const dataTeam = opts.teamId
     ? ` data-team-color="${escapeAttr(opts.teamId)}"`
     : ` data-new-team-color`;
   const idAttr = opts.id ? ` id="${escapeAttr(opts.id)}"` : "";
+  const disabled = opts.disabled ? " disabled" : "";
   return `
     <button
       type="button"
-      class="team-color-btn"${idAttr}${dataTeam}
+      class="team-color-btn"${idAttr}${dataTeam}${disabled}
       aria-label="Цвет команды"
       title="Выбрать цвет"
       aria-haspopup="dialog"
@@ -2276,11 +2383,13 @@ function fioSuggestions(): string[] {
 function teamsManageHtml(): string {
   applyComputedTeamCapacities(state.teams);
   const suggest = fioSuggestions();
+  const canCreate = currentCan("teams.create");
   const datalist = `<datalist id="fio-suggest">${suggest
     .map((n) => `<option value="${escapeAttr(n)}"></option>`)
     .join("")}</datalist>`;
   const rows = state.teams
     .map((t) => {
+      const canEdit = currentCan("teams.manage", t.id);
       const members = t.members ?? [];
       const seatRows = members
         .map(
@@ -2291,6 +2400,7 @@ function teamsManageHtml(): string {
               data-team-row-role="${t.id}"
               data-person-id="${escapeAttr(m.id)}"
               aria-label="Роль"
+              ${canEdit ? "" : "disabled"}
             >${catalogRoleOptionsHtml(m.role)}</select>
             <input
               class="team-roster-fio"
@@ -2300,34 +2410,46 @@ function teamsManageHtml(): string {
               data-person-id="${escapeAttr(m.id)}"
               value="${escapeAttr(m.name)}"
               aria-label="ФИО"
+              ${canEdit ? "" : "disabled"}
             />
-            <button type="button" class="need-role-del" data-team-row-del="${t.id}" data-person-id="${escapeAttr(m.id)}" title="Удалить строку" aria-label="Удалить строку">×</button>
+            ${
+              canEdit
+                ? `<button type="button" class="need-role-del" data-team-row-del="${t.id}" data-person-id="${escapeAttr(m.id)}" title="Удалить строку" aria-label="Удалить строку">×</button>`
+                : `<span class="team-roster-del-spacer" aria-hidden="true"></span>`
+            }
           </div>`
         )
         .join("");
       return `
       <div class="team-manage-card" data-team-row="${t.id}">
         <div class="capacity-row">
-          ${teamColorBtnHtml(t.color, { teamId: t.id })}
+          ${teamColorBtnHtml(t.color, { teamId: t.id, disabled: !canEdit })}
           <input
             class="team-name-input"
             type="text"
             data-team-name="${t.id}"
             value="${escapeAttr(t.name)}"
             aria-label="Название команды"
+            ${canEdit ? "" : "disabled"}
           />
-          <button
+          ${
+            canCreate
+              ? `<button
             type="button"
             class="btn btn-ghost team-delete-btn"
             data-team-delete="${t.id}"
             title="Удалить команду"
             ${state.teams.length <= 1 ? "disabled" : ""}
-          >Удалить</button>
+          >Удалить</button>`
+              : ""
+          }
         </div>
         <div class="team-roster">
           <div class="team-roster-head" aria-hidden="true"><span>Роль</span><span>ФИО</span></div>
           ${seatRows || `<div class="meta team-roster-empty">Нет строк — добавьте роль и ФИО</div>`}
-          <div class="team-roster-row team-roster-add">
+          ${
+            canEdit
+              ? `<div class="team-roster-row team-roster-add">
             <select class="team-roster-role" data-team-row-role-new="${t.id}" aria-label="Новая роль">
               <option value="">Роль</option>
               ${catalogRoleOptionsHtml("")}
@@ -2341,7 +2463,9 @@ function teamsManageHtml(): string {
               aria-label="Новое ФИО"
             />
             <button type="button" class="btn btn-primary" data-team-row-add="${t.id}">+ Строка</button>
-          </div>
+          </div>`
+              : `<p class="meta team-roster-readonly">Только просмотр — нет прав на правку этой команды.</p>`
+          }
         </div>
       </div>`;
     })
@@ -2349,8 +2473,9 @@ function teamsManageHtml(): string {
 
   return `
     <div class="callout">
-      Каждая строка — <strong>роль — ФИО</strong>. В Потребности доступны роли, которые есть в команде.
-      Новую команду добавляете ниже и назначаете на вкладке «Потребность».
+      Каждая строка — <strong>роль — ФИО</strong> (должностная роль в команде, не доступ в приложении).
+      В Потребности доступны роли, которые есть в команде.
+      ${canCreate ? "Новую команду добавляете ниже и назначаете на вкладке «Потребность»." : ""}
     </div>
     ${datalist}
     <div class="panel panel-sticky-host">
@@ -2362,12 +2487,16 @@ function teamsManageHtml(): string {
       <div id="teamsManageList">
         ${rows || `<div class="empty">Нет команд — добавьте первую ниже</div>`}
       </div>
-      <div class="team-add-bar" id="teamAddBar">
+      ${
+        canCreate
+          ? `<div class="team-add-bar" id="teamAddBar">
         ${teamColorBtnHtml(newTeamColor(), { id: "newTeamColorBtn" })}
         <input id="newTeamName" type="text" placeholder="Название новой команды" />
         <button class="btn btn-primary" id="saveNewTeam">+ Команда</button>
         <button class="btn" id="cancelNewTeam">Отмена</button>
-      </div>
+      </div>`
+          : ""
+      }
     </div>
   `;
 }
@@ -2455,8 +2584,8 @@ function changeLogHtml(): string {
           </div>
           <div class="toolbar">
             <button type="button" class="btn" id="clearChangeLogBtn" ${
-              entries.length ? "" : "disabled"
-            }>Очистить</button>
+              entries.length && currentCan("changelog.clear") ? "" : "disabled"
+            } ${currentCan("changelog.clear") ? "" : 'title="Очищать журнал может только PM/PMO"'}>Очистить</button>
           </div>
         </div>
       </div>
@@ -3197,8 +3326,20 @@ function planFocusTeamId(selected: string[]): string | null {
   return selected[0] ?? null;
 }
 
-function planSliceDays(slice: ScheduledSlice): number {
-  return Math.max(1, slice.endWeek - slice.startWeek + 1) * 5;
+/** Confirmed (= has FIO / assignee on timeline) role days for selected assignments. */
+function agreedRolePlanDays(
+  assigns: TeamAssignment[],
+  ranges: SizeRanges
+): number {
+  return assigns.reduce((sum, a) => {
+    return (
+      sum +
+      planningDemandRoles(a).reduce((roleSum, role) => {
+        if (!rolePlacedOnTimeline(a.teamId, role)) return roleSum;
+        return roleSum + rolePlanDays(role, ranges);
+      }, 0)
+    );
+  }, 0);
 }
 
 function planConflictWeeks(
@@ -4010,7 +4151,7 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
 
 function planningHtml(
   rollups: ItemSchedule[],
-  slices: ScheduledSlice[],
+  _slices: ScheduledSlice[],
   overflowByTeam: Record<string, Set<number>>
 ): string {
   const weeks = PLAN_WEEKS;
@@ -4046,9 +4187,10 @@ function planningHtml(
     (s, x) => s + assignmentPlanDays(x.a, ranges),
     0
   );
-  const plannedDays = slices
-    .filter((s) => selectedSet.has(s.teamId) && items.some((it) => it.id === s.item.id))
-    .reduce((s, sl) => s + planSliceDays(sl), 0);
+  const agreedDays = agreedRolePlanDays(
+    selectedAssigns.map((x) => x.a),
+    ranges
+  );
   const capacityConflictWeeks = selected.reduce(
     (n, id) => n + planConflictWeeks(id, overflowByTeam, weeks),
     0
@@ -4082,7 +4224,7 @@ function planningHtml(
               const itemSlices = (roll?.slices ?? []).filter((s) =>
                 selectedSet.has(s.teamId)
               );
-              const plan = itemSlices.reduce((s, sl) => s + planSliceDays(sl), 0);
+              const agreed = agreedRolePlanDays(assigns, ranges);
               const fnOpen = !ui.planCollapsedItems[item.id];
               const execRows = assigns
                 .map((a) => {
@@ -4159,7 +4301,7 @@ function planningHtml(
                 <summary class="plan-row plan-fn-sum">
                   <div class="plan-cell">
                     <span class="plan-fn-title">${escapeHtml(item.title)}</span>
-                    <span class="plan-fn-days">${req}/${plan || "—"}</span>
+                    <span class="plan-fn-days">${req}/${agreed || "—"}</span>
                   </div>
                   ${planTrackHtml(fnBar, weeks)}
                 </summary>
@@ -4205,7 +4347,7 @@ function planningHtml(
       <div class="need-stats plan-stats">
         <div class="need-stat"><div class="label">Проектов команды</div><div class="value">${groups.length}</div></div>
         <div class="need-stat"><div class="label">Функциональностей</div><div class="value">${items.length}</div></div>
-        <div class="need-stat"><div class="label">Запрошено / запланировано дней</div><div class="value">${requestedDays} <span class="plan-stat-sep">/</span> ${plannedDays}</div></div>
+        <div class="need-stat"><div class="label">Запрошено / согласовано дней</div><div class="value">${requestedDays} <span class="plan-stat-sep">/</span> ${agreedDays}</div></div>
         <div class="need-stat"><div class="label">Конфликтов ресурса</div><div class="value${conflictCount ? " is-pending" : ""}">${conflictCount}</div></div>
       </div>
       <div class="plan-board">
@@ -4254,6 +4396,10 @@ function settingsHtml(rollups: ItemSchedule[]): string {
   const active = state.items.filter((i) => i.status !== "done");
   const ends = rollups.map((s) => s.endWeek);
   const horizon = ends.length ? Math.max(...ends) + 1 : 0;
+  const canPlan = currentCan("settings.plan");
+  const canSizes = currentCan("settings.sizes");
+  const canPack = currentCan("settings.portfolioPack");
+  const canRoles = currentCan("settings.appRoles");
 
   const rows = TSHIRT_SIZES.map(
     (sz) => `
@@ -4273,6 +4419,7 @@ function settingsHtml(rollups: ItemSchedule[]): string {
           min="1"
           step="1"
           value="${r[sz].min}"
+          ${canSizes ? "" : "disabled"}
         />
       </label>
       <label class="size-range-field">
@@ -4286,6 +4433,7 @@ function settingsHtml(rollups: ItemSchedule[]): string {
           min="1"
           step="1"
           value="${r[sz].max}"
+          ${canSizes ? "" : "disabled"}
         />
       </label>
       <div class="size-range-plan">
@@ -4300,9 +4448,12 @@ function settingsHtml(rollups: ItemSchedule[]): string {
     <div class="settings-stack">
       <header class="settings-page-head">
         <h2 class="settings-page-title">Настройки</h2>
-        <p class="settings-page-lead">Параметры планирования и исходный портфель.</p>
+        <p class="settings-page-lead">Параметры планирования, ролевая модель и исходный портфель.</p>
       </header>
-      <div class="panel">
+      ${appRolesSettingsHtml(canRoles)}
+      ${
+        canPlan
+          ? `<div class="panel">
         <div class="panel-header">
           <h3 class="settings-section-title">Старт планирования</h3>
         </div>
@@ -4321,8 +4472,12 @@ function settingsHtml(rollups: ItemSchedule[]): string {
             Дата округляется к понедельнику.
           </p>
         </div>
-      </div>
-      <div class="panel panel-sticky-host">
+      </div>`
+          : ""
+      }
+      ${
+        canSizes
+          ? `<div class="panel panel-sticky-host">
         <div class="panel-sticky">
           <div class="panel-header">
             <h3 class="settings-section-title">Маечная оценка (XS–XXL)</h3>
@@ -4349,8 +4504,12 @@ function settingsHtml(rollups: ItemSchedule[]): string {
             <strong class="settings-preview-value" id="settingsRangesSummary">${sizeRangesSummary(r)}</strong>
           </div>
         </div>
-      </div>
-      <div class="panel">
+      </div>`
+          : ""
+      }
+      ${
+        canPack
+          ? `<div class="panel">
         <div class="panel-header">
           <h3 class="settings-section-title">Портфель из таблицы</h3>
         </div>
@@ -4373,9 +4532,152 @@ function settingsHtml(rollups: ItemSchedule[]): string {
             <button type="button" class="btn" id="reapplyPrioBtn">Загрузить таблицу снова</button>
           </div>
         </div>
+      </div>`
+          : ""
+      }
+    </div>
+  `;
+}
+
+function appRolesSettingsHtml(canEdit: boolean): string {
+  const people = appPeopleDirectory();
+  const teamOpts = (selected: readonly string[]) =>
+    state.teams
+      .map(
+        (t) =>
+          `<option value="${escapeAttr(t.id)}" ${
+            selected.includes(t.id) ? "selected" : ""
+          }>${escapeHtml(t.name)}</option>`
+      )
+      .join("");
+
+  const bodyRows = people
+    .map((p) => {
+      const assignment = findRoleAssignment(state.roleAssignments, p.id);
+      const role = assignment?.role ?? "employee";
+      const leadTeams =
+        role === "team_lead"
+          ? resolveLeadTeamIds(assignment, p)
+          : [];
+      const roleOpts = APP_ROLES.map(
+        (r) =>
+          `<option value="${r}" ${r === role ? "selected" : ""}>${escapeHtml(
+            APP_ROLE_LABELS[r]
+          )}</option>`
+      ).join("");
+      const teamCell =
+        role === "team_lead"
+          ? `<select
+              class="app-role-teams"
+              data-app-role-teams="${escapeAttr(p.id)}"
+              multiple
+              size="${Math.min(3, Math.max(1, state.teams.length))}"
+              aria-label="Команды тимлида"
+              ${canEdit ? "" : "disabled"}
+            >${teamOpts(leadTeams)}</select>`
+          : `<span class="app-role-teams-na meta">—</span>`;
+      return `
+        <tr data-app-person="${escapeAttr(p.id)}">
+          <td class="app-role-fio">
+            <div class="app-role-name">${escapeHtml(p.name)}</div>
+            <div class="meta">${
+              p.teamIds.length
+                ? escapeHtml(
+                    p.teamIds
+                      .map(
+                        (id) =>
+                          state.teams.find((t) => t.id === id)?.name ?? id
+                      )
+                      .join(", ")
+                  )
+                : "вне команд"
+            }</div>
+          </td>
+          <td>
+            <select
+              class="app-role-select"
+              data-app-role="${escapeAttr(p.id)}"
+              aria-label="Роль приложения"
+              ${canEdit ? "" : "disabled"}
+            >${roleOpts}</select>
+          </td>
+          <td class="app-role-teams-cell">${teamCell}</td>
+        </tr>`;
+    })
+    .join("");
+
+  return `
+    <div class="panel">
+      <div class="panel-header">
+        <h3 class="settings-section-title">Ролевая модель</h3>
+      </div>
+      <div class="settings-panel-body app-roles-body">
+        <p class="settings-help">
+          Кто пользуется планировщиком — отдельно от должностных ролей в «Командах»
+          (аналитик, разработчик и т.п.). Назначения хранятся в общем состоянии;
+          «Текущий пользователь» в шапке — только для демонстрации прав на этом устройстве.
+        </p>
+        <div class="app-role-matrix" role="note">
+          <div class="settings-label">Права по умолчанию</div>
+          <ul class="app-role-matrix-list">
+            <li><strong>PM/PMO</strong> — полный доступ: реестр, потребность, планирование, гант, команды, настройки и назначения ролей.</li>
+            <li><strong>Тимлид</strong> — потребность / план / гант и правка своих команд; параметры плана без загрузки портфеля и без назначения ролей.</li>
+            <li><strong>Сотрудник</strong> — просмотр реестра, ганта, мониторинга и журнала.</li>
+          </ul>
+        </div>
+        ${
+          people.length
+            ? `<div class="app-roles-table-wrap">
+          <table class="app-roles-table">
+            <thead>
+              <tr>
+                <th>ФИО</th>
+                <th>Роль</th>
+                <th>Команды тимлида</th>
+              </tr>
+            </thead>
+            <tbody>${bodyRows}</tbody>
+          </table>
+        </div>`
+            : `<p class="meta">Нет людей в командах — добавьте ФИО на вкладке «Команды».</p>`
+        }
+        ${
+          canEdit
+            ? ""
+            : `<p class="settings-help">Назначать роли может только PM/PMO. Сейчас: ${escapeHtml(
+                APP_ROLE_LABELS[currentAppRole()]
+              )}.</p>`
+        }
       </div>
     </div>
   `;
+}
+
+function currentUserSwitcherHtml(): string {
+  const people = appPeopleDirectory();
+  const currentId = ensureCurrentUserId();
+  const role = currentAppRole();
+  if (!people.length) {
+    return `<label class="current-user-switch no-print" title="Нет людей в справочнике">
+      <span class="current-user-label">Я</span>
+      <span class="current-user-empty meta">—</span>
+    </label>`;
+  }
+  const opts = people
+    .map((p) => {
+      const r = resolveAppRole(state.roleAssignments, p.id);
+      return `<option value="${escapeAttr(p.id)}" ${
+        p.id === currentId ? "selected" : ""
+      }>${escapeHtml(p.name)} · ${escapeHtml(APP_ROLE_LABELS[r])}</option>`;
+    })
+    .join("");
+  return `<label class="current-user-switch no-print" title="Текущий пользователь (демо прав)">
+    <span class="current-user-label">Я</span>
+    <select id="currentUserSelect" class="current-user-select" aria-label="Текущий пользователь">
+      ${opts}
+    </select>
+    <span class="current-user-role">${escapeHtml(APP_ROLE_LABELS[role])}</span>
+  </label>`;
 }
 
 function readSizeRangesFromInputs(): SizeRanges | null {
@@ -4686,7 +4988,7 @@ function editorHtml(item: WorkItem | null): string {
             </div>
           </div>
         </div>
-        ${item ? `<div class="modal-foot">
+        ${item && currentCan("portfolio.delete") ? `<div class="modal-foot">
           <button class="btn" id="deleteItem" style="color:var(--bad)">Удалить</button>
         </div>` : ""}
       </div>
@@ -4998,21 +5300,82 @@ function showOverloadExplain(
   });
 }
 
-/** Position conflict tip with position:fixed so overflow:hidden / sticky ancestors cannot clip it. */
+let planConflictTipOpen: { mark: HTMLElement; tip: HTMLElement } | null =
+  null;
+let planConflictTipDismissBound = false;
+
+function hideOpenPlanConflictTip() {
+  if (!planConflictTipOpen) return;
+  const { mark, tip } = planConflictTipOpen;
+  clearPlanConflictTip(mark, tip);
+}
+
+function ensurePlanConflictTipDismissListeners() {
+  if (planConflictTipDismissBound) return;
+  planConflictTipDismissBound = true;
+  // Capture scroll from nested overflow containers (plan board, etc.).
+  window.addEventListener("scroll", hideOpenPlanConflictTip, true);
+  window.addEventListener("resize", hideOpenPlanConflictTip);
+}
+
+/**
+ * Position conflict tip with position:fixed so overflow:hidden / sticky
+ * ancestors cannot clip it. Prefer the side with more viewport room
+ * (sticky week headers usually open below into the grid), then clamp.
+ */
 function placePlanConflictTip(mark: HTMLElement, tip: HTMLElement) {
+  const margin = 8;
+  const gap = 8;
+
   tip.classList.add("is-fixed");
   tip.style.left = "0px";
   tip.style.top = "0px";
+  tip.style.right = "auto";
+  tip.style.bottom = "auto";
+  tip.style.maxHeight = "";
+  tip.style.overflowY = "";
+  // Open before measuring so visibility/opacity don't zero out the box.
+  mark.classList.add("is-tip-open");
+
   const markRect = mark.getBoundingClientRect();
-  const tipRect = tip.getBoundingClientRect();
-  const gap = 8;
+  let tipRect = tip.getBoundingClientRect();
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const maxH = Math.max(48, vh - margin * 2);
+  if (tipRect.height > maxH) {
+    tip.style.maxHeight = `${maxH}px`;
+    tip.style.overflowY = "auto";
+    tipRect = tip.getBoundingClientRect();
+  }
+
   let left = markRect.left + markRect.width / 2 - tipRect.width / 2;
-  let top = markRect.top - tipRect.height - gap;
-  left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
-  if (top < 8) top = markRect.bottom + gap;
+  left = Math.max(margin, Math.min(left, vw - tipRect.width - margin));
+
+  const spaceAbove = markRect.top - margin;
+  const spaceBelow = vh - markRect.bottom - margin;
+  const need = tipRect.height + gap;
+  const belowFits = spaceBelow >= need;
+  const aboveFits = spaceAbove >= need;
+
+  let top: number;
+  // Prefer below when it fits and has at least as much room (sticky axis).
+  if (belowFits && (!aboveFits || spaceBelow >= spaceAbove)) {
+    top = markRect.bottom + gap;
+  } else if (aboveFits) {
+    top = markRect.top - tipRect.height - gap;
+  } else if (spaceBelow >= spaceAbove) {
+    top = Math.max(
+      margin,
+      Math.min(markRect.bottom + gap, vh - tipRect.height - margin)
+    );
+  } else {
+    top = Math.max(margin, markRect.top - tipRect.height - gap);
+  }
+
   tip.style.left = `${Math.round(left)}px`;
   tip.style.top = `${Math.round(top)}px`;
-  mark.classList.add("is-tip-open");
+  planConflictTipOpen = { mark, tip };
+  ensurePlanConflictTipDismissListeners();
 }
 
 function clearPlanConflictTip(mark: HTMLElement, tip: HTMLElement) {
@@ -5020,9 +5383,15 @@ function clearPlanConflictTip(mark: HTMLElement, tip: HTMLElement) {
   tip.classList.remove("is-fixed");
   tip.style.left = "";
   tip.style.top = "";
+  tip.style.right = "";
+  tip.style.bottom = "";
+  tip.style.maxHeight = "";
+  tip.style.overflowY = "";
+  if (planConflictTipOpen?.mark === mark) planConflictTipOpen = null;
 }
 
 function bindPlanConflictTips() {
+  hideOpenPlanConflictTip();
   document
     .querySelectorAll<HTMLElement>(
       ".plan-conflict-mark, .plan-axis-tick.is-conflict-week"
@@ -5252,6 +5621,7 @@ function askPrioConfirm(
 
 /** Row drag only when sorted by priority — other sorts never rewrite ranks */
 function bindPortfolioDrag() {
+  if (!currentCan("portfolio.edit")) return;
   if (ui.sortKey !== "priority") return;
   const body = document.querySelector("#portfolioBody");
   if (!body) return;
@@ -5482,6 +5852,7 @@ function render() {
           </button>
         </div>
         <div class="top-actions">
+          ${currentUserSwitcherHtml()}
           ${editionSwitcherHtml()}
           <span class="release-stamp" title="Дата релиза">updated ${RELEASE_UPDATED}</span>
           <span class="sync-badge" id="syncStatus" data-status="${getSyncStatus()}">${syncStatusLabel(getSyncStatus())}</span>
@@ -6476,6 +6847,7 @@ function applyPlanBarPreview(
 }
 
 function bindPlanBarDrag(root: Element) {
+  if (!currentCan("planning.edit")) return;
   root.querySelectorAll<HTMLElement>("[data-plan-bar]").forEach((bar) => {
     bar.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
@@ -6766,6 +7138,7 @@ function persist() {
 function bind() {
   // Critical actions first so a later bind helper throw cannot orphan these buttons.
   document.querySelector("#addItem")?.addEventListener("click", () => {
+    if (!currentCan("portfolio.edit")) return;
     ui.creating = false;
     ui.editingId = null;
     ui.creatingProject = true;
@@ -6787,6 +7160,69 @@ function bindUiRest() {
   document.querySelector("#brandHomeBtn")?.addEventListener("click", () => {
     setActiveTab("portfolio");
     render();
+  });
+
+  document.querySelector("#currentUserSelect")?.addEventListener("change", (e) => {
+    const sel = e.currentTarget as HTMLSelectElement;
+    writeStoredCurrentUserId(sel.value);
+    render();
+  });
+
+  document.querySelectorAll<HTMLSelectElement>("[data-app-role]").forEach((sel) => {
+    sel.addEventListener("change", () => {
+      if (!currentCan("settings.appRoles")) return;
+      const personId = sel.dataset.appRole;
+      if (!personId) return;
+      const person = appPeopleDirectory().find((p) => p.id === personId);
+      const role = parseAppRole(sel.value);
+      if (!role) return;
+      const prev = findRoleAssignment(state.roleAssignments, personId);
+      const teamIds =
+        role === "team_lead"
+          ? prev?.teamIds?.length
+            ? prev.teamIds
+            : person?.teamIds?.slice(0, 1) ?? []
+          : undefined;
+      state.roleAssignments = upsertRoleAssignment(state.roleAssignments, {
+        personId,
+        personName: person?.name ?? prev?.personName ?? personId,
+        role,
+        ...(teamIds?.length ? { teamIds } : {}),
+      });
+      logChange(
+        `Роль приложения: ${person?.name ?? personId} → ${APP_ROLE_LABELS[role]}`,
+        "settings"
+      );
+      persist();
+    });
+  });
+
+  document.querySelectorAll<HTMLSelectElement>("[data-app-role-teams]").forEach((sel) => {
+    sel.addEventListener("change", () => {
+      if (!currentCan("settings.appRoles")) return;
+      const personId = sel.dataset.appRoleTeams;
+      if (!personId) return;
+      const person = appPeopleDirectory().find((p) => p.id === personId);
+      const prev = findRoleAssignment(state.roleAssignments, personId);
+      const role = prev?.role ?? "team_lead";
+      if (role !== "team_lead") return;
+      const teamIds = Array.from(sel.selectedOptions).map((o) => o.value);
+      state.roleAssignments = upsertRoleAssignment(state.roleAssignments, {
+        personId,
+        personName: person?.name ?? prev?.personName ?? personId,
+        role: "team_lead",
+        teamIds,
+      });
+      logChange(
+        `Тимлид ${person?.name ?? personId}: команды ${
+          teamIds
+            .map((id) => state.teams.find((t) => t.id === id)?.name ?? id)
+            .join(", ") || "—"
+        }`,
+        "settings"
+      );
+      persist();
+    });
   });
 
   document.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((btn) => {
@@ -6897,6 +7333,7 @@ function bindUiRest() {
         )
       )
         return;
+      if (!currentCan("portfolio.edit")) return;
       const projectRow = t.closest<HTMLTableRowElement>("[data-project-card]");
       if (projectRow) {
         ui.creatingProject = false;
@@ -6917,6 +7354,10 @@ function bindUiRest() {
   bindPortfolioDrag();
 
   document.querySelectorAll<HTMLInputElement>(".prio-input").forEach((input) => {
+    if (!currentCan("portfolio.edit")) {
+      input.disabled = true;
+      return;
+    }
     const itemId = input.dataset.prioId;
     if (!itemId) return;
     let confirming = false;
@@ -7040,6 +7481,10 @@ function bindUiRest() {
   });
 
   document.querySelectorAll<HTMLSelectElement>("[data-project-status]").forEach((sel) => {
+    if (!currentCan("portfolio.edit")) {
+      sel.disabled = true;
+      return;
+    }
     const stop = (e: Event) => {
       e.stopPropagation();
       e.stopImmediatePropagation();
@@ -7085,6 +7530,10 @@ function bindUiRest() {
 
   document.querySelectorAll<HTMLSelectElement>(".status-select").forEach((sel) => {
     if (sel.dataset.projectStatus) return;
+    if (!currentCan("portfolio.edit")) {
+      sel.disabled = true;
+      return;
+    }
     const stop = (e: Event) => {
       e.stopPropagation();
       e.stopImmediatePropagation();
@@ -7388,6 +7837,7 @@ function bindUiRest() {
   document.querySelectorAll<HTMLSelectElement>("[data-team-row-role]").forEach((sel) => {
     sel.addEventListener("change", () => {
       const teamId = sel.dataset.teamRowRole!;
+      if (!currentCan("teams.manage", teamId)) return;
       const personId = sel.dataset.personId!;
       const team = state.teams.find((t) => t.id === teamId);
       const person = team?.members?.find((m) => m.id === personId);
@@ -7405,6 +7855,7 @@ function bindUiRest() {
   document.querySelectorAll<HTMLInputElement>("[data-team-row-fio]").forEach((input) => {
     const commit = () => {
       const teamId = input.dataset.teamRowFio!;
+      if (!currentCan("teams.manage", teamId)) return;
       const personId = input.dataset.personId!;
       const team = state.teams.find((t) => t.id === teamId);
       const person = team?.members?.find((m) => m.id === personId);
@@ -7428,6 +7879,7 @@ function bindUiRest() {
   document.querySelectorAll<HTMLButtonElement>("[data-team-row-del]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const teamId = btn.dataset.teamRowDel!;
+      if (!currentCan("teams.manage", teamId)) return;
       const personId = btn.dataset.personId!;
       const team = state.teams.find((t) => t.id === teamId);
       const person = team?.members?.find((m) => m.id === personId);
@@ -7452,6 +7904,7 @@ function bindUiRest() {
   });
 
   const addTeamRow = (teamId: string) => {
+    if (!currentCan("teams.manage", teamId)) return;
     const team = state.teams.find((t) => t.id === teamId);
     const roleSel = document.querySelector<HTMLSelectElement>(
       `[data-team-row-role-new="${CSS.escape(teamId)}"]`
@@ -7503,6 +7956,7 @@ function bindUiRest() {
     (btn) => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
+        if (!currentCan("teams.create")) return;
         const id = btn.dataset.teamDelete!;
         confirmDeleteTeam(id, btn);
       });
@@ -7685,6 +8139,7 @@ function bindUiRest() {
     });
 
   const createTeam = () => {
+    if (!currentCan("teams.create")) return;
     const nameInput = document.querySelector<HTMLInputElement>("#newTeamName");
     const name = nameInput?.value.trim() || "";
     if (!name) {
@@ -7773,6 +8228,7 @@ function bindUiRest() {
   });
 
   document.querySelector("#clearChangeLogBtn")?.addEventListener("click", (e) => {
+    if (!currentCan("changelog.clear")) return;
     const btn = e.currentTarget as HTMLElement;
     askAppConfirm(
       btn,

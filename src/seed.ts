@@ -7,6 +7,7 @@ import {
   containerNameFromBacklog,
   ensureUniquePriorities,
   makeSeedTeamMembers,
+  seedRoleAssignments,
   syncTeamRoster,
   uniqCatalogNames,
 } from "./model";
@@ -1334,9 +1335,11 @@ function withSeedRosters(teams: Team[]): Team[] {
   );
 }
 
+const SEEDED_TEAMS = withSeedRosters(SEED_RAW.teams);
+
 export const SEED: AppState = {
   ...SEED_RAW,
-  teams: withSeedRosters(SEED_RAW.teams),
+  teams: SEEDED_TEAMS,
   customers: uniqCatalogNames(SEED_RAW.items.map((i) => i.owner)),
   executors: uniqCatalogNames(SEED_RAW.items.map((i) => i.assignee)),
   projects: uniqCatalogNames(
@@ -1350,4 +1353,5 @@ export const SEED: AppState = {
       .map((i) => containerNameFromBacklog(i.backlog))
   ),
   items: ensureUniquePriorities(SEED_RAW.items),
+  roleAssignments: seedRoleAssignments(SEEDED_TEAMS),
 };

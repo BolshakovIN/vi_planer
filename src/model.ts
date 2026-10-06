@@ -1103,6 +1103,68 @@ export interface ChangeLogEntry {
 /** Cap persisted activity log to avoid localStorage/cloud bloat. */
 export const CHANGE_LOG_MAX = 150;
 
+/**
+ * Application access role (who uses the planner) — not a job role on a team
+ * seat (аналитик / разработчик). Job roles stay on `TeamMember.role`.
+ */
+export type AppRole = "pm_pmo" | "team_lead" | "employee";
+
+export const APP_ROLES: readonly AppRole[] = [
+  "pm_pmo",
+  "team_lead",
+  "employee",
+] as const;
+
+export const APP_ROLE_LABELS: Record<AppRole, string> = {
+  pm_pmo: "PM/PMO",
+  team_lead: "Тимлид",
+  employee: "Сотрудник",
+};
+
+/** Soft UI permissions — not a security boundary. */
+export type AppPermission =
+  | "tab.portfolio"
+  | "tab.demand"
+  | "tab.planning"
+  | "tab.timeline"
+  | "tab.demoA"
+  | "tab.queuesTest"
+  | "tab.capacity"
+  | "tab.changelog"
+  | "tab.settings"
+  | "portfolio.edit"
+  | "portfolio.delete"
+  | "demand.edit"
+  | "planning.edit"
+  | "gantt.edit"
+  | "teams.manage"
+  | "teams.create"
+  | "settings.plan"
+  | "settings.sizes"
+  | "settings.portfolioPack"
+  | "settings.appRoles"
+  | "changelog.clear";
+
+/**
+ * App-role assignment for a person (usually a `TeamMember.id`).
+ * Missing person → treated as «Сотрудник».
+ * Тимлид may lead several teams via `teamIds` (simplest useful default).
+ */
+export interface AppRoleAssignment {
+  personId: string;
+  personName: string;
+  role: AppRole;
+  /** Teams this тимлид leads; ignored for other roles. */
+  teamIds?: string[];
+}
+
+/** Directory row for role UI — person + teams they sit on. */
+export interface AppPerson {
+  id: string;
+  name: string;
+  teamIds: string[];
+}
+
 export interface AppState {
   teams: Team[];
   items: WorkItem[];
@@ -1141,6 +1203,11 @@ export interface AppState {
    */
   teamRosterSeeded?: string;
   /**
+   * Application role assignments (PM/PMO, Тимлид, Сотрудник).
+   * Separate from job roles on team seats.
+   */
+  roleAssignments?: AppRoleAssignment[];
+  /**
    * Work-item ids the user deleted. Seed merge must not resurrect these
    * (x001–x063 or later user-created ids).
    */
@@ -1153,6 +1220,255 @@ export interface AppState {
   /** ISO time of last local/cloud save. Used so stale remote cannot replace newer local. */
   savedAt?: string;
   version: 3;
+}
+
+export function parseAppRole(raw: unknown): AppRole | null {
+  const v = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (
+    v === "pm_pmo" ||
+    v === "pm" ||
+    v === "pmo" ||
+    v === "pm/pmo" ||
+    v === "admin"
+  ) {
+    return "pm_pmo";
+  }
+  if (
+    v === "team_lead" ||
+    v === "teamlead" ||
+    v === "тимлид" ||
+    v === "lead" ||
+    v === "tl"
+  ) {
+    return "team_lead";
+  }
+  if (
+    v === "employee" ||
+    v === "сотрудник" ||
+    v === "участник" ||
+    v === "member" ||
+    v === "viewer" ||
+    v === "general"
+  ) {
+    return "employee";
+  }
+  return null;
+}
+
+export function parseRoleAssignments(raw: unknown): AppRoleAssignment[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AppRoleAssignment[] = [];
+  const seen = new Set<string>();
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const personId = String(r.personId ?? r.id ?? "").trim();
+    const personName = String(
+      r.personName ?? r.name ?? r.fio ?? ""
+    ).trim();
+    const role = parseAppRole(r.role ?? r.appRole);
+    if (!personId || !role) continue;
+    if (seen.has(personId)) continue;
+    seen.add(personId);
+    const teamIds = Array.isArray(r.teamIds)
+      ? [
+          ...new Set(
+            r.teamIds
+              .map((id) => String(id ?? "").trim())
+              .filter(Boolean)
+          ),
+        ]
+      : typeof r.teamId === "string" && r.teamId.trim()
+        ? [r.teamId.trim()]
+        : undefined;
+    out.push({
+      personId,
+      personName: personName || personId,
+      role,
+      ...(role === "team_lead" && teamIds?.length ? { teamIds } : {}),
+    });
+  }
+  return out;
+}
+
+/** Union of team-seat people + any orphaned role-assignment rows. */
+export function collectAppPeople(
+  teams: readonly Team[],
+  assignments?: readonly AppRoleAssignment[]
+): AppPerson[] {
+  const byId = new Map<string, AppPerson>();
+  for (const team of teams) {
+    for (const m of team.members ?? []) {
+      const id = String(m.id ?? "").trim();
+      const name = String(m.name ?? "").trim();
+      if (!id || !name) continue;
+      const prev = byId.get(id);
+      if (prev) {
+        if (!prev.teamIds.includes(team.id)) prev.teamIds.push(team.id);
+        if (name && prev.name !== name) prev.name = name;
+      } else {
+        byId.set(id, { id, name, teamIds: [team.id] });
+      }
+    }
+  }
+  for (const a of assignments ?? []) {
+    const id = String(a.personId ?? "").trim();
+    if (!id) continue;
+    const prev = byId.get(id);
+    if (prev) {
+      if (a.personName?.trim()) prev.name = a.personName.trim();
+      continue;
+    }
+    byId.set(id, {
+      id,
+      name: a.personName?.trim() || id,
+      teamIds: [...(a.teamIds ?? [])],
+    });
+  }
+  return [...byId.values()].sort((a, b) =>
+    a.name.localeCompare(b.name, "ru")
+  );
+}
+
+export function findRoleAssignment(
+  assignments: readonly AppRoleAssignment[] | undefined,
+  personId: string | null | undefined
+): AppRoleAssignment | undefined {
+  const id = String(personId ?? "").trim();
+  if (!id) return undefined;
+  return (assignments ?? []).find((a) => a.personId === id);
+}
+
+export function resolveAppRole(
+  assignments: readonly AppRoleAssignment[] | undefined,
+  personId: string | null | undefined
+): AppRole {
+  return findRoleAssignment(assignments, personId)?.role ?? "employee";
+}
+
+/** Teams a тимлид leads; falls back to seats they occupy if `teamIds` empty. */
+export function resolveLeadTeamIds(
+  assignment: AppRoleAssignment | undefined,
+  person: AppPerson | undefined
+): string[] {
+  if (!assignment || assignment.role !== "team_lead") return [];
+  if (assignment.teamIds?.length) return [...assignment.teamIds];
+  return person?.teamIds?.length ? [...person.teamIds] : [];
+}
+
+/**
+ * Seed a few demo app-role rows when none are stored yet:
+ * first roster person → PM/PMO; first seat on each other team → Тимлид;
+ * two more people → Сотрудник (rest default to Сотрудник without rows).
+ */
+export function seedRoleAssignments(
+  teams: readonly Team[]
+): AppRoleAssignment[] {
+  const people = collectAppPeople(teams, []);
+  if (!people.length) return [];
+  const used = new Set<string>();
+  const out: AppRoleAssignment[] = [];
+  const first = people[0]!;
+  out.push({
+    personId: first.id,
+    personName: first.name,
+    role: "pm_pmo",
+  });
+  used.add(first.id);
+  for (const team of teams) {
+    const seat = (team.members ?? []).find((m) => !used.has(m.id));
+    if (!seat) continue;
+    out.push({
+      personId: seat.id,
+      personName: seat.name,
+      role: "team_lead",
+      teamIds: [team.id],
+    });
+    used.add(seat.id);
+    if (out.filter((a) => a.role === "team_lead").length >= 3) break;
+  }
+  let employees = 0;
+  for (const p of people) {
+    if (used.has(p.id)) continue;
+    out.push({
+      personId: p.id,
+      personName: p.name,
+      role: "employee",
+    });
+    used.add(p.id);
+    employees += 1;
+    if (employees >= 2) break;
+  }
+  return out;
+}
+
+export function canApp(
+  role: AppRole,
+  permission: AppPermission,
+  opts?: { teamId?: string; leadTeamIds?: readonly string[] }
+): boolean {
+  const leadOk =
+    !opts?.teamId ||
+    (opts.leadTeamIds ?? []).includes(opts.teamId);
+
+  switch (permission) {
+    case "tab.portfolio":
+    case "tab.timeline":
+    case "tab.demoA":
+    case "tab.changelog":
+      return true;
+    case "tab.demand":
+    case "tab.planning":
+    case "tab.queuesTest":
+    case "tab.capacity":
+      return role === "pm_pmo" || role === "team_lead";
+    case "tab.settings":
+      return role === "pm_pmo" || role === "team_lead";
+    case "portfolio.edit":
+    case "portfolio.delete":
+    case "settings.portfolioPack":
+    case "settings.appRoles":
+    case "changelog.clear":
+    case "teams.create":
+      return role === "pm_pmo";
+    case "demand.edit":
+    case "planning.edit":
+    case "gantt.edit":
+      return role === "pm_pmo" || role === "team_lead";
+    case "teams.manage":
+      if (role === "pm_pmo") return true;
+      if (role === "team_lead") return leadOk;
+      return false;
+    case "settings.plan":
+    case "settings.sizes":
+      return role === "pm_pmo" || role === "team_lead";
+    default:
+      return false;
+  }
+}
+
+/** Upsert one assignment; employee with no teamIds may stay as an explicit row. */
+export function upsertRoleAssignment(
+  list: readonly AppRoleAssignment[] | undefined,
+  next: AppRoleAssignment
+): AppRoleAssignment[] {
+  const id = next.personId.trim();
+  if (!id) return [...(list ?? [])];
+  const cleaned: AppRoleAssignment = {
+    personId: id,
+    personName: next.personName.trim() || id,
+    role: next.role,
+    ...(next.role === "team_lead" && next.teamIds?.length
+      ? { teamIds: [...new Set(next.teamIds.map((t) => t.trim()).filter(Boolean))] }
+      : {}),
+  };
+  const out = (list ?? []).filter((a) => a.personId !== id);
+  out.push(cleaned);
+  out.sort((a, b) => a.personName.localeCompare(b.personName, "ru"));
+  return out;
 }
 
 /** Deduped id / catalog-key list; empty strings dropped. */
@@ -1442,6 +1758,11 @@ export function mergeLiveV2States(local: AppState, remote: AppState): AppState {
       clearedDemandTeams: local.clearedDemandTeams ?? remote.clearedDemandTeams,
       teamRosterSeeded: local.teamRosterSeeded ?? remote.teamRosterSeeded,
       portfolioPack: local.portfolioPack ?? remote.portfolioPack,
+      roleAssignments:
+        (local.roleAssignments?.length ?? 0) >=
+        (remote.roleAssignments?.length ?? 0)
+          ? local.roleAssignments
+          : remote.roleAssignments ?? local.roleAssignments,
       savedAt: pickLaterSavedAt(local.savedAt, remote.savedAt),
     };
   }
@@ -1485,6 +1806,11 @@ export function mergeLiveV2States(local: AppState, remote: AppState): AppState {
     clearedDemandTeams: remote.clearedDemandTeams ?? local.clearedDemandTeams,
     teamRosterSeeded: remote.teamRosterSeeded ?? local.teamRosterSeeded,
     portfolioPack: remote.portfolioPack ?? local.portfolioPack,
+    roleAssignments:
+      (remote.roleAssignments?.length ?? 0) >=
+      (local.roleAssignments?.length ?? 0)
+        ? remote.roleAssignments ?? local.roleAssignments
+        : local.roleAssignments ?? remote.roleAssignments,
     savedAt: pickLaterSavedAt(local.savedAt, remote.savedAt),
   };
 }
@@ -2790,6 +3116,12 @@ export function normalizeState(raw: unknown): AppState | null {
       data.teamRosterSeeded != null && String(data.teamRosterSeeded).trim()
         ? String(data.teamRosterSeeded).trim()
         : undefined,
+    roleAssignments: (() => {
+      if (!("roleAssignments" in data)) {
+        return seedRoleAssignments(teams);
+      }
+      return parseRoleAssignments(data.roleAssignments);
+    })(),
     deletedItemIds: parseIdList(data.deletedItemIds),
     deletedProjectKeys: parseIdList(data.deletedProjectKeys),
     savedAt:
