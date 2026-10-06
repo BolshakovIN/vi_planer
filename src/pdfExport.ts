@@ -452,7 +452,7 @@ export type PlanerReportRow = {
 
 export type PlanerReportTeam = {
   name: string;
-  capacity: string;
+  roster: string;
 };
 
 export type PlanerReportData = {
@@ -634,13 +634,13 @@ function buildPlanerReportHtml(data: PlanerReportData): string {
       ? `<p class="report-pdf-empty">Команды не заданы</p>`
       : `<table>
         <thead>
-          <tr><th>Команда</th><th>Ёмкость</th></tr>
+          <tr><th>Команда</th><th>Состав</th></tr>
         </thead>
         <tbody>
           ${data.teams
             .map(
               (t) =>
-                `<tr><td>${reportEscape(t.name)}</td><td class="num">${reportEscape(t.capacity)}</td></tr>`,
+                `<tr><td>${reportEscape(t.name)}</td><td class="num">${reportEscape(t.roster)}</td></tr>`,
             )
             .join("")}
         </tbody>
@@ -652,7 +652,7 @@ function buildPlanerReportHtml(data: PlanerReportData): string {
       <p class="meta">Отчёт по портфелю<br/>${reportEscape(data.generatedAt)}</p>
     </div>
     <p class="report-pdf-lead">
-      Сводка функциональностей, метрик и ёмкости команд. Старт планирования: <strong>${reportEscape(data.planStart)}</strong>.
+      Сводка функциональностей, метрик и команд. Старт планирования: <strong>${reportEscape(data.planStart)}</strong>.
     </p>
     <h2>Сводка</h2>
     <div class="report-pdf-metrics">${metrics}</div>
@@ -682,7 +682,7 @@ function buildPlanerReportHtml(data: PlanerReportData): string {
         <tbody>${rows}</tbody>
       </table>`
     }
-    <h2>Ёмкость команд</h2>
+    <h2>Команды</h2>
     ${teamRows}
     <p class="report-pdf-foot">VI Planer · документ сформирован автоматически · не скриншот интерфейса</p>
   `;

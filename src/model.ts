@@ -170,10 +170,16 @@ export function parseSize(raw: unknown): TShirtSize {
   return "M";
 }
 
+/**
+ * Weekly slot budget for Gantt / queue packing.
+ * Always 1 FTE — team headcount is not used for parallel compression.
+ */
+export const SCHEDULE_CAPACITY_PW = 1;
+
 /** Legacy person-week estimate → nearest t-shirt by planning midpoint. */
 export function pwToSize(
   estimatePw: number,
-  _capacityPw = 3,
+  _ignoredCapacityPw = 1,
   ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): TShirtSize {
   return nearestSizeForEstimatePw(estimatePw, ranges);
@@ -198,30 +204,26 @@ export function nearestSizeForEstimatePw(
 }
 
 /**
- * Calendar weeks a size occupies at a team's capacity (same fill rule as schedule).
+ * Calendar weeks a size occupies at SCHEDULE_CAPACITY_PW (same fill rule as schedule).
  */
 export function calendarWeeksForSize(
   size: TShirtSize,
-  capacityPw: number,
   ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): number {
   const pw = sizePlanWeeks(size, ranges);
-  const cap = Math.max(capacityPw, 0.001);
-  return Math.max(1, Math.ceil(pw / cap - 1e-9));
+  return Math.max(1, Math.ceil(pw / SCHEDULE_CAPACITY_PW - 1e-9));
 }
 
 /**
  * Map a dragged/resized Gantt span (inclusive calendar weeks) to the nearest t-shirt
- * for that team's capacity — used when the user edits bar length on the timeline.
+ * — used when the user edits bar length on the timeline.
  */
 export function nearestSizeForCalendarWeeks(
   calendarWeeks: number,
-  capacityPw: number,
   ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): TShirtSize {
   const target = Math.max(1, Math.round(calendarWeeks));
-  const estimatePw = target * Math.max(capacityPw, 0.001);
-  return nearestSizeForEstimatePw(estimatePw, ranges);
+  return nearestSizeForEstimatePw(target * SCHEDULE_CAPACITY_PW, ranges);
 }
 
 /** Nearest t-shirt by planning midpoint in calendar days. */
@@ -319,8 +321,11 @@ export interface TeamMember {
 export interface Team {
   id: string;
   name: string;
-  /** Person-weeks available per calendar week (derived: row count). */
-  capacityPw: number;
+  /**
+   * @deprecated Ignored at runtime. Schedule always uses {@link SCHEDULE_CAPACITY_PW}.
+   * Accepted on hydrate for older saves; stripped on sync/write.
+   */
+  capacityPw?: number;
   color: string;
   /** Seats on the team: each row is роль — ФИО. */
   members?: TeamMember[];
@@ -555,8 +560,9 @@ export function uniqueRolesFromMembers(
 export function syncTeamRoster<T extends Team>(team: T): T {
   if (team.members != null) {
     team.roles = uniqueRolesFromMembers(team.members);
-    team.capacityPw = team.members.length;
   }
+  // Drop legacy capacity field — schedule uses SCHEDULE_CAPACITY_PW only.
+  delete (team as { capacityPw?: number }).capacityPw;
   return team;
 }
 
@@ -704,17 +710,8 @@ export function resolveTeamRoleNames(
   return uniqueRoleNames(team.roles);
 }
 
-/**
- * Silent capacity for queues/Gantt: 1 чел·нед per роль—ФИО row.
- * Not shown on the Команды tab.
- */
-export function computedTeamCapacityPw(
-  team: Pick<Team, "members" | "roles">
-): number {
-  return team.members?.length ?? 0;
-}
-
-export function applyComputedTeamCapacities<T extends Team>(teams: T[]): T[] {
+/** Keep team role lists in sync with роль—ФИО rows (no capacity side effects). */
+export function syncTeamRosters<T extends Team>(teams: T[]): T[] {
   for (const team of teams) syncTeamRoster(team);
   return teams;
 }
@@ -1070,7 +1067,7 @@ export function ensureItemAssignmentRoles(
 export function ensureStateAssignmentRoles<T extends { items: WorkItem[]; teams?: Team[] }>(
   state: T
 ): T {
-  const teams = applyComputedTeamCapacities(
+  const teams = syncTeamRosters(
     (state.teams ?? []).map((t) => syncTeamRoster({ ...t }))
   );
   return {
@@ -1956,7 +1953,7 @@ export interface TeamLoadWeek {
   items: LoadDemandItem[];
 }
 
-/** Scheduled week load exceeds team capacity (rare after queue merge). */
+/** Scheduled week load exceeds weekly slot budget (rare after queue merge). */
 export function isTeamWeekOverloaded(lw: TeamLoadWeek): boolean {
   return lw.usedPw > lw.capacityPw + 0.001;
 }
@@ -1993,7 +1990,7 @@ function addLoadContribution(
 }
 
 /**
- * Weeks where scheduled demand (same intervals as Gantt bars) exceeds capacity.
+ * Weeks where scheduled demand (same intervals as Gantt bars) exceeds weekly budget.
  */
 export function scheduledOverloadWeeks(
   load: Record<string, TeamLoadWeek[]>
@@ -2017,8 +2014,8 @@ export type ConcurrentLoadWeek = TeamLoadWeek;
 
 /**
  * Parallel planned load by team/week: each assignment from its workStartDate
- * consumes capacity week-by-week without waiting for the queue.
- * Kept for diagnostics; UI capacity strips use schedulePortfolio load instead.
+ * consumes SCHEDULE_CAPACITY_PW week-by-week without waiting for the queue.
+ * Kept for diagnostics; UI load strips use schedulePortfolio load instead.
  */
 export function concurrentTeamLoad(
   state: AppState,
@@ -2026,13 +2023,14 @@ export function concurrentTeamLoad(
 ): Record<string, TeamLoadWeek[]> {
   const ranges = state.sizeRanges ?? DEFAULT_SIZE_RANGES;
   const result: Record<string, TeamLoadWeek[]> = {};
+  const cap = SCHEDULE_CAPACITY_PW;
 
   for (const team of state.teams) {
     const weeks: TeamLoadWeek[] = Array.from({ length: maxWeeks }, (_, w) => ({
       week: w,
       weekStart: addWeeks(state.startDate, w),
       usedPw: 0,
-      capacityPw: team.capacityPw,
+      capacityPw: cap,
       items: [],
     }));
 
@@ -2044,7 +2042,7 @@ export function concurrentTeamLoad(
         let rem = pw;
         let w = weekIndex(state.startDate, a.workStartDate);
         while (rem > 0.001 && w < maxWeeks) {
-          const take = Math.min(team.capacityPw, rem);
+          const take = Math.min(cap, rem);
           addLoadContribution(weeks[w], item, take);
           rem -= take;
           w += 1;
@@ -2060,7 +2058,7 @@ export function concurrentTeamLoad(
 
 /**
  * Weeks where parallel planned work (each assignment from its workStartDate)
- * would exceed team capacity before the queue merges slots.
+ * would exceed SCHEDULE_CAPACITY_PW before the queue merges slots.
  */
 export function concurrentOverloadWeeks(
   state: AppState,
@@ -2571,7 +2569,7 @@ export function ensureUniquePriorities(
 }
 
 /**
- * How Gantt / queues place work relative to team capacity.
+ * How Gantt / queues place work (weekly slot = {@link SCHEDULE_CAPACITY_PW}).
  * - `manual`: fixed workStartDate (overloads visible)
  * - `teamQueue`: Finish-to-Start per team by portfolio priority (legacy auto)
  * - `maxUtilization`: item-level parallel blocks by priority — all teams on one
@@ -2590,7 +2588,7 @@ export type LegacyScheduleMode =
 export interface ScheduleOptions {
   /**
    * `maxUtilization` (recommended): process items by priority; all assignments
-   * of an item share one start week and run in parallel (respecting capacity).
+   * of an item share one start week and run in parallel (1 FTE weekly budget).
    * `teamQueue`: strict per-team Finish-to-Start queue by priority.
    * `manual`: fix each assignment at workStartDate; concurrent work may overload.
    * Legacy `"auto"` → `teamQueue`; `"dense"` / `"parallel"` / `"max_util"` → `maxUtilization`.
@@ -2639,16 +2637,17 @@ function canPlaceContiguous(
 
 /**
  * Schedule portfolio work by shared priority field.
- * T-shirt on assignment → person-weeks; team capacityPw = person-weeks per calendar week.
+ * T-shirt on assignment → person-weeks; weekly budget = {@link SCHEDULE_CAPACITY_PW}
+ * (1 FTE) so estimate weeks map 1:1 to calendar weeks without headcount compression.
  *
  * Mode `teamQueue`: later items wait until previous team work finishes (FS), then
  * fill free slots — classic queue arrows on Gantt.
  * Mode `maxUtilization`: process items in priority order; for each item pick a
  * common start week (≥ all planned starts) where every assigned team can run its
- * track contiguously from that week in parallel; consume capacity, then next item.
+ * track contiguously from that week in parallel; consume weekly budget, then next.
  * Does not use a per-team FS cursor that splits one item’s teams across time.
- * Mode `manual`: user dates fixed — effort fills from workStartDate at capacityPw
- * rate even when weeks already have other work, so overload is visible.
+ * Mode `manual`: user dates fixed — effort fills from workStartDate at 1 FTE/week
+ * even when weeks already have other work, so overload is visible.
  * Does not mutate stored workStartDate values.
  */
 export function schedulePortfolio(
@@ -2668,19 +2667,19 @@ export function schedulePortfolio(
   const load: Record<string, TeamLoadWeek[]> = {};
   const maxWeeks = 52;
   const packCapacity = isCapacityScheduleMode(mode);
+  const cap = SCHEDULE_CAPACITY_PW;
 
-  const emptyWeeks = (team: Team): TeamLoadWeek[] =>
+  const emptyWeeks = (): TeamLoadWeek[] =>
     Array.from({ length: maxWeeks }, (_, w) => ({
       week: w,
       weekStart: addWeeks(state.startDate, w),
       usedPw: 0,
-      capacityPw: team.capacityPw,
+      capacityPw: cap,
       items: [] as LoadDemandItem[],
     }));
 
   const placeEffort = (
     weeks: TeamLoadWeek[],
-    team: Team,
     item: WorkItem,
     startWeek: number,
     estimatePw: number,
@@ -2697,20 +2696,20 @@ export function schedulePortfolio(
       let offsetInWeek = 0;
 
       if (mode === "manual") {
-        take = Math.min(team.capacityPw, remaining);
+        take = Math.min(cap, remaining);
       } else {
-        const free = Math.max(0, team.capacityPw - slot.usedPw);
+        const free = Math.max(0, cap - slot.usedPw);
         if (free <= 0.001) {
           if (!allowSkipBusy) break;
           endWeek += 1;
           continue;
         }
         take = Math.min(free, remaining);
-        offsetInWeek = (slot.usedPw / team.capacityPw) * 7;
+        offsetInWeek = (slot.usedPw / cap) * 7;
       }
 
       const weekStart = addWeeks(state.startDate, endWeek);
-      const daysUsed = (take / Math.max(team.capacityPw, 0.001)) * 7;
+      const daysUsed = (take / Math.max(cap, 0.001)) * 7;
       endDate = addDays(weekStart, offsetInWeek + daysUsed);
 
       addLoadContribution(slot, item, take);
@@ -2723,7 +2722,7 @@ export function schedulePortfolio(
 
   if (mode === "maxUtilization") {
     for (const team of state.teams) {
-      load[team.id] = emptyWeeks(team);
+      load[team.id] = emptyWeeks();
     }
 
     ordered.forEach((item, itemIdx) => {
@@ -2751,7 +2750,7 @@ export function schedulePortfolio(
         const allReady = tracks.every((t) =>
           canPlaceContiguous(
             load[t.team.id],
-            t.team.capacityPw,
+            cap,
             commonStart,
             t.estimatePw,
             maxWeeks
@@ -2766,16 +2765,13 @@ export function schedulePortfolio(
         const plannedWeek = weekIndex(state.startDate, t.workStartDate);
         const { endWeek, endDate, startDate } = placeEffort(
           weeks,
-          t.team,
           item,
           commonStart,
           t.estimatePw,
           false
         );
         const durationWeeks =
-          t.team.capacityPw > 0
-            ? Math.round((t.estimatePw / t.team.capacityPw) * 100) / 100
-            : t.estimatePw;
+          Math.round((t.estimatePw / cap) * 100) / 100;
 
         slices.push({
           item,
@@ -2825,7 +2821,7 @@ export function schedulePortfolio(
 
     for (const team of state.teams) {
       const queue = byTeam.get(team.id) ?? [];
-      const weeks = emptyWeeks(team);
+      const weeks = emptyWeeks();
 
       let cursor = 0;
       queue.forEach((entry, idx) => {
@@ -2840,7 +2836,7 @@ export function schedulePortfolio(
           startWeek = Math.max(cursor, plannedWeek);
           while (
             startWeek < maxWeeks &&
-            weeks[startWeek].usedPw >= team.capacityPw - 0.001
+            weeks[startWeek].usedPw >= cap - 0.001
           ) {
             startWeek += 1;
           }
@@ -2848,7 +2844,6 @@ export function schedulePortfolio(
 
         const { endWeek, endDate, startDate } = placeEffort(
           weeks,
-          team,
           entry.item,
           startWeek,
           estimatePw,
@@ -2856,9 +2851,7 @@ export function schedulePortfolio(
         );
 
         const durationWeeks =
-          team.capacityPw > 0
-            ? Math.round((estimatePw / team.capacityPw) * 100) / 100
-            : estimatePw;
+          Math.round((estimatePw / cap) * 100) / 100;
 
         slices.push({
           item: entry.item,
@@ -2878,7 +2871,7 @@ export function schedulePortfolio(
         });
 
         if (mode === "teamQueue") {
-          if (weeks[endWeek] && weeks[endWeek].usedPw >= team.capacityPw - 0.001) {
+          if (weeks[endWeek] && weeks[endWeek].usedPw >= cap - 0.001) {
             cursor = endWeek + 1;
           } else {
             cursor = endWeek;
@@ -2960,10 +2953,8 @@ export function normalizeState(raw: unknown): AppState | null {
       color: String(t.color ?? "#737373"),
       ...(members ? { members } : {}),
       roles,
-      capacityPw: members?.length ?? 0,
     });
   });
-  const teamCap = new Map(teams.map((t) => [t.id, t.capacityPw]));
 
   const items: WorkItem[] = data.items.map((row) => {
     const r = row as Record<string, unknown>;
@@ -2974,14 +2965,13 @@ export function normalizeState(raw: unknown): AppState | null {
         .filter((a) => a && typeof a.teamId === "string")
         .map((a) => {
           const teamId = String(a.teamId);
-          const cap = teamCap.get(teamId) ?? 3;
           const days = parseOptionalDays(a.days);
           const size =
             a.size != null
               ? parseSize(a.size)
               : days != null
                 ? nearestSizeFromDays(days)
-                : pwToSize(Number(a.estimatePw) || 1, cap);
+                : pwToSize(Number(a.estimatePw) || 1);
           const demandStatus =
             parseAssignmentDemandStatus(a.demandStatus) ??
             (itemDemand === "submitted" ? "pending" : undefined);
@@ -3005,7 +2995,7 @@ export function normalizeState(raw: unknown): AppState | null {
       assignments = [
         {
           teamId: r.teamId,
-          size: pwToSize(Number(r.estimatePw) || 1, teamCap.get(r.teamId) ?? 3),
+          size: pwToSize(Number(r.estimatePw) || 1),
           workStartDate: planStart,
           roles: makeAssignmentRolesForTeam(
             teams.find((t) => t.id === r.teamId)?.roles

@@ -2115,6 +2115,16 @@ body.prio-dragging {
 .eta-cell {
   min-width: 0;
   overflow: hidden;
+  text-align: center;
+  vertical-align: middle;
+}
+
+th.eta-cell .th-label {
+  text-align: center;
+}
+
+.eta-cell .eta-final {
+  font-size: 12px;
 }
 
 .teams-cell,
@@ -3346,19 +3356,6 @@ a.req-dl-btn {
   align-self: end;
 }
 
-.team-capacity-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.team-capacity-fact {
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.3;
-}
-
 .team-role-name {
   flex: 1;
   min-width: 0;
@@ -3387,23 +3384,6 @@ a.req-dl-btn {
 .need-project-title .prio-mini,
 .plan-project-title .prio-mini {
   margin-right: 4px;
-}
-
-.team-capacity-slider {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.team-capacity-slider input[type="range"] {
-  flex: 1;
-  min-width: 100px;
-}
-
-.capacity-label {
-  min-width: 36px;
-  text-align: right;
-  font-weight: 700;
 }
 
 .callout a {

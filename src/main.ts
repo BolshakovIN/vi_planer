@@ -53,6 +53,7 @@ import {
   nearestSizeForCalendarWeeks,
   nearestSizeFromDays,
   calendarWeeksForSize,
+  SCHEDULE_CAPACITY_PW,
   assignmentPlanDays,
   assignmentPlanWeeks,
   itemFinishDate,
@@ -77,8 +78,7 @@ import {
   normalizeAssignmentRoleName,
   teamHasRoleName,
   assignmentHasRoleName,
-  computedTeamCapacityPw,
-  applyComputedTeamCapacities,
+  syncTeamRosters,
   syncTeamRoster,
   AssignmentRole,
   fillAssignmentRoles,
@@ -409,7 +409,7 @@ const SCHEDULE_MODE_META: Record<
 > = {
   manual: {
     label: "Как задано",
-    hint: "Старты = даты в карточке; возможны перегрузки ёмкости.",
+    hint: "Старты = даты в карточке; параллельная работа может пересекаться по неделям.",
   },
   teamQueue: {
     label: "Последовательная утилизация ресурса",
@@ -641,17 +641,17 @@ function syncDemandRolesToTeam(team: Team) {
   }));
 }
 
-function teamCapacityStripHtml(
+function teamLoadStripHtml(
   team: Team,
   loadWeeks: TeamLoadWeek[],
   overflowWeeks: Set<number>,
   horizonWeeks: number
 ): string {
   const weekPct = 100 / horizonWeeks;
+  const cap = SCHEDULE_CAPACITY_PW;
   const cells = Array.from({ length: horizonWeeks }, (_, w) => {
     const lw = loadWeeks[w];
     const used = lw?.usedPw ?? 0;
-    const cap = team.capacityPw;
     const pct = utilizationPct(used, cap);
     const isOverflow =
       overflowWeeks.has(w) || (lw != null && isTeamWeekOverloaded(lw));
@@ -664,7 +664,7 @@ function teamCapacityStripHtml(
     if (isOverflow) {
       return `<button type="button" class="${cls}" style="width:${weekPct}%" data-overload-team="${escapeAttr(team.id)}" data-overload-week="${w}" aria-label="Перегруз Н${w + 1}: расшифровка"><span style="height:${Math.min(100, pct)}%"></span></button>`;
     }
-    const title = `Н${w + 1}: ${used.toFixed(1)}/${cap} чел·нед`;
+    const title = `Н${w + 1}: ${used.toFixed(1)} чел·нед`;
     return `<div class="${cls}" style="width:${weekPct}%" title="${escapeAttr(title)}"><span style="height:${Math.min(100, pct)}%"></span></div>`;
   }).join("");
   return `<div class="cap-strip" style="--team-color:${team.color}">${cells}</div>`;
@@ -1115,7 +1115,7 @@ function portfolioTheadCellsHtml(): string {
     ${resizableTh("ЧП", "cashFlow", "finance-cell", undefined, "млрд ₽")}
     ${resizableTh("ROI, %", "roi", "finance-cell")}
     ${sortHeader("Маечная оценка", "estimate", "estimate-cell")}
-    ${sortHeader("Дата завершения", "eta")}
+    ${sortHeader("Дата завершения", "eta", "eta-cell")}
   `;
 }
 
@@ -1197,8 +1197,8 @@ function metricsHtml(_rollups: ItemSchedule[], slices: ScheduledSlice[]): string
     ? Math.max(...finishes.map((iso) => weekIndex(state.startDate, iso))) + 1
     : 0;
   const overloaded = state.teams.filter((t) => {
-    const demandDays = teamQueuePw(slices, t.id);
-    return demandDays > t.capacityPw * 8;
+    const demandWeeks = teamQueuePw(slices, t.id);
+    return demandWeeks > 8 * SCHEDULE_CAPACITY_PW;
   }).length;
 
   return `
@@ -1290,11 +1290,10 @@ function prioBadgeHtml(prio: number | string | undefined): string {
   return `<span class="prio-mini" title="Приоритет проекта">${prio ?? "—"}</span>`;
 }
 
-function teamCapacityFactLabel(team: Team): string {
+function teamRosterFactLabel(team: Team): string {
   const people = team.members?.length ?? 0;
   const roles = resolveTeamRoleNames(team).length;
-  const cap = computedTeamCapacityPw(team);
-  return `${cap} чел·нед/нед · ${people} чел. · ${roles} рол.`;
+  return `${people} чел. · ${roles} рол.`;
 }
 
 function uniqueAssignments(items: WorkItem[]): TeamAssignment[] {
@@ -1476,7 +1475,7 @@ function queuesTestHtml(
           return a.effectiveRank - b.effectiveRank;
         });
       const demand = queue.reduce((sum, s) => sum + s.estimatePw, 0);
-      const weeksToClear = team.capacityPw > 0 ? demand / team.capacityPw : 0;
+      const weeksToClear = demand / SCHEDULE_CAPACITY_PW;
       const freeFrom = queue.length
         ? queue[queue.length - 1].endDate
         : planStart;
@@ -1546,7 +1545,7 @@ function queuesTestHtml(
           <div class="team-card-head">
             <div>
               <h3><span class="team-dot" style="background:${team.color}"></span>${escapeHtml(team.name)}</h3>
-              <div class="meta">Ёмкость ${escapeHtml(teamCapacityFactLabel(team))} · спрос ${demand.toFixed(1)} · ~${weeksToClear.toFixed(1)} нед. до очистки</div>
+              <div class="meta">${escapeHtml(teamRosterFactLabel(team))} · спрос ${demand.toFixed(1)} чел·нед · ~${weeksToClear.toFixed(1)} нед. до очистки</div>
               <div class="take-free">Очередь закрывается / слот после всего: <strong>${formatDate(freeFrom)}</strong></div>
             </div>
             <div class="mono" style="font-weight:600;text-align:right;font-size:12px;color:var(--muted)">
@@ -1554,8 +1553,8 @@ function queuesTestHtml(
             </div>
           </div>
           <div class="cap-strip-wrap">
-            <div class="cap-strip-label meta">Загрузка по расписанию (эксп.) — красный = перегруз ёмкости; наведите или нажмите</div>
-            ${teamCapacityStripHtml(
+            <div class="cap-strip-label meta">Загрузка по расписанию — красный = пересечение работ на неделе; наведите или нажмите</div>
+            ${teamLoadStripHtml(
               team,
               load[team.id] ?? [],
               overflowByTeam[team.id] ?? new Set(),
@@ -1574,7 +1573,7 @@ function queuesTestHtml(
       ${
         mode === "teamQueue"
           ? "Режим «Последовательная утилизация ресурса»: «Может взять с …» — после FS-предшественника и не раньше планового старта."
-          : "Режим «Как задано»: даты = заданные старты; параллельная работа может перегрузить ёмкость."
+          : "Режим «Как задано»: даты = заданные старты; параллельная работа может пересекаться по неделям."
       }
       Полоска — окно работы в ближайшие 12 недель.
     </div>
@@ -2109,16 +2108,8 @@ function bindGanttBarEdit() {
         const newSize =
           mode === "move"
             ? oldSize
-            : nearestSizeForCalendarWeeks(
-                newSpan,
-                team.capacityPw,
-                szRanges()
-              );
-        const scheduledSpan = calendarWeeksForSize(
-          newSize,
-          team.capacityPw,
-          szRanges()
-        );
+            : nearestSizeForCalendarWeeks(newSpan, szRanges());
+        const scheduledSpan = calendarWeeksForSize(newSize, szRanges());
         const sizeChanged = newSize !== oldSize;
 
         // Keep preview at the snapped edit; cancel restores.
@@ -2381,7 +2372,7 @@ function fioSuggestions(): string[] {
 }
 
 function teamsManageHtml(): string {
-  applyComputedTeamCapacities(state.teams);
+  syncTeamRosters(state.teams);
   const suggest = fioSuggestions();
   const canCreate = currentCan("teams.create");
   const datalist = `<datalist id="fio-suggest">${suggest
@@ -2883,7 +2874,7 @@ function demoVariantBHtml(
       const cells = row.weeks
         .map((lw, idx) => {
           const pct = utilizationPct(lw.usedPw, lw.capacityPw);
-          const title = `Н${idx + 1}: ${lw.usedPw.toFixed(1)}/${lw.capacityPw} чел·нед (${pct}%)`;
+          const title = `Н${idx + 1}: ${lw.usedPw.toFixed(1)} чел·нед (${pct}%)`;
           return `<span class="demo-heat-cell" title="${escapeAttr(title)}" style="background:${demoHeatColor(pct)};border-color:${demoHeatBorder(pct)}"></span>`;
         })
         .join("");
@@ -2892,7 +2883,7 @@ function demoVariantBHtml(
         <tr>
           <td>
             <strong>${escapeHtml(row.team.name)}</strong>
-            <div class="meta">${escapeHtml(teamCapacityFactLabel(row.team))}</div>
+            <div class="meta">${escapeHtml(teamRosterFactLabel(row.team))}</div>
           </td>
           <td>
             <div class="demo-heat-cells" style="--demo-weeks:${data.horizon}">${cells}</div>
@@ -2944,7 +2935,7 @@ function demoVariantBHtml(
         <div class="demo-kpi demo-tone-${data.overloadTeams ? "bad" : "good"}">
           <div class="label">Команд с перегрузом</div>
           <div class="value">${data.overloadTeams}</div>
-          <div class="hint">пик &gt; 100% или недели сверх ёмкости</div>
+          <div class="hint">пик &gt; 100% или пересечение работ на неделе</div>
         </div>
         <div class="demo-kpi demo-tone-${data.withoutAssignee ? "warn" : "good"}">
           <div class="label">Без исполнителя</div>
@@ -5010,12 +5001,10 @@ function previewScheduleFor(draft: WorkItem): ItemSchedule | null {
   return rollups.find((r) => r.item.id === id) ?? null;
 }
 
-/** ETA from plan+estimate only (no other backlog items stealing capacity) */
+/** ETA from plan+estimate only (no other backlog items stealing the weekly slot) */
 function planOnlyEnd(a: TeamAssignment): { start: string; end: string; weeks: number } {
-  const team = teamById(a.teamId);
-  const cap = team?.capacityPw || 1;
   const estimatePw = assignmentPlanWeeks(a, szRanges());
-  const weeks = Math.round((estimatePw / cap) * 100) / 100;
+  const weeks = Math.round((estimatePw / SCHEDULE_CAPACITY_PW) * 100) / 100;
   const start = snapToMonday(a.workStartDate || state.startDate);
   const end = addDays(start, weeks * 7);
   return { start, end, weeks };
@@ -5143,7 +5132,7 @@ function overloadExplainBodyHtml(
   slot: TeamLoadWeek | undefined
 ): string {
   const used = slot?.usedPw ?? 0;
-  const cap = slot?.capacityPw ?? team.capacityPw;
+  const cap = slot?.capacityPw ?? SCHEDULE_CAPACITY_PW;
   const items = slot?.items ?? [];
   const itemList =
     items.length > 0
@@ -5161,8 +5150,8 @@ function overloadExplainBodyHtml(
       <strong>${escapeHtml(team.name)}</strong>
     </div>
     <div class="meta">${overloadWeekLabel(week)}</div>
-    <div class="overload-load mono">Загрузка <strong>${used.toFixed(1)}</strong> / ${cap} чел·нед</div>
-    <p class="overload-why">По расписанию (те же интервалы, что полоски Gantt) спрос команды на этой неделе превышает ёмкость (${cap} чел·нед/нед).</p>
+    <div class="overload-load mono">Загрузка <strong>${used.toFixed(1)}</strong> чел·нед (слот ${cap}/нед)</div>
+    <p class="overload-why">По расписанию (те же интервалы, что полоски Gantt) на этой неделе пересекаются работы команды сверх недельного слота.</p>
     <div class="overload-contrib-label meta">Вклад функциональностей</div>
     ${itemList}
   `;
@@ -5177,7 +5166,6 @@ function overloadAxisBodyHtml(week: number): string {
     .map((team) => {
       const slot = lastScheduledLoad[team.id]?.[week];
       const used = slot?.usedPw ?? 0;
-      const cap = slot?.capacityPw ?? team.capacityPw;
       const top = (slot?.items ?? [])
         .slice(0, 3)
         .map((it) => escapeHtml(it.title))
@@ -5187,7 +5175,7 @@ function overloadAxisBodyHtml(week: number): string {
           <div class="overload-pop-head">
             <span class="team-dot" style="background:${team.color}"></span>
             <strong>${escapeHtml(team.name)}</strong>
-            <span class="mono">${used.toFixed(1)}/${cap}</span>
+            <span class="mono">${used.toFixed(1)} чел·нед</span>
           </div>
           ${top ? `<div class="meta">${top}${(slot?.items.length ?? 0) > 3 ? "…" : ""}</div>` : ""}
         </div>`;
@@ -5196,7 +5184,7 @@ function overloadAxisBodyHtml(week: number): string {
 
   return `
     <div class="meta">${overloadWeekLabel(week)}</div>
-    <p class="overload-why">На этой неделе загрузка по расписанию превышает ёмкость у ${teams.length}&nbsp;${
+    <p class="overload-why">На этой неделе работы пересекаются по расписанию у ${teams.length}&nbsp;${
       teams.length === 1 ? "команды" : "команд"
     }.</p>
     ${rows}
@@ -5827,7 +5815,7 @@ function render() {
   closeColPickerOutside();
   closeOverloadPop();
   ensureVisibleTab();
-  applyComputedTeamCapacities(state.teams);
+  syncTeamRosters(state.teams);
   const { slices, rollups, load } = scheduleState();
   const overflowByTeam = scheduledOverloadWeeks(load);
   lastScheduledLoad = load;
@@ -7128,7 +7116,7 @@ function saveProjectCard() {
 
 /** Write every user mutation to the isolated v2 store (local + cloud row `v2`). */
 function persist() {
-  applyComputedTeamCapacities(state.teams);
+  syncTeamRosters(state.teams);
   if (!state.teamRosterSeeded) state.teamRosterSeeded = MIGRATION_SEEDED_TEAM_ROSTER;
   state = ensureStateAssignmentRoles(state);
   saveState(state);
@@ -8155,7 +8143,6 @@ function bindUiRest() {
         color: newTeamColor(),
         members,
         roles: [],
-        capacityPw: 0,
       })
     );
     draftNewTeamColor = null;
@@ -8409,8 +8396,8 @@ function buildPlanerReportData(
   const ends = rollups.map((s) => s.endWeek);
   const horizon = ends.length ? Math.max(...ends) + 1 : 0;
   const overloaded = state.teams.filter((t) => {
-    const demandDays = teamQueuePw(slices, t.id);
-    return demandDays > t.capacityPw * 8;
+    const demandWeeks = teamQueuePw(slices, t.id);
+    return demandWeeks > 8 * SCHEDULE_CAPACITY_PW;
   }).length;
   const mode = activeScheduleMode();
   const modeMeta = SCHEDULE_MODE_META[mode];
@@ -8479,7 +8466,7 @@ function buildPlanerReportData(
     portfolioRows,
     teams: state.teams.map((t) => ({
       name: t.name,
-      capacity: `${t.capacityPw} чел·нед/нед`,
+      roster: teamRosterFactLabel(t),
     })),
   };
 }

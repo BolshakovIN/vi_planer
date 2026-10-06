@@ -2,7 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   AppState,
   applyClearedDemandTeams,
-  applyComputedTeamCapacities,
+  syncTeamRosters,
   applySeededTeamRoster,
   mergeMissingSeedItems,
   applyLocalDeletionTombstones,
@@ -131,7 +131,7 @@ function loadTeamsBackup(): Team[] | null {
       sizeRanges: SEED.sizeRanges,
     });
     if (!normalized || !teamCatalogHasRoster(normalized.teams)) return null;
-    return applyComputedTeamCapacities(
+    return syncTeamRosters(
       normalized.teams.map((t) =>
         syncTeamRoster({ ...t, members: t.members ?? [] })
       )
@@ -291,7 +291,7 @@ export function applyCurrentPortfolioPack(
   next.clearedDemandTeams =
     current.clearedDemandTeams ?? next.clearedDemandTeams;
   if (current.teams.length) {
-    next.teams = applyComputedTeamCapacities(
+    next.teams = syncTeamRosters(
       current.teams.map((t) => syncTeamRoster({ ...t }))
     );
     if (current.teamRosterSeeded) {
