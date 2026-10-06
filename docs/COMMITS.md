@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 06.10.2026, 16:09 GMT+3
+Сгенерировано: 06.10.2026, 17:08 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `8c2cb8e` | 2026-10-06 | ivanbolsakov | Add app roles, fix planning agreed-days metric, and polish staffing/tooltips. |
+| `59b2e6a` | 2026-10-06 | ivanbolsakov | Publish Gantt hierarchy bars and project statuses to GitHub Pages. |
 | `b9d651b` | 2026-10-06 | ivanbolsakov | Add Gantt hierarchy bars, project statuses, and soft conflict week highlights. |
 | `d09ef88` | 2026-10-06 | ivanbolsakov | Publish CSS conflict tooltips to GitHub Pages. |
 | `e09f920` | 2026-10-06 | ivanbolsakov | Replace native title with a visible CSS conflict tooltip. |
@@ -403,8 +405,10 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `b9d651b` | 2026-10-06 | ivanbolsakov | HEAD -> master | Add Gantt hierarchy bars, project statuses, and soft conflict week highlights. |
-| `d09ef88` | 2026-10-06 | ivanbolsakov | origin/master | Publish CSS conflict tooltips to GitHub Pages. |
+| `8c2cb8e` | 2026-10-06 | ivanbolsakov | HEAD -> master | Add app roles, fix planning agreed-days metric, and polish staffing/tooltips. |
+| `59b2e6a` | 2026-10-06 | ivanbolsakov | origin/master | Publish Gantt hierarchy bars and project statuses to GitHub Pages. |
+| `b9d651b` | 2026-10-06 | ivanbolsakov |  | Add Gantt hierarchy bars, project statuses, and soft conflict week highlights. |
+| `d09ef88` | 2026-10-06 | ivanbolsakov |  | Publish CSS conflict tooltips to GitHub Pages. |
 | `e09f920` | 2026-10-06 | ivanbolsakov |  | Replace native title with a visible CSS conflict tooltip. |
 | `67b2771` | 2026-10-06 | ivanbolsakov |  | Publish conflict tooltips and white conflict mark to GitHub Pages. |
 | `384f773` | 2026-10-06 | ivanbolsakov |  | Show project/week conflict tooltips and invert the plan conflict mark. |
