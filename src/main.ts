@@ -3971,9 +3971,15 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
 
   const body = groups.length
     ? groups
-        .map((g) => {
+        .map((g, gi) => {
           const open = !ui.ganttCollapsedProjects[g.key];
           const projectSpans: { startWeek: number; endWeek: number }[] = [];
+          const demoAttr =
+            gi === 0
+              ? ' data-project-demo="a"'
+              : gi === 1
+                ? ' data-project-demo="b"'
+                : "";
           const fnRows = g.items
             .map((item) => {
               const fnOpen = !ui.ganttCollapsedItems[item.id];
@@ -4092,7 +4098,7 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
                 `${g.title}${projectStatus ? ` · ${statusLabel(projectStatus)}` : ""} · ${planWeekRangeLabel(projectAgg.startWeek, projectAgg.endWeek)}`
               )
             : "";
-          return `<details class="plan-project" data-gantt-project="${escapeAttr(g.key)}"${open ? " open" : ""}>
+          return `<details class="plan-project" data-gantt-project="${escapeAttr(g.key)}"${demoAttr}${open ? " open" : ""}>
             <summary class="plan-row plan-project-sum">
               <div class="plan-cell">
                 <span class="plan-project-title">${prioBadgeHtml(prioMap.get(g.key))}${escapeHtml(g.title)}</span>
@@ -4200,8 +4206,14 @@ function planningHtml(
 
   const body = groups.length
     ? groups
-        .map((g) => {
+        .map((g, gi) => {
           const open = !ui.planCollapsedProjects[g.key];
+          const demoAttr =
+            gi === 0
+              ? ' data-project-demo="a"'
+              : gi === 1
+                ? ' data-project-demo="b"'
+                : "";
           const fnRows = g.items
             .map((item) => {
               const assigns = item.assignments.filter((a) =>
@@ -4300,7 +4312,7 @@ function planningHtml(
               </details>`;
             })
             .join("");
-          return `<details class="plan-project" data-plan-project="${escapeAttr(g.key)}"${open ? " open" : ""}>
+          return `<details class="plan-project" data-plan-project="${escapeAttr(g.key)}"${demoAttr}${open ? " open" : ""}>
             <summary class="plan-row plan-project-sum">
               <div class="plan-cell">
                 <span class="plan-project-title">${prioBadgeHtml(projectPrioMap().get(g.key))}${escapeHtml(g.title)}</span>

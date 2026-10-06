@@ -4877,6 +4877,23 @@ body.pdf-capturing .gantt-page .plan-board {
   display: block;
 }
 
+/* A/B project row emphasis (Планирование / Гант) — first two visible projects only */
+.plan-project[data-project-demo="a"],
+.plan-project[data-project-demo="b"] {
+  background: color-mix(in srgb, var(--surface-2) 88%, var(--project-soft));
+  border-radius: 4px;
+}
+
+.plan-project[data-project-demo="a"] {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.plan-project[data-project-demo="b"] {
+  margin-top: 10px;
+  padding-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 12%, var(--line));
+}
+
 .plan-project-sum,
 .plan-fn-sum,
 .plan-team-sum {
