@@ -5,6 +5,8 @@ import {
   ScheduledSlice,
   WorkItem,
   ItemStatus,
+  ITEM_STATUSES,
+  coerceItemStatus,
   ItemType,
   TeamAssignment,
   formatDate,
@@ -567,23 +569,20 @@ function teamCapacityStripHtml(
   return `<div class="cap-strip" style="--team-color:${team.color}">${cells}</div>`;
 }
 
-const ITEM_STATUSES: ItemStatus[] = [
-  "idea",
-  "ready",
-  "in_progress",
-  "blocked",
-  "done",
-];
-
 function statusLabel(s: ItemStatus): string {
   const map: Record<ItemStatus, string> = {
-    idea: "Идея",
-    ready: "Готово к работе",
+    staffing: "Комплектуется",
     in_progress: "В работе",
-    blocked: "Блокер",
-    done: "Готово",
+    paused: "На паузе",
+    done: "Завершен",
   };
   return map[s];
+}
+
+/** Unified project status when all child items agree; else undefined. */
+function projectGroupStatus(items: readonly WorkItem[]): ItemStatus | undefined {
+  const statuses = [...new Set(items.map((it) => it.status))];
+  return statuses.length === 1 ? statuses[0] : undefined;
 }
 
 function rollupById(rollups: ItemSchedule[]): Map<string, ItemSchedule> {
@@ -3231,10 +3230,19 @@ type PlanPersonPlacement = {
   key: string;
   /** Stable person key: member id, else normalized short FIO. */
   personKey: string;
+  /** Short FIO for tips / labels. */
+  memberName: string;
   projectTitle: string;
   itemTitle: string;
   startWeek: number;
   endWeek: number;
+};
+
+/** Person whose bars cover the same week (2+ placements). */
+type PlanWeekPersonConflict = {
+  personKey: string;
+  personName: string;
+  placements: PlanPersonPlacement[];
 };
 
 function planPersonKey(
@@ -3285,6 +3293,43 @@ function findPersonConflictKeys(
   return conflict;
 }
 
+/**
+ * Weeks where 2+ bars of the same person overlap (intersection only,
+ * not the full span of either bar).
+ */
+function findPersonConflictWeeks(
+  placements: readonly PlanPersonPlacement[],
+  weeks: number
+): Map<number, PlanWeekPersonConflict[]> {
+  const byPerson = new Map<string, PlanPersonPlacement[]>();
+  for (const p of placements) {
+    if (!p.personKey) continue;
+    const list = byPerson.get(p.personKey);
+    if (list) list.push(p);
+    else byPerson.set(p.personKey, [p]);
+  }
+  const byWeek = new Map<number, PlanWeekPersonConflict[]>();
+  for (const [personKey, list] of byPerson) {
+    if (list.length < 2) continue;
+    const personName = list[0]!.memberName;
+    for (let w = 0; w < weeks; w++) {
+      const covering = list.filter(
+        (p) => p.startWeek <= w && w <= p.endWeek
+      );
+      if (covering.length < 2) continue;
+      const entry: PlanWeekPersonConflict = {
+        personKey,
+        personName,
+        placements: covering,
+      };
+      const arr = byWeek.get(w);
+      if (arr) arr.push(entry);
+      else byWeek.set(w, [entry]);
+    }
+  }
+  return byWeek;
+}
+
 function collectPlanPersonPlacements(
   items: readonly WorkItem[],
   teamFilter: Set<string> | null,
@@ -3306,6 +3351,7 @@ function collectPlanPersonPlacements(
         out.push({
           key: planPlacementKey(item.id, a.teamId, role.id),
           personKey: planPersonKey(a.teamId, role.assigneeId, member.name),
+          memberName: shortFio(member.name),
           projectTitle: projectGroupKey(item),
           itemTitle: item.title,
           startWeek,
@@ -3322,11 +3368,73 @@ function planTrackBg(weeks: number): string {
   return `repeating-linear-gradient(90deg, transparent 0, transparent calc(${weekPct}% - 1px), var(--line) calc(${weekPct}% - 1px), var(--line) ${weekPct}%)`;
 }
 
-function planAxisHtml(weeks: number): string {
+/** e.g. `Н4 (12.10–18.10)` — Monday through Sunday of that plan week. */
+function planWeekMonSunLabel(week: number): string {
+  const monday = addWeeks(state.startDate, week);
+  const sunday = addDays(monday, 6);
+  const short = (iso: string) => {
+    const [, m, d] = iso.split("-");
+    return `${d}.${m}`;
+  };
+  return `Н${week + 1} (${short(monday)}–${short(sunday)})`;
+}
+
+function planWeekConflictProjectLine(p: PlanPersonPlacement): string {
+  if (p.itemTitle && p.itemTitle !== p.projectTitle) {
+    return `${p.projectTitle} · ${p.itemTitle}`;
+  }
+  return p.projectTitle;
+}
+
+/** Structured tip HTML for a conflict week header cell. */
+function planWeekConflictTipHtml(
+  week: number,
+  groups: readonly PlanWeekPersonConflict[]
+): string {
+  const title = `Пересечение · ${planWeekMonSunLabel(week)}`;
+  const blocks = groups
+    .map((g) => {
+      const projects = g.placements
+        .map(
+          (p) =>
+            `<div class="plan-conflict-tip-proj">• ${escapeHtml(planWeekConflictProjectLine(p))}</div>`
+        )
+        .join("");
+      return `<div class="plan-conflict-tip-group"><div class="plan-conflict-tip-person">${escapeHtml(g.personName)}</div>${projects}</div>`;
+    })
+    .join("");
+  return `<div class="plan-conflict-tip-title">${escapeHtml(title)}</div>${blocks}`;
+}
+
+function planWeekConflictAriaLabel(
+  week: number,
+  groups: readonly PlanWeekPersonConflict[]
+): string {
+  const people = groups
+    .map((g) => {
+      const projects = g.placements
+        .map((p) => planWeekConflictProjectLine(p))
+        .join(", ");
+      return `${g.personName}: ${projects}`;
+    })
+    .join("; ");
+  return `Пересечение · ${planWeekMonSunLabel(week)}. ${people}`;
+}
+
+function planAxisHtml(
+  weeks: number,
+  conflictWeeks?: Map<number, PlanWeekPersonConflict[]>
+): string {
   const weekPct = 100 / weeks;
   return Array.from({ length: weeks }, (_, w) => {
     const monday = addWeeks(state.startDate, w);
     const [, m, d] = monday.split("-");
+    const groups = conflictWeeks?.get(w);
+    if (groups?.length) {
+      const tip = planWeekConflictTipHtml(w, groups);
+      const aria = escapeAttr(planWeekConflictAriaLabel(w, groups));
+      return `<div class="plan-axis-tick is-conflict-week" style="width:${weekPct}%" tabindex="0" aria-label="${aria}"><span>Н${w + 1}</span><span>${d}.${m}</span><span class="plan-conflict-tip" role="tooltip">${tip}</span></div>`;
+    }
     return `<div class="plan-axis-tick" style="width:${weekPct}%"><span>Н${w + 1}</span><span>${d}.${m}</span></div>`;
   }).join("");
 }
@@ -3595,6 +3703,69 @@ function planBarHtml(
   return `<div class="plan-bar${conflict ? " is-conflict" : ""}"${attrs} style="left:${left}%;width:${Math.max(width, 3)}%;background:${color}" title="${escapeAttr(label)}">${escapeHtml(label)}</div>`;
 }
 
+/** Min start … max end across child placements; null if none. */
+function planAggregateSpan(
+  spans: readonly { startWeek: number; endWeek: number }[]
+): { startWeek: number; endWeek: number } | null {
+  if (!spans.length) return null;
+  let startWeek = spans[0]!.startWeek;
+  let endWeek = spans[0]!.endWeek;
+  for (let i = 1; i < spans.length; i++) {
+    const s = spans[i]!;
+    if (s.startWeek < startWeek) startWeek = s.startWeek;
+    if (s.endWeek > endWeek) endWeek = s.endWeek;
+  }
+  return { startWeek, endWeek };
+}
+
+type GanttBarLevel = "project" | "fn" | "team" | "role";
+
+/** Soft aggregate / role bar for Gantt hierarchy (no drag handles, minimal label). */
+function ganttLevelBarHtml(
+  startWeek: number,
+  endWeek: number,
+  weeks: number,
+  color: string,
+  level: GanttBarLevel,
+  title: string,
+  conflict = false
+): string {
+  const left = (Math.max(0, startWeek) / weeks) * 100;
+  const span = Math.max(1, endWeek - startWeek + 1);
+  const width = (span / weeks) * 100;
+  const cls = `plan-bar plan-bar-${level}${conflict ? " is-conflict" : ""}`;
+  return `<div class="${cls}" style="left:${left}%;width:${Math.max(width, 3)}%;background:${color}" title="${escapeAttr(title)}"></div>`;
+}
+
+function ganttProjectBarColor(status?: ItemStatus): string {
+  switch (status) {
+    case "staffing":
+      return "color-mix(in srgb, var(--status-staffing) 44%, transparent)";
+    case "in_progress":
+      return "color-mix(in srgb, var(--status-in-progress) 48%, transparent)";
+    case "paused":
+      return "color-mix(in srgb, var(--status-paused) 40%, transparent)";
+    case "done":
+      return "color-mix(in srgb, var(--status-done) 42%, transparent)";
+    default:
+      return "color-mix(in srgb, var(--status-paused) 32%, transparent)";
+  }
+}
+
+function ganttFnBarColor(teamColors: readonly string[]): string {
+  if (teamColors.length === 1) {
+    return `color-mix(in srgb, ${teamColors[0]} 48%, transparent)`;
+  }
+  if (teamColors.length > 1) {
+    return "color-mix(in srgb, #6b7280 52%, transparent)";
+  }
+  return "color-mix(in srgb, #6b7280 48%, transparent)";
+}
+
+function ganttTeamBarColor(teamColor: string): string {
+  return `color-mix(in srgb, ${teamColor} 72%, transparent)`;
+}
+
 function planTrackHtml(inner: string, weeks: number): string {
   return `<div class="plan-track" style="background:${planTrackBg(weeks)}">${inner}</div>`;
 }
@@ -3670,10 +3841,13 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
     ? groups
         .map((g) => {
           const open = !ui.ganttCollapsedProjects[g.key];
+          const projectSpans: { startWeek: number; endWeek: number }[] = [];
           const fnRows = g.items
             .map((item) => {
               const fnOpen = !ui.ganttCollapsedItems[item.id];
               const assigns = item.assignments;
+              const itemSpans: { startWeek: number; endWeek: number }[] = [];
+              const itemTeamColors: string[] = [];
               const execRows = assigns
                 .map((a) => {
                   const team = teamById(a.teamId);
@@ -3683,6 +3857,9 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
                   if (!roles.length) return "";
                   const teamKey = `${item.id}:${a.teamId}`;
                   const teamOpen = !ui.ganttCollapsedTeams[teamKey];
+                  const teamColor = team?.color ?? "#484f55";
+                  const teamSpans: { startWeek: number; endWeek: number }[] =
+                    [];
                   const roleRows = roles
                     .map((role) => {
                       const member = teamMemberById(a.teamId, role.assigneeId);
@@ -3695,13 +3872,17 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
                       const left = member
                         ? `${shortFio(member.name)} · ${days} дн.`
                         : `${role.name} · ${days} дн.`;
+                      if (member) {
+                        teamSpans.push({ startWeek, endWeek });
+                      }
                       const bar = member
-                        ? planBarHtml(
+                        ? ganttLevelBarHtml(
                             startWeek,
                             endWeek,
                             weeks,
-                            team?.color ?? "#484f55",
-                            role.name,
+                            teamColor,
+                            "role",
+                            `${role.name} · ${planWeekRangeLabel(startWeek, endWeek)}`,
                             conflict
                           )
                         : `<div class="plan-bar-empty"></div>`;
@@ -3713,35 +3894,79 @@ function ganttPlanHtml(overflowByTeam: Record<string, Set<number>>): string {
                       </div>`;
                     })
                     .join("");
+                  if (teamSpans.length) {
+                    itemSpans.push(...teamSpans);
+                    if (!itemTeamColors.includes(teamColor)) {
+                      itemTeamColors.push(teamColor);
+                    }
+                  }
+                  const teamAgg = planAggregateSpan(teamSpans);
+                  const teamBar = teamAgg
+                    ? ganttLevelBarHtml(
+                        teamAgg.startWeek,
+                        teamAgg.endWeek,
+                        weeks,
+                        ganttTeamBarColor(teamColor),
+                        "team",
+                        `${team?.name ?? a.teamId} · ${planWeekRangeLabel(teamAgg.startWeek, teamAgg.endWeek)}`,
+                        conflict
+                      )
+                    : "";
                   return `<details class="plan-team" data-gantt-team="${escapeAttr(teamKey)}"${teamOpen ? " open" : ""}>
                     <summary class="plan-row plan-exec-row plan-team-sum">
                       <div class="plan-cell">
                         <span class="plan-exec-name">${escapeHtml(team?.name ?? a.teamId)}</span>
                       </div>
-                      ${planTrackHtml("", weeks)}
+                      ${planTrackHtml(teamBar, weeks)}
                     </summary>
                     ${roleRows}
                   </details>`;
                 })
                 .join("");
+              if (itemSpans.length) {
+                projectSpans.push(...itemSpans);
+              }
+              const fnAgg = planAggregateSpan(itemSpans);
+              const fnBar = fnAgg
+                ? ganttLevelBarHtml(
+                    fnAgg.startWeek,
+                    fnAgg.endWeek,
+                    weeks,
+                    ganttFnBarColor(itemTeamColors),
+                    "fn",
+                    `${item.title} · ${planWeekRangeLabel(fnAgg.startWeek, fnAgg.endWeek)}`
+                  )
+                : "";
               return `<details class="plan-fn" data-gantt-fn="${item.id}"${fnOpen ? " open" : ""}>
                 <summary class="plan-row plan-fn-sum">
                   <div class="plan-cell">
                     <span class="plan-fn-title">${escapeHtml(item.title)}</span>
                   </div>
-                  ${planTrackHtml("", weeks)}
+                  ${planTrackHtml(fnBar, weeks)}
                 </summary>
                 ${execRows || `<div class="plan-row plan-team-row"><div class="plan-cell"><span class="plan-exec-name">Команда не назначена</span></div>${planTrackHtml("", weeks)}</div>`}
               </details>`;
             })
             .join("");
+          const projectAgg = planAggregateSpan(projectSpans);
+          const projectStatus = projectGroupStatus(g.items);
+          const projectBar = projectAgg
+            ? ganttLevelBarHtml(
+                projectAgg.startWeek,
+                projectAgg.endWeek,
+                weeks,
+                ganttProjectBarColor(projectStatus),
+                "project",
+                `${g.title}${projectStatus ? ` · ${statusLabel(projectStatus)}` : ""} · ${planWeekRangeLabel(projectAgg.startWeek, projectAgg.endWeek)}`
+              )
+            : "";
           return `<details class="plan-project" data-gantt-project="${escapeAttr(g.key)}"${open ? " open" : ""}>
             <summary class="plan-row plan-project-sum">
               <div class="plan-cell">
                 <span class="plan-project-title">${prioBadgeHtml(prioMap.get(g.key))}${escapeHtml(g.title)}</span>
                 <span class="plan-project-meta">${g.items.length} функц.</span>
               </div>
-              ${planTrackHtml("", weeks)}
+              ${planTrackHtml(projectBar, weeks)}
             </summary>
             ${fnRows}
           </details>`;
@@ -3834,6 +4059,10 @@ function planningHtml(
     ranges
   );
   const personConflictKeys = findPersonConflictKeys(personPlacements);
+  const personConflictWeeks = findPersonConflictWeeks(
+    personPlacements,
+    weeks
+  );
   const conflictCount = personConflictKeys.size || capacityConflictWeeks;
 
   const body = groups.length
@@ -3982,7 +4211,7 @@ function planningHtml(
       <div class="plan-board">
         <div class="plan-row plan-board-head">
           <div class="plan-cell plan-head-label">Проекты и функциональности</div>
-          <div class="plan-axis">${planAxisHtml(weeks)}</div>
+          <div class="plan-axis">${planAxisHtml(weeks, personConflictWeeks)}</div>
         </div>
         ${body}
       </div>
@@ -4219,7 +4448,7 @@ function projectCardHtml(): string {
   const items = group?.items ?? [];
   const name = creating ? "" : (group?.title ?? ui.editingProjectKey ?? "");
   const statuses = [...new Set(items.map((it) => it.status))];
-  const status = statuses.length === 1 ? statuses[0]! : items[0]?.status ?? "ready";
+  const status = statuses.length === 1 ? statuses[0]! : items[0]?.status ?? "staffing";
   const prioMap = projectPrioMap();
   const prio =
     (group ? prioMap.get(group.key) : undefined) ??
@@ -4294,7 +4523,7 @@ function editorHtml(item: WorkItem | null): string {
       type: "project",
       backlog: "",
       assignments: [],
-      status: "ready",
+      status: "staffing",
       owner: "",
       assignee: "",
       reach: 100,
@@ -4795,7 +5024,9 @@ function clearPlanConflictTip(mark: HTMLElement, tip: HTMLElement) {
 
 function bindPlanConflictTips() {
   document
-    .querySelectorAll<HTMLElement>(".plan-conflict-mark")
+    .querySelectorAll<HTMLElement>(
+      ".plan-conflict-mark, .plan-axis-tick.is-conflict-week"
+    )
     .forEach((mark) => {
       const tip = mark.querySelector<HTMLElement>(".plan-conflict-tip");
       if (!tip) return;
@@ -5358,7 +5589,7 @@ function refreshLiveEta() {
       type: "product",
       backlog: "",
       assignments,
-      status: "ready",
+      status: "staffing",
       owner: "—",
       assignee: "",
       reach: 100,
@@ -5378,9 +5609,10 @@ function refreshLiveEta() {
     type:
       (document.querySelector<HTMLSelectElement>("#f_type")
         ?.value as ItemType) || base.type,
-    status:
-      (document.querySelector<HTMLSelectElement>("#f_status")
-        ?.value as ItemStatus) || base.status,
+    status: coerceItemStatus(
+      document.querySelector<HTMLSelectElement>("#f_status")?.value,
+      base.status
+    ),
     reach: Number(
       document.querySelector<HTMLInputElement>("#f_reach")?.value
     ) || base.reach,
@@ -5453,7 +5685,7 @@ function readForm(): Omit<WorkItem, "id"> | null {
     type,
     backlog: backlogRaw,
     assignments,
-    status: val("f_status") as ItemStatus,
+    status: coerceItemStatus(val("f_status"), "staffing"),
     owner: ownerRaw || "—",
     assignee: assigneeRaw,
     reach: Math.max(0, num("f_reach", 100)),
@@ -5488,7 +5720,7 @@ function createDemandFunctionality(rawTitle: string) {
     type: "project",
     backlog: demandProjectBacklog(group),
     assignments: [],
-    status: "ready",
+    status: "staffing",
     owner: "",
     assignee: "",
     reach: 100,
@@ -6346,7 +6578,7 @@ function readProjectCardDraft(): {
   const statusRaw = document.querySelector<HTMLSelectElement>("#p_status")?.value ?? "";
   const status = ITEM_STATUSES.includes(statusRaw as ItemStatus)
     ? (statusRaw as ItemStatus)
-    : "ready";
+    : coerceItemStatus(statusRaw, "staffing");
   const rankRaw = Number(document.querySelector<HTMLInputElement>("#p_rank")?.value);
   const priority = Number.isFinite(rankRaw) && rankRaw >= 1 ? Math.round(rankRaw) : 1;
   return {
@@ -7076,7 +7308,7 @@ function bindUiRest() {
         type: "product" as ItemType,
         backlog: "",
         assignments,
-        status: "ready" as ItemStatus,
+        status: "staffing" as ItemStatus,
         owner: "",
         assignee: "",
         reach: 100,

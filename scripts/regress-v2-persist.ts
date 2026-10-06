@@ -69,7 +69,7 @@ function userState(): AppState {
         title: "Кастомная фича",
         type: "project",
         backlog: "CRM",
-        status: "ready",
+        status: "staffing",
         owner: "A",
         assignee: "",
         reach: 100,

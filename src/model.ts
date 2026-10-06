@@ -13,7 +13,35 @@ export {
 };
 
 export type ItemType = "project" | "product";
-export type ItemStatus = "idea" | "ready" | "in_progress" | "blocked" | "done";
+/**
+ * Project status (v2 resource plan).
+ * Migration from legacy keys:
+ * - idea, ready → staffing (комплектуется)
+ * - in_progress → in_progress (в работе)
+ * - blocked → paused (на паузе)
+ * - done → done (завершен)
+ */
+export type ItemStatus = "staffing" | "in_progress" | "paused" | "done";
+
+export const ITEM_STATUSES: ItemStatus[] = [
+  "staffing",
+  "in_progress",
+  "paused",
+  "done",
+];
+
+/** Coerce persisted / legacy status strings to the current enum. */
+export function coerceItemStatus(raw: unknown, fallback: ItemStatus = "staffing"): ItemStatus {
+  const s = String(raw ?? "");
+  if ((ITEM_STATUSES as string[]).includes(s)) return s as ItemStatus;
+  // Legacy → new
+  if (s === "idea" || s === "ready") return "staffing";
+  if (s === "blocked") return "paused";
+  if (s === "done") return "done";
+  if (s === "in_progress") return "in_progress";
+  return fallback;
+}
+
 export type TShirtSize = "XS" | "S" | "M" | "L" | "XL" | "XXL";
 
 export const TSHIRT_SIZES: TShirtSize[] = ["XS", "S", "M", "L", "XL", "XXL"];
@@ -2666,11 +2694,7 @@ export function normalizeState(raw: unknown): AppState | null {
       type: r.type === "project" ? "project" : "product",
       backlog: String(r.backlog ?? "Backlog"),
       assignments,
-      status: (["idea", "ready", "in_progress", "blocked", "done"].includes(
-        String(r.status)
-      )
-        ? r.status
-        : "idea") as ItemStatus,
+      status: coerceItemStatus(r.status, "staffing"),
       owner: String(r.owner ?? "—"),
       assignee: String(r.assignee ?? ""),
       ...riceFieldsFromRaw(r),

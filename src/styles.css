@@ -20,6 +20,18 @@
   --product-soft: #fae0e0;
   --project: #484f55;
   --project-soft: #eeeff1;
+  --status-staffing: #a61f1f;
+  --status-staffing-soft: #fae0e0;
+  --status-staffing-border: #e5a8a8;
+  --status-in-progress: #8a6b1f;
+  --status-in-progress-soft: #f5edd6;
+  --status-in-progress-border: #d4c48a;
+  --status-paused: #5c6570;
+  --status-paused-soft: #e8ebee;
+  --status-paused-border: #c5cad0;
+  --status-done: #3d6b4f;
+  --status-done-soft: #e4ede6;
+  --status-done-border: #a8c4b2;
   --neutral: #484f55;
   --neutral-soft: #eeeff1;
   --neutral-border: #dadcde;
@@ -1493,25 +1505,25 @@ tr.clickable:hover td {
   color: var(--project);
 }
 
-.badge-status-idea {
-  background: var(--surface-2);
-  color: var(--muted);
-}
-.badge-status-ready {
-  background: var(--accent-soft);
-  color: var(--accent);
+.badge-status-staffing {
+  background: var(--status-staffing-soft);
+  color: var(--status-staffing);
+  border-color: var(--status-staffing-border);
 }
 .badge-status-in_progress {
-  background: var(--good-soft);
-  color: var(--good);
+  background: var(--status-in-progress-soft);
+  color: var(--status-in-progress);
+  border-color: var(--status-in-progress-border);
 }
-.badge-status-blocked {
-  background: var(--bad-soft);
-  color: var(--bad);
+.badge-status-paused {
+  background: var(--status-paused-soft);
+  color: var(--status-paused);
+  border-color: var(--status-paused-border);
 }
 .badge-status-done {
-  background: var(--surface-2);
-  color: var(--muted);
+  background: var(--status-done-soft);
+  color: var(--status-done);
+  border-color: var(--status-done-border);
 }
 
 .mono {
@@ -1961,7 +1973,7 @@ body.prio-dragging {
 .status-select {
   display: inline-block;
   max-width: 100%;
-  height: 24px;
+  height: 21px;
   margin: 0;
   padding: 0 4px 0 6px;
   border: 1px solid transparent;
@@ -1969,9 +1981,16 @@ body.prio-dragging {
   font: inherit;
   font-size: 11px;
   font-weight: 700;
-  line-height: 22px;
+  line-height: 19px;
   cursor: pointer;
   box-sizing: border-box;
+}
+
+.status-select.badge-status-staffing,
+.status-select.badge-status-in_progress,
+.status-select.badge-status-paused,
+.status-select.badge-status-done {
+  border-color: color-mix(in srgb, currentColor 22%, transparent);
 }
 
 .status-select:hover,
@@ -4687,6 +4706,34 @@ body.pdf-capturing .gantt-page .plan-board {
   font-variant-numeric: tabular-nums;
 }
 
+.plan-axis-tick.is-conflict-week {
+  position: relative;
+  box-sizing: border-box;
+  padding: 2px 3px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--warn-soft) 72%, var(--surface-2));
+  color: color-mix(in srgb, var(--warn) 40%, var(--muted));
+  cursor: help;
+  outline: none;
+}
+
+.plan-axis-tick.is-conflict-week:hover,
+.plan-axis-tick.is-conflict-week:focus-visible,
+.plan-axis-tick.is-conflict-week.is-tip-open {
+  background: color-mix(in srgb, var(--warn-soft) 92%, var(--surface-2));
+  color: var(--ink);
+}
+
+.plan-axis-tick.is-conflict-week:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warn) 35%, transparent);
+}
+
+.plan-board-head:has(.plan-axis-tick.is-conflict-week:hover),
+.plan-board-head:has(.plan-axis-tick.is-conflict-week:focus-visible),
+.plan-board-head:has(.plan-axis-tick.is-conflict-week.is-tip-open) {
+  z-index: 40;
+}
+
 .plan-project,
 .plan-fn,
 .plan-team {
@@ -4913,9 +4960,33 @@ body.pdf-capturing .gantt-page .plan-board {
 
 .plan-conflict-mark:hover .plan-conflict-tip,
 .plan-conflict-mark:focus-visible .plan-conflict-tip,
-.plan-conflict-mark.is-tip-open .plan-conflict-tip {
+.plan-conflict-mark.is-tip-open .plan-conflict-tip,
+.plan-axis-tick.is-conflict-week:hover .plan-conflict-tip,
+.plan-axis-tick.is-conflict-week:focus-visible .plan-conflict-tip,
+.plan-axis-tick.is-conflict-week.is-tip-open .plan-conflict-tip {
   opacity: 1;
   visibility: visible;
+}
+
+.plan-conflict-tip-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.plan-conflict-tip-group + .plan-conflict-tip-group {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.plan-conflict-tip-person {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.plan-conflict-tip-proj {
+  font-weight: 400;
+  opacity: 0.92;
 }
 
 .plan-add-btn {
@@ -4964,6 +5035,38 @@ body.pdf-capturing .gantt-page .plan-board {
   cursor: grab;
   touch-action: none;
   user-select: none;
+}
+
+/* Gantt hierarchy: project → fn → team → role (thicker / softer → thinner / clearer) */
+.gantt-board .plan-bar {
+  cursor: default;
+  padding: 0;
+  color: transparent;
+  touch-action: auto;
+}
+
+.gantt-board .plan-bar-project {
+  top: 3px;
+  height: 18px;
+  border-radius: 9px;
+}
+
+.gantt-board .plan-bar-fn {
+  top: 5px;
+  height: 14px;
+  border-radius: 7px;
+}
+
+.gantt-board .plan-bar-team {
+  top: 6px;
+  height: 12px;
+  border-radius: 6px;
+}
+
+.gantt-board .plan-bar-role {
+  top: 8px;
+  height: 10px;
+  border-radius: 5px;
 }
 
 .plan-bar.is-dragging {
