@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 06.10.2026, 20:07 GMT+3
+Сгенерировано: 06.10.2026, 23:07 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `af0509d` | 2026-10-06 | ivanbolsakov | Count Planning «Конфликтов ресурса» from person-overlap bars only. |
+| `94b999f` | 2026-10-06 | ivanbolsakov | Publish Planning conflicts filter and uniform project highlight to GitHub Pages. |
 | `bb61a83` | 2026-10-06 | ivanbolsakov | Improve Planning conflicts: filter, cross-team keys, uniform project highlight. |
 | `1fcf671` | 2026-10-06 | ivanbolsakov | Publish Planning A/B highlights and conflict tip polish to GitHub Pages. |
 | `6c8c9e5` | 2026-10-06 | ivanbolsakov | Structure person-conflict tips like week-header tips. |
@@ -413,8 +415,10 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `bb61a83` | 2026-10-06 | ivanbolsakov | HEAD -> master | Improve Planning conflicts: filter, cross-team keys, uniform project highlight. |
-| `1fcf671` | 2026-10-06 | ivanbolsakov | origin/master | Publish Planning A/B highlights and conflict tip polish to GitHub Pages. |
+| `af0509d` | 2026-10-06 | ivanbolsakov | HEAD -> master | Count Planning «Конфликтов ресурса» from person-overlap bars only. |
+| `94b999f` | 2026-10-06 | ivanbolsakov | origin/master | Publish Planning conflicts filter and uniform project highlight to GitHub Pages. |
+| `bb61a83` | 2026-10-06 | ivanbolsakov |  | Improve Planning conflicts: filter, cross-team keys, uniform project highlight. |
+| `1fcf671` | 2026-10-06 | ivanbolsakov |  | Publish Planning A/B highlights and conflict tip polish to GitHub Pages. |
 | `6c8c9e5` | 2026-10-06 | ivanbolsakov |  | Structure person-conflict tips like week-header tips. |
 | `da7c664` | 2026-10-06 | ivanbolsakov |  | Restyle Planning conflict bars with thinner VI-red border and hatching. |
 | `e7ab6b5` | 2026-10-06 | ivanbolsakov |  | A/B-test project row emphasis on Planning and Gantt. |
