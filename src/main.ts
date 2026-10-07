@@ -132,7 +132,7 @@ type GanttBarDragMode = "move" | "resize-left" | "resize-right";
 
 const TAB_LABELS: Record<Tab, string> = {
   portfolio: "Реестр",
-  timeline: "Гант",
+  timeline: "Гантт",
   demand: "Потребность",
   planning: "Планирование",
   demoA: "Мониторинг",
@@ -4043,7 +4043,7 @@ function ganttPlanHtml(): string {
     <div class="gantt-page">
       <div class="panel-header need-page-head">
         <div>
-          <h2>Гант — итоговый ресурсный план</h2>
+          <h2>Гантт — итоговый ресурсный план</h2>
           <p class="meta">Проект → функциональность → команда → роль. Полоски — назначения с вкладки «Планирование».</p>
         </div>
         <div class="gantt-head-actions">
@@ -4358,7 +4358,7 @@ function jiraApiHtml(): string {
           <li>Пользователь вводит <strong>Personal Access Token</strong> только в backend-сессию (память процесса).</li>
           <li>Backend ходит в Jira Server/DC REST от имени пользователя (read-only).</li>
           <li>Ответ маппится в проекты / функциональности / key / status / даты.</li>
-          <li>SPA забирает preview/sync через <span class="mono">/api/jira/*</span>; планирование и Гант остаются в VI Planer.</li>
+          <li>SPA забирает preview/sync через <span class="mono">/api/jira/*</span>; планирование и Гантт остаются в VI Planer.</li>
         </ol>
         <p class="settings-help">
           На GitHub Pages без своего API live-Jira недоступна: нужен backend в корпсети/VPN
@@ -5759,7 +5759,7 @@ function render() {
           ${editionSwitcherHtml()}
           <span class="release-stamp" title="Дата релиза">updated ${RELEASE_UPDATED}</span>
           <span class="sync-badge" id="syncStatus" data-status="${getSyncStatus()}">${syncStatusLabel(getSyncStatus())}</span>
-          <button class="btn" id="exportPdfBtn">${ui.tab === "timeline" ? "Экспорт Ганта" : "Экспорт PDF"}</button>
+          <button class="btn" id="exportPdfBtn">${ui.tab === "timeline" ? "Экспорт Гантта" : "Экспорт PDF"}</button>
         </div>
         <p class="subtitle">
           Единый портфель проектов и продуктов: сквозной приоритет, несколько команд на функциональность

@@ -1064,7 +1064,7 @@ function buildGanttSchematicHtml(data: GanttPdfData): string {
   return `
     <div class="gantt-pdf-brand">
       <h1>VI Planer</h1>
-      <p class="meta">Гант · ресурсный план<br/>${escapeHtml(data.generatedAt)}</p>
+      <p class="meta">Гантт · ресурсный план<br/>${escapeHtml(data.generatedAt)}</p>
     </div>
     <p class="gantt-pdf-lead">
       Старт шкалы: <strong>${escapeHtml(data.planStart)}</strong>
@@ -1083,7 +1083,7 @@ function buildGanttSchematicHtml(data: GanttPdfData): string {
       </div>
       ${body}
     </div>
-    <p class="gantt-pdf-foot">VI Planer · схематичный экспорт Ганта · не скриншот интерфейса</p>
+    <p class="gantt-pdf-foot">VI Planer · схематичный экспорт Гантта · не скриншот интерфейса</p>
   `;
 }
 
