@@ -39,6 +39,7 @@ import {
   orderedProjectGroups,
   moveProjectGroupToPriority,
   projectGroupKey,
+  functionalityItems,
   TeamLoadWeek,
   Team,
   scheduledOverloadWeeks,
@@ -1353,7 +1354,8 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
         ? weekIndex(state.startDate, finish)
         : 0;
       const expanded = Boolean(ui.portfolioExpandedProjects[g.key]);
-      const fnCount = g.items.length;
+      const fnItems = functionalityItems(g.items);
+      const fnCount = fnItems.length;
       const projectRow = `
         <tr class="clickable portfolio-row-project${expanded ? " is-expanded" : ""}" data-project-card="${escapeAttr(g.key)}" data-row-id="${escapeAttr(g.key)}" title="Открыть карточку проекта">
           <td${tdAttrs("priority", "prio-cell")} data-stop-edit>
@@ -1388,7 +1390,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
       `;
       if (!expanded) return projectRow;
 
-      const childRows = sortByPriority(g.items, szRanges())
+      const childRows = sortByPriority(fnItems, szRanges())
         .map((it) => {
           const itFinish = itemFinishDate(it, state.startDate, szRanges());
           const itWait = itFinish ? weekIndex(state.startDate, itFinish) : 0;
@@ -6990,6 +6992,7 @@ function saveProjectCard() {
       manualRank: nextPriority(state.items),
       cashFlow12m: draft.cashFlow12m,
       roi12m: draft.roi12m,
+      projectAnchor: true,
     };
     state.projects = uniqCatalogNames([...state.projects, draft.name]);
     state.items = [...state.items, item];

@@ -1036,6 +1036,11 @@ export interface WorkItem {
   roi12m: number | null;
   /** Потребность: «Отправлено» after submit. Absent = черновик. */
   demandStatus?: DemandStatus;
+  /**
+   * Registry project-card stub: holds project metadata/priority but is not a
+   * functionality. Excluded from «N функц.» and nested rows.
+   */
+  projectAnchor?: boolean;
 }
 
 export function ensureItemAssignmentRoles(
@@ -1995,6 +2000,23 @@ export function projectGroupKey(item: WorkItem): string {
   return containerNameFromBacklog(item.backlog) || "Без проекта";
 }
 
+/**
+ * Project-card create inserts a stub WorkItem so an empty project appears in
+ * Реестр. It must not count as a functionality.
+ * Legacy stubs (pre-flag): title mirrors the container and has no teams.
+ */
+export function isProjectAnchor(item: WorkItem): boolean {
+  if (item.projectAnchor) return true;
+  const key = projectGroupKey(item);
+  if (key === "Без проекта") return false;
+  return item.title.trim() === key && item.assignments.length === 0;
+}
+
+/** Work items that are real functionalities (not project-card anchors). */
+export function functionalityItems(items: WorkItem[]): WorkItem[] {
+  return items.filter((it) => !isProjectAnchor(it));
+}
+
 /** Project groups in sequential priority order (min item rank, then name). */
 export function orderedProjectGroups(
   items: WorkItem[],
@@ -2605,6 +2627,7 @@ export function normalizeState(raw: unknown): AppState | null {
       ...(parseDemandStatus(r.demandStatus) === "submitted"
         ? { demandStatus: "submitted" as const }
         : {}),
+      ...(r.projectAnchor === true ? { projectAnchor: true as const } : {}),
     };
   });
 
