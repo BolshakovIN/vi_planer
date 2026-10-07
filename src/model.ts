@@ -1024,12 +1024,6 @@ export interface WorkItem {
   owner: string;
   /** Исполнитель — empty if unset */
   assignee: string;
-  /** RICE Reach — how many users/period */
-  reach: number;
-  /** RICE Impact — 0.25 / 0.5 / 1 / 2 / 3 */
-  impact: RiceImpact;
-  /** RICE Confidence — 0–1 (UI may show %) */
-  confidence: number;
   notes?: string;
   /**
    * Explicit portfolio priority (1 = highest). Unique across items.
@@ -1361,8 +1355,11 @@ export const SEED_PM_PMO_NAME = "Белов Дмитрий";
 
 function normPersonName(name: string): string {
   return String(name ?? "")
+    .normalize("NFKC")
+    .replace(/[\u00A0\u202F\u2007\uFEFF]/g, " ")
     .trim()
     .toLowerCase()
+    .replace(/ё/g, "е")
     .replace(/\s+/g, " ");
 }
 
@@ -1374,6 +1371,22 @@ export function findAppPersonByName(
   const needle = normPersonName(name);
   if (!needle) return undefined;
   return people.find((p) => normPersonName(p.name) === needle);
+}
+
+/** Prefer a live team-seat match over an orphan assignment-only row. */
+function findCanonicalPersonByName(
+  teams: readonly Team[],
+  people: readonly AppPerson[],
+  name: string
+): AppPerson | undefined {
+  const needle = normPersonName(name);
+  if (!needle) return undefined;
+  const matches = people.filter((p) => normPersonName(p.name) === needle);
+  if (!matches.length) return undefined;
+  const seated = matches.find((p) =>
+    teams.some((t) => (t.members ?? []).some((m) => m.id === p.id))
+  );
+  return seated ?? matches[0];
 }
 
 /**
@@ -1425,28 +1438,43 @@ export function seedRoleAssignments(
 }
 
 /**
- * Keep Белов Дмитрий as PM/PMO when present in the roster or assignment list.
- * Upserts only his row (clears teamIds); does not wipe other assignments.
+ * Force Белов Дмитрий → PM/PMO on every hydrate.
+ *
+ * Cloud/local may still carry a stale `team_lead` row under an old personId
+ * (pre-stable seat ids) while the roster has `p_oms-arhitektura_2`. Upserting
+ * only the roster id left the orphan «Тимлид» row visible in the user switcher.
+ * Drop every assignment matching his ФИО (any id), then upsert one canonical
+ * seat as `pm_pmo` with `teamIds` cleared.
  */
 export function ensureRoleAssignments(
   teams: readonly Team[],
   assignments: readonly AppRoleAssignment[] | undefined
 ): AppRoleAssignment[] {
+  const needle = normPersonName(SEED_PM_PMO_NAME);
   const list = [...(assignments ?? [])];
+  if (!needle) return list;
+
   const people = collectAppPeople(teams, list);
-  const belov = findAppPersonByName(people, SEED_PM_PMO_NAME);
+  const belov = findCanonicalPersonByName(teams, people, SEED_PM_PMO_NAME);
   if (!belov) return list;
+
+  const withoutBelov = list.filter(
+    (a) =>
+      a.personId !== belov.id &&
+      normPersonName(a.personName) !== needle
+  );
   const prev = findRoleAssignment(list, belov.id);
   if (
+    withoutBelov.length === list.length - (prev ? 1 : 0) &&
     prev?.role === "pm_pmo" &&
     !(prev.teamIds?.length) &&
-    prev.personName === belov.name
+    normPersonName(prev.personName) === needle
   ) {
     return list;
   }
-  return upsertRoleAssignment(list, {
+  return upsertRoleAssignment(withoutBelov, {
     personId: belov.id,
-    personName: belov.name,
+    personName: belov.name.trim() || SEED_PM_PMO_NAME,
     role: "pm_pmo",
   });
 }
@@ -1958,7 +1986,6 @@ export interface ScheduledSlice {
   size: TShirtSize;
   /** Person-weeks of effort (from t-shirt size) */
   estimatePw: number;
-  rice: number;
   effectiveRank: number;
   /** User-planned earliest start */
   plannedStartDate: string;
@@ -1977,7 +2004,6 @@ export interface ScheduledSlice {
 export interface ItemSchedule {
   item: WorkItem;
   slices: ScheduledSlice[];
-  rice: number;
   totalEstimateWeeks: number;
   startWeek: number;
   endWeek: number;
@@ -2114,101 +2140,6 @@ export function concurrentOverloadWeeks(
   maxWeeks = 52
 ): Record<string, Set<number>> {
   return scheduledOverloadWeeks(concurrentTeamLoad(state, maxWeeks));
-}
-
-/** Standard RICE impact scale (Intercom / product ops). */
-export const RICE_IMPACT_OPTIONS = [0.25, 0.5, 1, 2, 3] as const;
-export type RiceImpact = (typeof RICE_IMPACT_OPTIONS)[number];
-
-export const RICE_IMPACT_LABELS: Record<RiceImpact, string> = {
-  0.25: "Минимальное",
-  0.5: "Низкое",
-  1: "Среднее",
-  2: "Высокое",
-  3: "Огромное",
-};
-
-/** Map legacy WSJF Business Value (1–10) → RICE Impact. */
-export function impactFromBusinessValue(bv: number): RiceImpact {
-  if (bv <= 2) return 0.25;
-  if (bv <= 4) return 0.5;
-  if (bv <= 6) return 1;
-  if (bv <= 8) return 2;
-  return 3;
-}
-
-export function parseRiceImpact(
-  raw: unknown,
-  fallback: RiceImpact = 1
-): RiceImpact {
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return fallback;
-  for (const opt of RICE_IMPACT_OPTIONS) {
-    if (Math.abs(n - opt) < 0.001) return opt;
-  }
-  return fallback;
-}
-
-/** Accept 0–1 or 0–100; clamp to 0–1. */
-export function parseRiceConfidence(
-  raw: unknown,
-  fallback = 0.8
-): number {
-  let n = Number(raw);
-  if (!Number.isFinite(n)) return fallback;
-  if (n > 1) n = n / 100;
-  return Math.round(Math.min(1, Math.max(0, n)) * 100) / 100;
-}
-
-/**
- * RICE Effort = sum of t-shirt person-weeks (replaces WSJF Job Size).
- * Denominator never below 0.5.
- */
-export function riceEffortWeeks(
-  item: WorkItem,
-  ranges: SizeRanges = DEFAULT_SIZE_RANGES
-): number {
-  return Math.max(totalEstimateWeeks(item, ranges), 0.5);
-}
-
-/** RICE = (Reach × Impact × Confidence) / Effort (чел·нед по маечной оценке). */
-export function rice(
-  item: WorkItem,
-  ranges: SizeRanges = DEFAULT_SIZE_RANGES
-): number {
-  const score =
-    (item.reach * item.impact * item.confidence) /
-    riceEffortWeeks(item, ranges);
-  return Math.round(score * 100) / 100;
-}
-
-/**
- * Migrate legacy WSJF fields → RICE when reach/impact/confidence absent.
- * - businessValue → impact (buckets)
- * - reach → 100 (no WSJF analogue)
- * - confidence → clamp((TC+RR)/20, 0.5..1)
- * - jobSize dropped; Effort = t-shirt weeks
- */
-export function riceFieldsFromRaw(
-  r: Record<string, unknown>
-): Pick<WorkItem, "reach" | "impact" | "confidence"> {
-  const hasRice =
-    r.reach != null || r.impact != null || r.confidence != null;
-  if (hasRice) {
-    return {
-      reach: Math.max(0, Number(r.reach) || 100),
-      impact: parseRiceImpact(r.impact, 1),
-      confidence: parseRiceConfidence(r.confidence, 0.8),
-    };
-  }
-  const bv = Number(r.businessValue) || 5;
-  const tc = Number(r.timeCriticality) || 5;
-  const rr = Number(r.riskReduction) || 5;
-  return {
-    reach: 100,
-    impact: impactFromBusinessValue(bv),
-    confidence: Math.max(0.5, parseRiceConfidence((tc + rr) / 20, 0.8)),
-  };
 }
 
 /** Optional finance number; missing / empty / invalid → null. */
@@ -2406,10 +2337,10 @@ export function weekIndex(planStart: string, dateIso: string): number {
   return Math.max(0, Math.round((b - a) / (7 * 24 * 3600 * 1000)));
 }
 
-/** Sort by explicit priority (1 first); missing ranks fall back to RICE */
+/** Sort by explicit priority (1 first); missing ranks fall back to title, then id */
 export function sortByPriority(
   items: WorkItem[],
-  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+  _ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): WorkItem[] {
   return [...items].sort((a, b) => {
     const pa = a.manualRank;
@@ -2417,9 +2348,9 @@ export function sortByPriority(
     if (pa != null && pb != null && pa !== pb) return pa - pb;
     if (pa != null && pb == null) return -1;
     if (pa == null && pb != null) return 1;
-    const dr = rice(b, ranges) - rice(a, ranges);
-    if (dr !== 0) return dr;
-    return totalEstimateWeeks(a, ranges) - totalEstimateWeeks(b, ranges);
+    const byTitle = a.title.localeCompare(b.title, "ru");
+    if (byTitle !== 0) return byTitle;
+    return a.id.localeCompare(b.id);
   });
 }
 
@@ -2579,22 +2510,22 @@ export function nextPriority(items: WorkItem[]): number {
 
 /**
  * Ensure every item has a unique integer priority.
- * Keeps valid unique ranks; fills gaps / fixes duplicates by RICE order.
+ * Keeps valid unique ranks; fills gaps / fixes duplicates by title, then id.
  */
 export function ensureUniquePriorities(
   items: WorkItem[],
-  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+  _ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): WorkItem[] {
-  const byRice = [...items].sort((a, b) => {
-    const dr = rice(b, ranges) - rice(a, ranges);
-    if (dr !== 0) return dr;
-    return totalEstimateWeeks(a, ranges) - totalEstimateWeeks(b, ranges);
+  const byStable = [...items].sort((a, b) => {
+    const byTitle = a.title.localeCompare(b.title, "ru");
+    if (byTitle !== 0) return byTitle;
+    return a.id.localeCompare(b.id);
   });
 
   const used = new Set<number>();
   const kept = new Map<string, number>();
 
-  for (const item of byRice) {
+  for (const item of byStable) {
     const r = item.manualRank;
     if (r != null && Number.isFinite(r) && r >= 1 && !used.has(r)) {
       used.add(r);
@@ -2827,7 +2758,6 @@ export function schedulePortfolio(
           teamId: t.team.id,
           size: t.size,
           estimatePw: t.estimatePw,
-          rice: rice(item, ranges),
           effectiveRank: itemIdx + 1,
           plannedStartDate: t.workStartDate,
           startWeek: commonStart,
@@ -2907,7 +2837,6 @@ export function schedulePortfolio(
           teamId: team.id,
           size: entry.size,
           estimatePw,
-          rice: rice(entry.item, ranges),
           effectiveRank: idx + 1,
           plannedStartDate: entry.workStartDate,
           startWeek,
@@ -2957,7 +2886,6 @@ export function schedulePortfolio(
             ? 1
             : -1
       ),
-      rice: rice(item, ranges),
       totalEstimateWeeks: totalEstimateWeeks(item, ranges),
       startWeek: earliest.startWeek,
       endWeek: bottleneck.endWeek,
@@ -2970,7 +2898,12 @@ export function schedulePortfolio(
 
   slices.sort((a, b) => {
     if (a.startWeek !== b.startWeek) return a.startWeek - b.startWeek;
-    return b.rice - a.rice;
+    const ra = a.item.manualRank;
+    const rb = b.item.manualRank;
+    if (ra != null && rb != null && ra !== rb) return ra - rb;
+    const byTitle = a.item.title.localeCompare(b.item.title, "ru");
+    if (byTitle !== 0) return byTitle;
+    return a.item.id.localeCompare(b.item.id);
   });
 
   return { slices, rollups, load };
@@ -3053,6 +2986,7 @@ export function normalizeState(raw: unknown): AppState | null {
       ];
     }
 
+    // Legacy RICE (reach/impact/confidence) and WSJF score fields are ignored if present.
     return {
       id: String(r.id ?? uid("item")),
       title: String(r.title ?? "Без названия"),
@@ -3062,7 +2996,6 @@ export function normalizeState(raw: unknown): AppState | null {
       status: coerceItemStatus(r.status, "staffing"),
       owner: String(r.owner ?? "—"),
       assignee: String(r.assignee ?? ""),
-      ...riceFieldsFromRaw(r),
       notes: r.notes != null ? String(r.notes) : undefined,
       manualRank:
         r.manualRank == null || r.manualRank === ""

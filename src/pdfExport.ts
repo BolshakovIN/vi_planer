@@ -443,7 +443,6 @@ export type PlanerReportRow = {
   title: string;
   teams: string;
   status: string;
-  rice: string;
   cashFlow: string;
   roi: string;
   estimate: string;
@@ -620,7 +619,6 @@ function buildPlanerReportHtml(data: PlanerReportData): string {
         <td>${reportEscape(r.title)}</td>
         <td>${reportEscape(r.teams)}</td>
         <td>${reportEscape(r.status)}</td>
-        <td class="num">${reportEscape(r.rice)}</td>
         <td class="num">${reportEscape(r.cashFlow)}</td>
         <td class="num">${reportEscape(r.roi)}</td>
         <td class="num">${reportEscape(r.estimate)}</td>
@@ -672,7 +670,6 @@ function buildPlanerReportHtml(data: PlanerReportData): string {
             <th>Функциональность</th>
             <th>Команды</th>
             <th>Статус</th>
-            <th>RICE</th>
             <th>ЧП, млрд ₽</th>
             <th>ROI, %</th>
             <th>Маечная оценка</th>

@@ -28,12 +28,6 @@ import {
   normalizeSizeRanges,
   hasTeam,
   uid,
-  rice,
-  riceEffortWeeks,
-  parseRiceImpact,
-  RICE_IMPACT_OPTIONS,
-  RICE_IMPACT_LABELS,
-  RiceImpact,
   snapToMonday,
   addDays,
   addWeeks,
@@ -140,7 +134,7 @@ type Tab =
   | "capacity"
   | "changelog"
   | "settings";
-type SortKey = "priority" | "rice" | "estimate" | "eta";
+type SortKey = "priority" | "estimate" | "eta";
 type SortDir = "asc" | "desc";
 type GanttBarDragMode = "move" | "resize-left" | "resize-right";
 
@@ -756,9 +750,7 @@ function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
   const dir = ui.sortDir === "asc" ? 1 : -1;
   return [...filtered].sort((a, b) => {
     let cmp = 0;
-    if (ui.sortKey === "rice") {
-      cmp = rice(a, szRanges()) - rice(b, szRanges());
-    } else if (ui.sortKey === "estimate") {
+    if (ui.sortKey === "estimate") {
       cmp = totalEstimateWeeks(a, szRanges()) - totalEstimateWeeks(b, szRanges());
     } else {
       const ea = byId.get(a.id)?.endDate ?? "9999-99-99";
@@ -787,7 +779,6 @@ type PortfolioCol =
   | "title"
   | "teams"
   | "status"
-  | "rice"
   | "cashFlow"
   | "roi"
   | "estimate"
@@ -798,7 +789,6 @@ type HideablePortfolioCol = Exclude<PortfolioCol, "priority" | "title">;
 const HIDEABLE_PORTFOLIO_COLS: HideablePortfolioCol[] = [
   "teams",
   "status",
-  "rice",
   "cashFlow",
   "roi",
   "estimate",
@@ -810,7 +800,6 @@ const ALL_PORTFOLIO_COLS: PortfolioCol[] = [
   "title",
   "teams",
   "status",
-  "rice",
   "cashFlow",
   "roi",
   "estimate",
@@ -822,7 +811,6 @@ const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
   title: "Проект",
   teams: "Команды",
   status: "Статус",
-  rice: "RICE",
   cashFlow: "ЧП, млрд ₽",
   roi: "ROI, %",
   estimate: "Маечная оценка",
@@ -835,7 +823,6 @@ const PORTFOLIO_COL_DEFAULTS: Record<PortfolioCol, number> = {
   title: 280,
   teams: 220,
   status: 130,
-  rice: 72,
   cashFlow: 84,
   roi: 76,
   estimate: 120,
@@ -853,10 +840,9 @@ function loadColWidths(): Partial<Record<PortfolioCol, number>> {
     const raw = localStorage.getItem(COL_WIDTH_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw) as Record<string, number>;
-    if (parsed.wsjf != null && parsed.rice == null) {
-      parsed.rice = parsed.wsjf;
-      delete parsed.wsjf;
-    }
+    // Drop legacy WSJF / RICE column widths.
+    if (parsed.wsjf != null) delete parsed.wsjf;
+    if (parsed.rice != null) delete parsed.rice;
     // Drop exact prior finance defaults (110) from full-₽ era so new narrow defaults apply.
     let migrated = false;
     for (const key of ["cashFlow", "roi"] as const) {
@@ -924,7 +910,7 @@ function loadHiddenCols(): HideablePortfolioCol[] {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .map((c) => (c === "wsjf" ? "rice" : c))
+      .filter((c) => c !== "wsjf" && c !== "rice")
       .filter((c): c is HideablePortfolioCol =>
         HIDEABLE_PORTFOLIO_COLS.includes(c as HideablePortfolioCol),
       );
@@ -1088,7 +1074,6 @@ function resizableTh(
 function sortHeader(label: string, key: SortKey, extraClass = ""): string {
   const colMap: Partial<Record<SortKey, PortfolioCol>> = {
     priority: "priority",
-    rice: "rice",
     estimate: "estimate",
     eta: "eta",
   };
@@ -1114,7 +1099,6 @@ function portfolioTheadCellsHtml(): string {
     ${resizableTh("Проект", "title", "title-cell")}
     ${resizableTh("Команды", "teams")}
     ${resizableTh("Статус", "status", "status-cell")}
-    ${sortHeader("RICE", "rice", "rice-cell")}
     ${resizableTh("ЧП", "cashFlow", "finance-cell", undefined, "млрд ₽")}
     ${resizableTh("ROI, %", "roi", "finance-cell")}
     ${sortHeader("Маечная оценка", "estimate", "estimate-cell")}
@@ -1182,8 +1166,8 @@ function toggleSort(key: SortKey) {
     ui.sortDir = ui.sortDir === "asc" ? "desc" : "asc";
   } else {
     ui.sortKey = key;
-    // priority: 1 first (asc); RICE: high first (desc); estimate/ETA: smaller/sooner first
-    ui.sortDir = key === "rice" ? "desc" : "asc";
+    // priority: 1 first (asc); estimate/ETA: smaller/sooner first
+    ui.sortDir = "asc";
   }
   render();
 }
@@ -1256,7 +1240,6 @@ function columnsHelpHtml(): string {
         <div><span class="cols-help-k">Проект</span> — контейнер плана; функциональности смотрите на вкладке «Потребность»</div>
         <div><span class="cols-help-k">Команды</span> — кто задействован в проекте</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
-        <div><span class="cols-help-k">RICE</span> — сумма RICE по работам проекта</div>
         <div><span class="cols-help-k">ЧП, млрд ₽</span> — чистая прибыль за 12 мес. (сумма по проекту)</div>
         <div><span class="cols-help-k">ROI, %</span> — ROI за 12 мес.</div>
         <div><span class="cols-help-k">Маечная оценка</span> — XS / S / M / L / XL / XXL (дни в Настройках)</div>
@@ -1330,7 +1313,6 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
       const prio = prioByKey.get(g.key) ?? 1;
       const assigns = uniqueAssignments(g.items);
       const teamItem: WorkItem = { ...g.items[0], assignments: assigns };
-      const score = g.items.reduce((s, it) => s + rice(it, szRanges()), 0);
       const total = g.items.reduce(
         (s, it) => s + totalEstimateWeeks(it, szRanges()),
         0
@@ -1377,7 +1359,6 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           <td${tdAttrs("status", "status-cell")} data-stop-edit>
             <select class="status-select ${statusClass}" data-project-status="${escapeAttr(g.key)}" data-status-was="${statusVal}" data-stop-edit aria-label="Статус проекта">${statusOpts}</select>
           </td>
-          <td${tdAttrs("rice", "rice-cell mono metric-num")}>${Math.round(score * 10) / 10}</td>
           <td${tdAttrs("cashFlow", "finance-cell mono metric-num")}>${formatMlrd(cash)}</td>
           <td${tdAttrs("roi", "finance-cell mono metric-num")}>${
             rois.length === 1 ? formatPercent(rois[0]) : "—"
@@ -4850,18 +4831,12 @@ function editorHtml(item: WorkItem | null): string {
       status: "staffing",
       owner: "",
       assignee: "",
-      reach: 100,
-      impact: 1,
-      confidence: 0.8,
       notes: "",
       manualRank: nextPriority(state.items),
       cashFlow12m: null,
       roi12m: null,
     } satisfies WorkItem);
 
-  const score = rice(draft, szRanges());
-  const effort = riceEffortWeeks(draft, szRanges());
-  const confPct = Math.round(draft.confidence * 100);
   const selected = new Set(draft.assignments.map((a) => a.teamId));
   const sizeMap = new Map(
     draft.assignments.map((a) => [a.teamId, a.size])
@@ -4985,18 +4960,8 @@ function editorHtml(item: WorkItem | null): string {
             </summary>
             <div id="liveEta" class="live-eta-body">${previewHtml}</div>
           </details>
-          <div class="modal-section modal-rice-block">
-            <div class="modal-section-title">Приоритизация RICE</div>
-            <div class="score-grid">
-              <div class="score-box"><div class="k">Охват</div><div class="v"><input id="f_reach" type="number" min="0" step="1" value="${draft.reach}" title="Пользователей / период" style="width:72px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
-              <div class="score-box"><div class="k">Влияние</div><div class="v"><select id="f_impact" title="Сила эффекта" style="width:auto;text-align:center;border:none;background:transparent;font:inherit;font-weight:700">${RICE_IMPACT_OPTIONS.map(
-                (v) =>
-                  `<option value="${v}" ${draft.impact === v ? "selected" : ""}>${v} · ${RICE_IMPACT_LABELS[v]}</option>`
-              ).join("")}</select></div></div>
-              <div class="score-box"><div class="k">Уверенность, %</div><div class="v"><input id="f_conf" type="number" min="0" max="100" step="5" value="${confPct}" title="0–100%" style="width:64px;text-align:center;border:none;background:transparent;font:inherit;font-weight:700" /></div></div>
-              <div class="score-box"><div class="k">Трудозатраты</div><div class="v mono" id="liveEffort" title="Сумма чел·нед по маечной оценке">${effort}</div></div>
-            </div>
-            <div class="callout rice-formula">RICE = (Охват × Влияние × Уверенность) / Трудозатраты → <strong class="mono" id="liveRice">${score}</strong></div>
+          <div class="modal-section">
+            <div class="modal-section-title">Приоритет</div>
             <div class="grid-2">
               <div class="field">
                 <label>Приоритет (уникальный, 1 = выше)</label>
@@ -5878,7 +5843,7 @@ function render() {
           <button class="btn" id="exportPdfBtn">${ui.tab === "timeline" ? "Экспорт Ганта" : "Экспорт PDF"}</button>
         </div>
         <p class="subtitle">
-          Единый портфель проектов и продуктов: сквозной RICE, несколько команд на функциональность
+          Единый портфель проектов и продуктов: сквозной приоритет, несколько команд на функциональность
           со своими оценками и датой реализации (bottleneck).
         </p>
       </div>
@@ -5982,9 +5947,6 @@ function refreshLiveEta() {
       status: "staffing",
       owner: "—",
       assignee: "",
-      reach: 100,
-      impact: 1,
-      confidence: 0.8,
       manualRank: null,
       cashFlow12m: null,
       roi12m: null,
@@ -6003,19 +5965,6 @@ function refreshLiveEta() {
       document.querySelector<HTMLSelectElement>("#f_status")?.value,
       base.status
     ),
-    reach: Number(
-      document.querySelector<HTMLInputElement>("#f_reach")?.value
-    ) || base.reach,
-    impact: (Number(
-      document.querySelector<HTMLSelectElement>("#f_impact")?.value
-    ) || base.impact) as RiceImpact,
-    confidence: (() => {
-      const raw = Number(
-        document.querySelector<HTMLInputElement>("#f_conf")?.value
-      );
-      if (!Number.isFinite(raw)) return base.confidence;
-      return Math.min(1, Math.max(0, raw > 1 ? raw / 100 : raw));
-    })(),
     manualRank: (() => {
       const raw = document.querySelector<HTMLInputElement>("#f_rank")?.value;
       const n = Math.round(Number(raw));
@@ -6035,11 +5984,6 @@ function refreshLiveEta() {
 }
 
 function readForm(): Omit<WorkItem, "id"> | null {
-  const num = (id: string, fallback: number) => {
-    const el = document.querySelector<HTMLInputElement>(`#${id}`);
-    const v = Number(el?.value);
-    return Number.isFinite(v) ? v : fallback;
-  };
   const val = (id: string) =>
     document.querySelector<
       HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
@@ -6078,9 +6022,6 @@ function readForm(): Omit<WorkItem, "id"> | null {
     status: coerceItemStatus(val("f_status"), "staffing"),
     owner: ownerRaw || "—",
     assignee: assigneeRaw,
-    reach: Math.max(0, num("f_reach", 100)),
-    impact: parseRiceImpact(num("f_impact", 1), 1),
-    confidence: clamp(num("f_conf", 80), 0, 100) / 100,
     notes: val("f_notes").trim(),
     manualRank: priority,
     cashFlow12m: optionalNum("f_cashFlow12m"),
@@ -6096,10 +6037,6 @@ function optionalNum(id: string): number | null {
   return Number.isFinite(v) ? v : null;
 }
 
-function clamp(n: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, n));
-}
-
 function createDemandFunctionality(rawTitle: string) {
   const title = titleRu(rawTitle.trim());
   const group = demandSelectedGroup();
@@ -6113,9 +6050,6 @@ function createDemandFunctionality(rawTitle: string) {
     status: "staffing",
     owner: "",
     assignee: "",
-    reach: 100,
-    impact: 1,
-    confidence: 0.8,
     notes: "",
     manualRank: nextPriority(state.items),
     cashFlow12m: null,
@@ -7031,9 +6965,6 @@ function saveProjectCard() {
       status: draft.status,
       owner: "",
       assignee: "",
-      reach: 100,
-      impact: 1,
-      confidence: 0.8,
       notes: "",
       manualRank: nextPriority(state.items),
       cashFlow12m: draft.cashFlow12m,
@@ -7606,7 +7537,7 @@ function bindUiRest() {
       if ((e.target as HTMLElement).closest("[data-col-resize]")) return;
       e.stopPropagation();
       const key = th.dataset.sort as SortKey | undefined;
-      if (key === "rice" || key === "estimate" || key === "eta" || key === "priority")
+      if (key === "estimate" || key === "eta" || key === "priority")
         toggleSort(key);
     });
   });
@@ -7777,64 +7708,6 @@ function bindUiRest() {
     ui.editingId = null;
     persist();
   });
-
-  const refreshLiveRice = () => {
-    const live = document.querySelector("#liveRice");
-    const liveEffort = document.querySelector("#liveEffort");
-    if (!live && !liveEffort) return;
-    const assignments = readAssignments();
-    const base =
-      (ui.editingId
-        ? state.items.find((i) => i.id === ui.editingId)
-        : null) ??
-      ({
-        id: "x",
-        title: "",
-        type: "product" as ItemType,
-        backlog: "",
-        assignments,
-        status: "staffing" as ItemStatus,
-        owner: "",
-        assignee: "",
-        reach: 100,
-        impact: 1 as RiceImpact,
-        confidence: 0.8,
-        manualRank: null,
-        cashFlow12m: null,
-        roi12m: null,
-      } satisfies WorkItem);
-    const confRaw = Number(
-      document.querySelector<HTMLInputElement>("#f_conf")?.value
-    );
-    const item: WorkItem = {
-      ...base,
-      id: "x",
-      assignments: assignments.length ? assignments : base.assignments,
-      reach: Math.max(
-        0,
-        Number(document.querySelector<HTMLInputElement>("#f_reach")?.value) ||
-          base.reach
-      ),
-      impact: parseRiceImpact(
-        document.querySelector<HTMLSelectElement>("#f_impact")?.value,
-        base.impact
-      ),
-      confidence: Number.isFinite(confRaw)
-        ? Math.min(1, Math.max(0, confRaw > 1 ? confRaw / 100 : confRaw))
-        : base.confidence,
-      manualRank: null,
-    };
-    if (live) live.textContent = String(rice(item, szRanges()));
-    if (liveEffort)
-      liveEffort.textContent = String(riceEffortWeeks(item, szRanges()));
-  };
-
-  ["f_reach", "f_impact", "f_conf"].forEach((id) => {
-    document.querySelector(`#${id}`)?.addEventListener("input", refreshLiveRice);
-    document.querySelector(`#${id}`)?.addEventListener("change", refreshLiveRice);
-  });
-  teamList?.addEventListener("input", refreshLiveRice);
-  teamList?.addEventListener("change", refreshLiveRice);
 
   const ganttWeeks = document.querySelector<HTMLInputElement>("#ganttWeeks");
   ganttWeeks?.addEventListener("input", () => {
@@ -8473,7 +8346,6 @@ function buildPlanerReportData(
       title: item.title,
       teams: teamBits || "—",
       status: statusLabel(item.status),
-      rice: String(rice(item, szRanges())),
       cashFlow: formatMlrd(item.cashFlow12m),
       roi: formatPercent(item.roi12m),
       estimate: `${sizesSummary(item)} (~${totalEstimateWeeks(item, szRanges())} чел·нед)`,

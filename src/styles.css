@@ -241,8 +241,8 @@ textarea {
   border: none;
   background: transparent;
   font: inherit;
-  font-size: clamp(10px, 1.05vw, 12px);
-  font-weight: 600;
+  font-size: clamp(10px, 0.95vw, 11px);
+  font-weight: 400;
   color: var(--ink);
   padding: 2px 0;
 }
@@ -1938,21 +1938,6 @@ body.prio-dragging {
   color: var(--neutral-ink);
 }
 
-.modal-rice-block {
-  display: grid;
-  gap: 10px;
-}
-
-.modal-rice-block .score-box {
-  background: var(--surface);
-}
-
-.modal-rice-block .rice-formula {
-  margin: 0;
-  padding: 10px 12px;
-  background: var(--surface);
-}
-
 .field > .meta {
   margin-top: 6px;
   font-size: 11px;
@@ -2166,7 +2151,6 @@ th.eta-cell .th-label {
   border-color: color-mix(in srgb, currentColor 35%, var(--line));
 }
 
-.rice-cell,
 .estimate-cell {
   vertical-align: middle !important;
 }
