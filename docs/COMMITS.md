@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 07.10.2026, 13:28 GMT+3
+Сгенерировано: 07.10.2026, 13:47 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `9f4efe2` | 2026-10-07 | ivanbolsakov | Move Gantt to second tab and enable Registry ЧП/ROI column sort. |
+| `88c0687` | 2026-10-07 | ivanbolsakov | Publish roles removal and Settings API section to GitHub Pages. |
 | `d688e73` | 2026-10-07 | ivanbolsakov | Remove app-role RBAC and move Jira API into Settings. |
 | `372cab7` | 2026-10-07 | ivanbolsakov | Update COMMITS.md after Pages deploy of API tab. |
 | `6e0611f` | 2026-10-07 | ivanbolsakov | Publish API tab and Jira stubs to GitHub Pages. |
@@ -431,8 +433,10 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `d688e73` | 2026-10-07 | ivanbolsakov | HEAD -> master | Remove app-role RBAC and move Jira API into Settings. |
-| `372cab7` | 2026-10-07 | ivanbolsakov | origin/master | Update COMMITS.md after Pages deploy of API tab. |
+| `9f4efe2` | 2026-10-07 | ivanbolsakov | HEAD -> master | Move Gantt to second tab and enable Registry ЧП/ROI column sort. |
+| `88c0687` | 2026-10-07 | ivanbolsakov | origin/master | Publish roles removal and Settings API section to GitHub Pages. |
+| `d688e73` | 2026-10-07 | ivanbolsakov |  | Remove app-role RBAC and move Jira API into Settings. |
+| `372cab7` | 2026-10-07 | ivanbolsakov |  | Update COMMITS.md after Pages deploy of API tab. |
 | `6e0611f` | 2026-10-07 | ivanbolsakov |  | Publish API tab and Jira stubs to GitHub Pages. |
 | `b8fdf4c` | 2026-10-07 | ivanbolsakov |  | Add API tab with Jira read-only stubs and backend proxy placeholders. |
 | `22f12e5` | 2026-10-07 | ivanbolsakov |  | Publish Registry functionality row typography to GitHub Pages. |
