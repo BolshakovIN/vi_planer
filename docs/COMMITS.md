@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 07.10.2026, 12:47 GMT+3
+Сгенерировано: 07.10.2026, 13:12 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `b8fdf4c` | 2026-10-07 | ivanbolsakov | Add API tab with Jira read-only stubs and backend proxy placeholders. |
+| `22f12e5` | 2026-10-07 | ivanbolsakov | Publish Registry functionality row typography to GitHub Pages. |
 | `c74951a` | 2026-10-07 | ivanbolsakov | Style Registry nested functionality rows with smaller italic text. |
 | `900c6d7` | 2026-10-07 | ivanbolsakov | Publish Registry Jira, expand, and collapsible teams to GitHub Pages. |
 | `2822b8a` | 2026-10-07 | ivanbolsakov | Make Registry teams chips collapsible so rows stay one line. |
@@ -426,8 +428,10 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `c74951a` | 2026-10-07 | ivanbolsakov | HEAD -> master | Style Registry nested functionality rows with smaller italic text. |
-| `900c6d7` | 2026-10-07 | ivanbolsakov | origin/master | Publish Registry Jira, expand, and collapsible teams to GitHub Pages. |
+| `b8fdf4c` | 2026-10-07 | ivanbolsakov | HEAD -> master | Add API tab with Jira read-only stubs and backend proxy placeholders. |
+| `22f12e5` | 2026-10-07 | ivanbolsakov | origin/master | Publish Registry functionality row typography to GitHub Pages. |
+| `c74951a` | 2026-10-07 | ivanbolsakov |  | Style Registry nested functionality rows with smaller italic text. |
+| `900c6d7` | 2026-10-07 | ivanbolsakov |  | Publish Registry Jira, expand, and collapsible teams to GitHub Pages. |
 | `2822b8a` | 2026-10-07 | ivanbolsakov |  | Make Registry teams chips collapsible so rows stay one line. |
 | `236b302` | 2026-10-07 | ivanbolsakov |  | Add Registry Jira column and expandable project functionalities. |
 | `aa3000d` | 2026-10-07 | ivanbolsakov |  | Publish RICE-free v2 and Belov hydrate fix to GitHub Pages. |
