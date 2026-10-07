@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 06.10.2026, 23:58 GMT+3
+Сгенерировано: 07.10.2026, 10:34 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `3e4d0f5` | 2026-10-07 | ivanbolsakov | Seed and keep Белов Дмитрий as PM/PMO in role assignments. |
+| `ff3dcad` | 2026-10-06 | ivanbolsakov | Publish thinner Gantt bars and click-to-edit need days to GitHub Pages. |
 | `eaba7f9` | 2026-10-06 | ivanbolsakov | Thin Gantt bars and make Потребность days click-to-edit. |
 | `8feca43` | 2026-10-06 | ivanbolsakov | Publish person-overlap-only Planning conflict metric to GitHub Pages. |
 | `af0509d` | 2026-10-06 | ivanbolsakov | Count Planning «Конфликтов ресурса» from person-overlap bars only. |
@@ -417,8 +419,10 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `eaba7f9` | 2026-10-06 | ivanbolsakov | HEAD -> master | Thin Gantt bars and make Потребность days click-to-edit. |
-| `8feca43` | 2026-10-06 | ivanbolsakov | origin/master | Publish person-overlap-only Planning conflict metric to GitHub Pages. |
+| `3e4d0f5` | 2026-10-07 | ivanbolsakov | HEAD -> master | Seed and keep Белов Дмитрий as PM/PMO in role assignments. |
+| `ff3dcad` | 2026-10-06 | ivanbolsakov | origin/master | Publish thinner Gantt bars and click-to-edit need days to GitHub Pages. |
+| `eaba7f9` | 2026-10-06 | ivanbolsakov |  | Thin Gantt bars and make Потребность days click-to-edit. |
+| `8feca43` | 2026-10-06 | ivanbolsakov |  | Publish person-overlap-only Planning conflict metric to GitHub Pages. |
 | `af0509d` | 2026-10-06 | ivanbolsakov |  | Count Planning «Конфликтов ресурса» from person-overlap bars only. |
 | `94b999f` | 2026-10-06 | ivanbolsakov |  | Publish Planning conflicts filter and uniform project highlight to GitHub Pages. |
 | `bb61a83` | 2026-10-06 | ivanbolsakov |  | Improve Planning conflicts: filter, cross-team keys, uniform project highlight. |
