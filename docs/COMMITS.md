@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 07.10.2026, 13:12 GMT+3
+Сгенерировано: 07.10.2026, 13:13 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,7 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `6e0611f` | 2026-10-07 | ivanbolsakov | Publish API tab and Jira stubs to GitHub Pages. |
 | `b8fdf4c` | 2026-10-07 | ivanbolsakov | Add API tab with Jira read-only stubs and backend proxy placeholders. |
 | `22f12e5` | 2026-10-07 | ivanbolsakov | Publish Registry functionality row typography to GitHub Pages. |
 | `c74951a` | 2026-10-07 | ivanbolsakov | Style Registry nested functionality rows with smaller italic text. |
@@ -428,8 +429,9 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `b8fdf4c` | 2026-10-07 | ivanbolsakov | HEAD -> master | Add API tab with Jira read-only stubs and backend proxy placeholders. |
-| `22f12e5` | 2026-10-07 | ivanbolsakov | origin/master | Publish Registry functionality row typography to GitHub Pages. |
+| `6e0611f` | 2026-10-07 | ivanbolsakov | HEAD -> master, origin/master | Publish API tab and Jira stubs to GitHub Pages. |
+| `b8fdf4c` | 2026-10-07 | ivanbolsakov |  | Add API tab with Jira read-only stubs and backend proxy placeholders. |
+| `22f12e5` | 2026-10-07 | ivanbolsakov |  | Publish Registry functionality row typography to GitHub Pages. |
 | `c74951a` | 2026-10-07 | ivanbolsakov |  | Style Registry nested functionality rows with smaller italic text. |
 | `900c6d7` | 2026-10-07 | ivanbolsakov |  | Publish Registry Jira, expand, and collapsible teams to GitHub Pages. |
 | `2822b8a` | 2026-10-07 | ivanbolsakov |  | Make Registry teams chips collapsible so rows stay one line. |
