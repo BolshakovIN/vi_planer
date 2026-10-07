@@ -710,6 +710,121 @@ table {
   line-height: 1.25;
 }
 
+.portfolio-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.portfolio-expand-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.portfolio-expand-btn:hover {
+  color: var(--ink);
+  background: var(--row-hover);
+}
+
+.portfolio-expand-chevron {
+  display: block;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 4px 0 4px 6px;
+  border-color: transparent transparent transparent currentColor;
+  transition: transform 0.12s ease;
+}
+
+.portfolio-row-project.is-expanded .portfolio-expand-chevron {
+  transform: rotate(90deg);
+}
+
+.portfolio-project-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.portfolio-project-name:hover .name {
+  color: var(--accent);
+}
+
+.portfolio-fn-count {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.portfolio-row-fn {
+  background: var(--surface-2);
+}
+
+.portfolio-row-fn td {
+  border-top-color: transparent;
+}
+
+.portfolio-fn-spacer {
+  background: var(--surface-2);
+}
+
+.portfolio-fn-title {
+  padding-left: 28px !important;
+}
+
+.portfolio-fn-title .name {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.portfolio-row-fn .status-pill {
+  display: inline-block;
+  max-width: 100%;
+  height: 21px;
+  margin: 0;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 19px;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.portfolio-row-fn .status-pill.badge-status-staffing,
+.portfolio-row-fn .status-pill.badge-status-in_progress,
+.portfolio-row-fn .status-pill.badge-status-paused,
+.portfolio-row-fn .status-pill.badge-status-done {
+  border-color: color-mix(in srgb, currentColor 22%, transparent);
+}
+
 .portfolio-table .type-container-name,
 .portfolio-table .type-team-count {
   margin-top: 1px;
@@ -2110,6 +2225,20 @@ th.eta-cell .th-label {
 
 .eta-cell .eta-final {
   font-size: 12px;
+}
+
+.jira-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-align: center;
+  vertical-align: middle;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+th.jira-cell .th-label {
+  text-align: center;
 }
 
 .teams-cell,

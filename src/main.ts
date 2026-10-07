@@ -374,6 +374,8 @@ interface UiState {
   needDaysEdit: string | null;
   needCollapsedProjects: Record<string, true>;
   needCollapsedItems: Record<string, true>;
+  /** Expanded project keys in Реестр (show nested functionalities) */
+  portfolioExpandedProjects: Record<string, true>;
   /** Selected catalog teams on Планирование (Моя команда) */
   planTeamIds: string[];
   /** True when the user cleared the team filter (empty ≠ default first team). */
@@ -441,6 +443,7 @@ const ui: UiState = {
   needDaysEdit: null,
   needCollapsedProjects: {},
   needCollapsedItems: {},
+  portfolioExpandedProjects: {},
   planTeamIds: [],
   planTeamFilterCleared: false,
   planFocusTeamId: null,
@@ -777,6 +780,7 @@ const GANTT_LABEL_COL_MAX = 480;
 type PortfolioCol =
   | "priority"
   | "title"
+  | "jira"
   | "teams"
   | "status"
   | "cashFlow"
@@ -787,6 +791,7 @@ type PortfolioCol =
 type HideablePortfolioCol = Exclude<PortfolioCol, "priority" | "title">;
 
 const HIDEABLE_PORTFOLIO_COLS: HideablePortfolioCol[] = [
+  "jira",
   "teams",
   "status",
   "cashFlow",
@@ -798,6 +803,7 @@ const HIDEABLE_PORTFOLIO_COLS: HideablePortfolioCol[] = [
 const ALL_PORTFOLIO_COLS: PortfolioCol[] = [
   "priority",
   "title",
+  "jira",
   "teams",
   "status",
   "cashFlow",
@@ -809,6 +815,7 @@ const ALL_PORTFOLIO_COLS: PortfolioCol[] = [
 const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
   priority: "Приоритет",
   title: "Проект",
+  jira: "Jira",
   teams: "Команды",
   status: "Статус",
   cashFlow: "ЧП, млрд ₽",
@@ -821,6 +828,7 @@ const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
 const PORTFOLIO_COL_DEFAULTS: Record<PortfolioCol, number> = {
   priority: 96,
   title: 280,
+  jira: 88,
   teams: 220,
   status: 130,
   cashFlow: 84,
@@ -1097,6 +1105,7 @@ function portfolioTheadCellsHtml(): string {
   return `
     ${sortHeader("Приоритет", "priority", "prio-cell")}
     ${resizableTh("Проект", "title", "title-cell")}
+    ${resizableTh("Jira", "jira", "jira-cell")}
     ${resizableTh("Команды", "teams")}
     ${resizableTh("Статус", "status", "status-cell")}
     ${resizableTh("ЧП", "cashFlow", "finance-cell", undefined, "млрд ₽")}
@@ -1237,7 +1246,8 @@ function columnsHelpHtml(): string {
       <summary class="agenda-summary">Адженда</summary>
       <div class="cols-help">
         <div><span class="cols-help-k">Приоритет</span> — сквозной ранг проекта (1…N; 1 = выше). Смена — после подтверждения</div>
-        <div><span class="cols-help-k">Проект</span> — контейнер плана; функциональности смотрите на вкладке «Потребность»</div>
+        <div><span class="cols-help-k">Проект</span> — клик по названию раскрывает функциональности; по строке — карточка проекта</div>
+        <div><span class="cols-help-k">Jira</span> — ключ задачи (пока заглушка)</div>
         <div><span class="cols-help-k">Команды</span> — кто задействован в проекте</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
         <div><span class="cols-help-k">ЧП, млрд ₽</span> — чистая прибыль за 12 мес. (сумма по проекту)</div>
@@ -1347,14 +1357,25 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
       const finishWait = finish
         ? weekIndex(state.startDate, finish)
         : 0;
-      return `
-        <tr class="clickable" data-project-card="${escapeAttr(g.key)}" data-row-id="${escapeAttr(g.key)}" title="Открыть карточку проекта">
+      const expanded = Boolean(ui.portfolioExpandedProjects[g.key]);
+      const fnCount = g.items.length;
+      const projectRow = `
+        <tr class="clickable portfolio-row-project${expanded ? " is-expanded" : ""}" data-project-card="${escapeAttr(g.key)}" data-row-id="${escapeAttr(g.key)}" title="Открыть карточку проекта">
           <td${tdAttrs("priority", "prio-cell")} data-stop-edit>
             <input class="prio-input" type="number" min="1" max="${projectCount}" step="1" value="${prio}" data-project-prio="${escapeAttr(g.key)}" data-project-prio-now="${prio}" data-stop-edit aria-label="Приоритет проекта" />
           </td>
           <td${tdAttrs("title", "title-cell")}>
-            <div class="name">${escapeHtml(g.title)}</div>
+            <div class="portfolio-title-wrap">
+              <button type="button" class="portfolio-expand-btn" data-portfolio-toggle="${escapeAttr(g.key)}" aria-expanded="${expanded ? "true" : "false"}" title="${expanded ? "Свернуть функциональности" : "Показать функциональности"}" data-stop-edit>
+                <span class="portfolio-expand-chevron" aria-hidden="true"></span>
+              </button>
+              <button type="button" class="portfolio-project-name" data-portfolio-toggle="${escapeAttr(g.key)}" aria-expanded="${expanded ? "true" : "false"}" data-stop-edit>
+                <span class="name">${escapeHtml(g.title)}</span>
+                <span class="meta portfolio-fn-count">${fnCount} функц.</span>
+              </button>
+            </div>
           </td>
+          <td${tdAttrs("jira", "jira-cell muted")}>todo</td>
           <td${tdAttrs("teams", "teams-cell")}>${teamsCellHtml(teamItem)}</td>
           <td${tdAttrs("status", "status-cell")} data-stop-edit>
             <select class="status-select ${statusClass}" data-project-status="${escapeAttr(g.key)}" data-status-was="${statusVal}" data-stop-edit aria-label="Статус проекта">${statusOpts}</select>
@@ -1372,6 +1393,46 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           </td>
         </tr>
       `;
+      if (!expanded) return projectRow;
+
+      const childRows = sortByPriority(g.items, szRanges())
+        .map((it) => {
+          const itFinish = itemFinishDate(it, state.startDate, szRanges());
+          const itWait = itFinish ? weekIndex(state.startDate, itFinish) : 0;
+          const itWeeks = totalEstimateWeeks(it, szRanges());
+          const itSizes = [...new Set(it.assignments.map((a) => a.size))].join(
+            " + "
+          );
+          return `
+        <tr class="portfolio-row-fn" data-fn-parent="${escapeAttr(g.key)}" data-edit="${escapeAttr(it.id)}" title="Открыть функциональность">
+          <td${tdAttrs("priority", "prio-cell portfolio-fn-spacer")}></td>
+          <td${tdAttrs("title", "title-cell portfolio-fn-title")}>
+            <div class="name">${escapeHtml(it.title)}</div>
+          </td>
+          <td${tdAttrs("jira", "jira-cell muted")}>todo</td>
+          <td${tdAttrs("teams", "teams-cell")}>${teamsCellHtml(it)}</td>
+          <td${tdAttrs("status", "status-cell")}>
+            <span class="status-pill badge-status-${it.status}">${statusLabel(it.status)}</span>
+          </td>
+          <td${tdAttrs("cashFlow", "finance-cell mono metric-num")}>${formatMlrd(it.cashFlow12m ?? null)}</td>
+          <td${tdAttrs("roi", "finance-cell mono metric-num")}>${
+            it.roi12m != null && Number.isFinite(it.roi12m)
+              ? formatPercent(it.roi12m)
+              : "—"
+          }</td>
+          <td${tdAttrs("estimate", "estimate-cell mono metric-num")}>
+            <span class="size-badge">${itSizes || "—"}</span>
+            <div class="meta">~${itWeeks} чел·нед</div>
+          </td>
+          <td${tdAttrs("eta", `mono eta-cell ${itFinish && itWait > 4 ? "eta-late" : "eta-good"}`)}>
+            ${itFinish ? `<span class="eta-final">${formatDate(itFinish)}</span>` : "—"}
+          </td>
+        </tr>
+      `;
+        })
+        .join("");
+
+      return projectRow + childRows;
     })
     .join("");
 
@@ -7293,6 +7354,20 @@ function bindUiRest() {
       if (performance.now() < suppressPortfolioRowEditUntil) return;
       if (document.querySelector("#appConfirmPop")) return;
       const t = e.target as HTMLElement;
+      const toggle = t.closest<HTMLElement>("[data-portfolio-toggle]");
+      if (toggle) {
+        e.preventDefault();
+        e.stopPropagation();
+        const key = toggle.dataset.portfolioToggle;
+        if (!key) return;
+        if (ui.portfolioExpandedProjects[key]) {
+          delete ui.portfolioExpandedProjects[key];
+        } else {
+          ui.portfolioExpandedProjects[key] = true;
+        }
+        render();
+        return;
+      }
       if (isPortfolioStatusChrome(t)) return;
       if (
         t.closest(
@@ -7300,6 +7375,16 @@ function bindUiRest() {
         )
       )
         return;
+      const fnRow = t.closest<HTMLTableRowElement>("[data-edit]");
+      if (fnRow?.dataset.edit) {
+        if (!currentCan("portfolio.edit")) return;
+        ui.editingId = fnRow.dataset.edit;
+        ui.creating = false;
+        ui.editingProjectKey = null;
+        ui.creatingProject = false;
+        render();
+        return;
+      }
       if (!currentCan("portfolio.edit")) return;
       const projectRow = t.closest<HTMLTableRowElement>("[data-project-card]");
       if (projectRow) {
@@ -7310,11 +7395,6 @@ function bindUiRest() {
         render();
         return;
       }
-      const row = t.closest<HTMLTableRowElement>("[data-edit]");
-      if (!row) return;
-      ui.editingId = row.dataset.edit ?? null;
-      ui.creating = false;
-      render();
     });
   }
 
