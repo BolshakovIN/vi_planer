@@ -716,15 +716,33 @@ function teamsLabel(item: WorkItem): string {
     .join(", ");
 }
 
+function teamChipHtml(teamId: string): string {
+  const t = teamById(teamId);
+  const name = t?.name ?? teamId;
+  return `<span class="team-chip" title="${escapeAttr(name)}"><span class="team-chip-name"><span class="team-dot" style="background:${t?.color ?? "#94a3b8"}"></span><span class="team-chip-text">${escapeHtml(name)}</span></span></span>`;
+}
+
+/** Compact teams list for Реестр: one line + expand, so the row stays short. */
 function teamsCellHtml(item: WorkItem): string {
-  const chips = item.assignments
-    .map((a) => {
-      const t = teamById(a.teamId);
-      const name = t?.name ?? a.teamId;
-      return `<span class="team-chip" title="${escapeAttr(name)}"><span class="team-chip-name"><span class="team-dot" style="background:${t?.color ?? "#94a3b8"}"></span><span class="team-chip-text">${escapeHtml(name)}</span></span></span>`;
-    })
-    .join("");
-  return `<div class="teams-stack">${chips}</div>`;
+  const ids = item.assignments.map((a) => a.teamId);
+  if (!ids.length) return `<span class="muted">—</span>`;
+  if (ids.length === 1) {
+    return `<div class="portfolio-teams is-single">${teamChipHtml(ids[0])}</div>`;
+  }
+  const rest = ids.length - 1;
+  const full = ids.map(teamChipHtml).join("");
+  return `
+    <details class="portfolio-teams" data-stop-edit>
+      <summary class="portfolio-teams-sum" data-stop-edit title="Показать все команды">
+        <span class="portfolio-teams-preview">
+          ${teamChipHtml(ids[0])}
+          <span class="portfolio-teams-more">+${rest}</span>
+        </span>
+        <span class="portfolio-teams-collapse">Свернуть</span>
+      </summary>
+      <div class="teams-stack portfolio-teams-full">${full}</div>
+    </details>
+  `;
 }
 
 function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
@@ -1248,7 +1266,7 @@ function columnsHelpHtml(): string {
         <div><span class="cols-help-k">Приоритет</span> — сквозной ранг проекта (1…N; 1 = выше). Смена — после подтверждения</div>
         <div><span class="cols-help-k">Проект</span> — клик по названию раскрывает функциональности; по строке — карточка проекта</div>
         <div><span class="cols-help-k">Jira</span> — ключ задачи (пока заглушка)</div>
-        <div><span class="cols-help-k">Команды</span> — кто задействован в проекте</div>
+        <div><span class="cols-help-k">Команды</span> — первая + «+N»; клик раскрывает список без растягивания строки</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
         <div><span class="cols-help-k">ЧП, млрд ₽</span> — чистая прибыль за 12 мес. (сумма по проекту)</div>
         <div><span class="cols-help-k">ROI, %</span> — ROI за 12 мес.</div>

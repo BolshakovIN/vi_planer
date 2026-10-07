@@ -834,6 +834,80 @@ table {
   gap: 2px;
 }
 
+.portfolio-teams {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.portfolio-teams.is-single {
+  overflow: hidden;
+}
+
+.portfolio-teams-sum {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.portfolio-teams-sum::-webkit-details-marker {
+  display: none;
+}
+
+.portfolio-teams-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.portfolio-teams-preview .team-chip {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.portfolio-teams-more {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.portfolio-teams-sum:hover .portfolio-teams-more {
+  color: var(--accent);
+}
+
+.portfolio-teams-collapse {
+  display: none;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.portfolio-teams[open] > .portfolio-teams-sum .portfolio-teams-preview {
+  display: none;
+}
+
+.portfolio-teams[open] > .portfolio-teams-sum .portfolio-teams-collapse {
+  display: inline;
+}
+
+.portfolio-teams-full {
+  margin-top: 4px;
+}
+
+.portfolio-teams:not([open]) {
+  max-height: 22px;
+  overflow: hidden;
+}
+
 .portfolio-table .eta-teams {
   margin-top: 1px;
   gap: 0;
