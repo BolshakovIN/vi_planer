@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 07.10.2026, 13:13 GMT+3
+Сгенерировано: 07.10.2026, 13:28 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `d688e73` | 2026-10-07 | ivanbolsakov | Remove app-role RBAC and move Jira API into Settings. |
+| `372cab7` | 2026-10-07 | ivanbolsakov | Update COMMITS.md after Pages deploy of API tab. |
 | `6e0611f` | 2026-10-07 | ivanbolsakov | Publish API tab and Jira stubs to GitHub Pages. |
 | `b8fdf4c` | 2026-10-07 | ivanbolsakov | Add API tab with Jira read-only stubs and backend proxy placeholders. |
 | `22f12e5` | 2026-10-07 | ivanbolsakov | Publish Registry functionality row typography to GitHub Pages. |
@@ -429,7 +431,9 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `6e0611f` | 2026-10-07 | ivanbolsakov | HEAD -> master, origin/master | Publish API tab and Jira stubs to GitHub Pages. |
+| `d688e73` | 2026-10-07 | ivanbolsakov | HEAD -> master | Remove app-role RBAC and move Jira API into Settings. |
+| `372cab7` | 2026-10-07 | ivanbolsakov | origin/master | Update COMMITS.md after Pages deploy of API tab. |
+| `6e0611f` | 2026-10-07 | ivanbolsakov |  | Publish API tab and Jira stubs to GitHub Pages. |
 | `b8fdf4c` | 2026-10-07 | ivanbolsakov |  | Add API tab with Jira read-only stubs and backend proxy placeholders. |
 | `22f12e5` | 2026-10-07 | ivanbolsakov |  | Publish Registry functionality row typography to GitHub Pages. |
 | `c74951a` | 2026-10-07 | ivanbolsakov |  | Style Registry nested functionality rows with smaller italic text. |
