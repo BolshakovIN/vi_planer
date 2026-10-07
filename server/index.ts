@@ -10,6 +10,7 @@ import {
   setState,
   type StateEdition,
 } from "./db.ts";
+import { getJiraStatus, getSyncPreviewStub } from "./jira.ts";
 import { normalizeState } from "../src/model.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,7 +25,7 @@ app.use(express.json({ limit: "12mb" }));
 if (corsOrigin) {
   app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", corsOrigin);
-    res.setHeader("Access-Control-Allow-Methods", "GET, PUT, OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     if (req.method === "OPTIONS") {
       res.sendStatus(204);
@@ -110,6 +111,47 @@ app.put("/api/state/:edition", async (req, res) => {
     res.status(500).json({ error: "Failed to save state" });
   }
 });
+
+/** Jira read-only integration (stubs until PAT session + REST are wired). */
+app.get("/api/jira/status", (_req, res) => {
+  res.json(getJiraStatus());
+});
+
+app.post("/api/jira/session", (req, res) => {
+  const token = String(
+    (req.body as { token?: unknown } | undefined)?.token ?? ""
+  ).trim();
+  if (!token) {
+    res.status(400).json({ ok: false, error: "token required" });
+    return;
+  }
+  if (!jiraConfiguredGate()) {
+    res.status(503).json({
+      ok: false,
+      error: "Jira not configured (set JIRA_URL and JIRA_ENABLED=1)",
+    });
+    return;
+  }
+  // PAT must stay in-memory only — not persisted yet (session store TODO).
+  res.status(501).json({
+    ok: false,
+    error: "Session store not implemented yet",
+    hint: "Next: in-memory session keyed by cookie; never write PAT to disk/logs.",
+  });
+});
+
+app.delete("/api/jira/session", (_req, res) => {
+  res.json({ ok: true, cleared: false, hint: "No active session store yet" });
+});
+
+app.get("/api/jira/sync-preview", (_req, res) => {
+  const preview = getSyncPreviewStub();
+  res.status(preview.ok ? 200 : 503).json(preview);
+});
+
+function jiraConfiguredGate(): boolean {
+  return getJiraStatus().enabled;
+}
 
 app.use(express.static(distDir));
 

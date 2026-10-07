@@ -1122,6 +1122,7 @@ export type AppPermission =
   | "tab.queuesTest"
   | "tab.capacity"
   | "tab.changelog"
+  | "tab.jiraApi"
   | "tab.settings"
   | "portfolio.edit"
   | "portfolio.delete"
@@ -1493,6 +1494,7 @@ export function canApp(
     case "tab.timeline":
     case "tab.demoA":
     case "tab.changelog":
+    case "tab.jiraApi":
       return true;
     case "tab.demand":
     case "tab.planning":

@@ -133,6 +133,7 @@ type Tab =
   | "demoB"
   | "capacity"
   | "changelog"
+  | "jiraApi"
   | "settings";
 type SortKey = "priority" | "estimate" | "eta";
 type SortDir = "asc" | "desc";
@@ -148,6 +149,7 @@ const TAB_LABELS: Record<Tab, string> = {
   demoB: "Мониторинг",
   capacity: "Команды",
   changelog: "Журнал",
+  jiraApi: "API",
   settings: "Настройки",
 };
 
@@ -160,6 +162,7 @@ const TAB_APP_PERMISSION: Partial<Record<Tab, AppPermission>> = {
   demoA: "tab.demoA",
   capacity: "tab.capacity",
   changelog: "tab.changelog",
+  jiraApi: "tab.jiraApi",
   settings: "tab.settings",
 };
 
@@ -246,6 +249,8 @@ const TAB_ICON_SVG: Record<Tab, string> = {
     '<circle cx="6.1" cy="5.1" r="2"/><path d="M2.6 12.4c.2-2.5 1.6-3.6 3.5-3.6s3.3 1.1 3.5 3.6"/><circle cx="11.1" cy="5.6" r="1.55"/><path d="M9.3 12.4c.15-1.7 1.1-2.5 2.2-2.5 1.15 0 2.05.8 2.2 2.5"/>',
   changelog:
     '<path d="M3.6 2.6h8.8v10.8H4.4c-1 0-1.8-.8-1.8-1.8V4.3c0-.9.8-1.7 1-1.7z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6.4 5.8h4M6.4 8.2h4M6.4 10.6h2.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+  jiraApi:
+    '<rect x="2.2" y="3.2" width="11.6" height="9.6" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 6.2h6M5 8.2h6M5 10.2h3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
   settings:
     '<path d="M3 5.2h10M3 10.8h10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="6.2" cy="5.2" r="1.55"/><circle cx="10.1" cy="10.8" r="1.55"/>',
 };
@@ -256,7 +261,11 @@ function tabIconHtml(tab: Tab, quiet = false): string {
 
 function tabButtonHtml(id: Tab, extraClass = ""): string {
   if (!canAccessTab(id)) return "";
-  const quiet = id === "capacity" || id === "changelog" || id === "settings";
+  const quiet =
+    id === "capacity" ||
+    id === "changelog" ||
+    id === "jiraApi" ||
+    id === "settings";
   const cls = ["tab", extraClass, ui.tab === id ? "active" : ""]
     .filter(Boolean)
     .join(" ");
@@ -278,6 +287,7 @@ function normalizeTab(tab: string | undefined | null): Tab {
     tab === "demoB" ||
     tab === "capacity" ||
     tab === "changelog" ||
+    tab === "jiraApi" ||
     tab === "settings"
   ) {
     return tab;
@@ -327,6 +337,7 @@ function ensureVisibleTab() {
       "timeline",
       "demoA",
       "changelog",
+      "jiraApi",
       "demand",
       "planning",
       "capacity",
@@ -4468,9 +4479,121 @@ function tabContentHtml(
       return capacityHtml();
     case "changelog":
       return changeLogHtml();
+    case "jiraApi":
+      return jiraApiHtml();
     case "settings":
       return settingsHtml(rollups);
   }
+}
+
+/** Proposal + live backend status for read-only Jira integration (no stack compare). */
+function jiraApiHtml(): string {
+  return `
+    <div class="api-page">
+      <header class="settings-page-head">
+        <h2 class="settings-page-title">API — Jira (read-only)</h2>
+        <p class="settings-page-lead">
+          Практичный путь: backend проксирует Jira REST, SPA только читает уже смапленные данные.
+          Токен в браузер не попадает. Запись в Jira не делаем.
+        </p>
+      </header>
+
+      <div class="panel api-status-panel">
+        <div class="panel-header">
+          <h3 class="settings-section-title">Статус backend</h3>
+          <button type="button" class="btn" id="jiraApiRefreshBtn">Обновить</button>
+        </div>
+        <div class="api-status-body" id="jiraApiStatus">
+          <p class="meta">Загрузка <span class="mono">GET /api/jira/status</span>…</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h3 class="settings-section-title">Архитектура</h3>
+        </div>
+        <ol class="api-steps">
+          <li>Пользователь вводит <strong>Personal Access Token</strong> только в backend-сессию (память процесса).</li>
+          <li>Backend ходит в Jira Server/DC REST от имени пользователя (read-only).</li>
+          <li>Ответ маппится в проекты / функциональности / key / status / даты.</li>
+          <li>SPA забирает preview/sync через <span class="mono">/api/jira/*</span>; планирование и Гант остаются в VI Planer.</li>
+        </ol>
+        <p class="settings-help">
+          На GitHub Pages без своего API live-Jira недоступна: нужен backend в корпсети/VPN
+          (<span class="mono">npm run dev</span> уже проксирует <span class="mono">/api → :8787</span>).
+        </p>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h3 class="settings-section-title">Эндпоинты</h3>
+        </div>
+        <table class="api-endpoint-table">
+          <thead>
+            <tr><th>Метод</th><th>Путь</th><th>Назначение</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="mono">GET</td>
+              <td class="mono">/api/jira/status</td>
+              <td>Конфиг: <span class="mono">not_configured</span> / disabled / ready</td>
+            </tr>
+            <tr>
+              <td class="mono">POST</td>
+              <td class="mono">/api/jira/session</td>
+              <td>Принять PAT в память (stub → 501)</td>
+            </tr>
+            <tr>
+              <td class="mono">DELETE</td>
+              <td class="mono">/api/jira/session</td>
+              <td>Стереть сессию</td>
+            </tr>
+            <tr>
+              <td class="mono">GET</td>
+              <td class="mono">/api/jira/sync-preview</td>
+              <td>Плоский список issues → маппинг в портфель (stub)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h3 class="settings-section-title">Маппинг Jira → VI Planer</h3>
+        </div>
+        <table class="api-endpoint-table">
+          <thead>
+            <tr><th>Jira</th><th>VI Planer</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Тип «Проект» / контейнер</td><td>Проект в Реестре</td></tr>
+            <tr><td>Тип «Функциональность»</td><td>WorkItem (функциональность)</td></tr>
+            <tr><td><span class="mono">issue.key</span></td><td>Колонка Jira</td></tr>
+            <tr><td><span class="mono">status.name</span></td><td>Статус (таблица соответствий)</td></tr>
+            <tr><td>Target start / end</td><td>Старт / baseline·actual finish</td></tr>
+            <tr><td><span class="mono">assignee</span> / Team</td><td>Опционально → Потребность / команды</td></tr>
+          </tbody>
+        </table>
+        <p class="settings-help">
+          Иерархия Parent Link + Epic Link + «является дочерней» — как в корп. Jira;
+          без Structure sync на первом этапе.
+        </p>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h3 class="settings-section-title">MVP по фазам</h3>
+        </div>
+        <ol class="api-steps">
+          <li><strong>Сейчас</strong> — вкладка API + stubs статуса/сессии/preview; env <span class="mono">JIRA_URL</span>, <span class="mono">JIRA_ENABLED</span>.</li>
+          <li><strong>Сессия</strong> — in-memory PAT + cookie; проверка <span class="mono">/myself</span>.</li>
+          <li><strong>Sync-preview</strong> — JQL/поиск → список для Реестра без автозаписи.</li>
+          <li><strong>Импорт</strong> — по подтверждению создать/обновить проекты и функциональности + key.</li>
+          <li><strong>Не в MVP</strong> — write-back в Jira, webhooks, двусторонний sync.</li>
+        </ol>
+      </div>
+    </div>
+  `;
 }
 
 function settingsHtml(rollups: ItemSchedule[]): string {
@@ -5940,6 +6063,7 @@ function render() {
         ${tabButtonHtml("queuesTest")}
         ${tabButtonHtml("capacity", "tab-end")}
         ${tabButtonHtml("changelog")}
+        ${tabButtonHtml("jiraApi")}
         ${tabButtonHtml("settings")}
       </div>
       ${ui.tab === "portfolio" ? metricsHtml(rollups, slices) : ""}
@@ -7202,7 +7326,63 @@ function bind() {
   }
 }
 
+function bindJiraApiTab() {
+  if (ui.tab !== "jiraApi") return;
+  const box = document.querySelector("#jiraApiStatus");
+  if (!box) return;
+
+  const paint = (html: string) => {
+    box.innerHTML = html;
+  };
+
+  const load = async () => {
+    paint(`<p class="meta">Загрузка <span class="mono">GET /api/jira/status</span>…</p>`);
+    try {
+      const res = await fetch("/api/jira/status", { cache: "no-store" });
+      const data = (await res.json()) as {
+        status?: string;
+        configured?: boolean;
+        enabled?: boolean;
+        jiraUrl?: string | null;
+        message?: string;
+        mode?: string;
+        writeBack?: boolean;
+      };
+      const code = String(data.status ?? "not_configured");
+      const tone =
+        code === "ready" ? "is-ready" : code === "disabled" ? "is-warn" : "is-muted";
+      paint(`
+        <div class="api-status-row">
+          <span class="api-status-pill ${tone}">${escapeHtml(code)}</span>
+          <span class="meta">${escapeHtml(data.message ?? "")}</span>
+        </div>
+        <dl class="api-status-dl">
+          <div><dt>Jira URL</dt><dd class="mono">${escapeHtml(data.jiraUrl || "—")}</dd></div>
+          <div><dt>configured</dt><dd class="mono">${data.configured ? "true" : "false"}</dd></div>
+          <div><dt>enabled</dt><dd class="mono">${data.enabled ? "true" : "false"}</dd></div>
+          <div><dt>mode</dt><dd class="mono">${escapeHtml(String(data.mode ?? "read_only"))}</dd></div>
+          <div><dt>writeBack</dt><dd class="mono">${data.writeBack ? "true" : "false"}</dd></div>
+        </dl>
+      `);
+    } catch {
+      paint(`
+        <div class="api-status-row">
+          <span class="api-status-pill is-muted">unreachable</span>
+          <span class="meta">Backend не ответил. Запустите API на :8787 (<span class="mono">npm run dev</span> / <span class="mono">dev:api</span>).</span>
+        </div>
+      `);
+    }
+  };
+
+  document.querySelector("#jiraApiRefreshBtn")?.addEventListener("click", () => {
+    void load();
+  });
+  void load();
+}
+
 function bindUiRest() {
+  bindJiraApiTab();
+
   document.querySelector("#brandHomeBtn")?.addEventListener("click", () => {
     setActiveTab("portfolio");
     render();
