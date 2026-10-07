@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 07.10.2026, 23:34 GMT+3
+Сгенерировано: 08.10.2026, 00:38 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `e4bea62` | 2026-10-08 | ivanbolsakov | Polish Registry finance/schedule columns and remove Очередь команд. |
+| `a5116cd` | 2026-10-07 | ivanbolsakov | Publish Registry empty-project functionality count fix to GitHub Pages. |
 | `6d54c07` | 2026-10-07 | ivanbolsakov | Exclude project-card stubs from Registry functionality counts. |
 | `9ef1dac` | 2026-10-07 | ivanbolsakov | Publish Gantt tab order and Registry ЧП/ROI sort to GitHub Pages. |
 | `9f4efe2` | 2026-10-07 | ivanbolsakov | Move Gantt to second tab and enable Registry ЧП/ROI column sort. |
@@ -435,8 +437,10 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `6d54c07` | 2026-10-07 | ivanbolsakov | HEAD -> master | Exclude project-card stubs from Registry functionality counts. |
-| `9ef1dac` | 2026-10-07 | ivanbolsakov | origin/master | Publish Gantt tab order and Registry ЧП/ROI sort to GitHub Pages. |
+| `e4bea62` | 2026-10-08 | ivanbolsakov | HEAD -> master | Polish Registry finance/schedule columns and remove Очередь команд. |
+| `a5116cd` | 2026-10-07 | ivanbolsakov | origin/master | Publish Registry empty-project functionality count fix to GitHub Pages. |
+| `6d54c07` | 2026-10-07 | ivanbolsakov |  | Exclude project-card stubs from Registry functionality counts. |
+| `9ef1dac` | 2026-10-07 | ivanbolsakov |  | Publish Gantt tab order and Registry ЧП/ROI sort to GitHub Pages. |
 | `9f4efe2` | 2026-10-07 | ivanbolsakov |  | Move Gantt to second tab and enable Registry ЧП/ROI column sort. |
 | `88c0687` | 2026-10-07 | ivanbolsakov |  | Publish roles removal and Settings API section to GitHub Pages. |
 | `d688e73` | 2026-10-07 | ivanbolsakov |  | Remove app-role RBAC and move Jira API into Settings. |
