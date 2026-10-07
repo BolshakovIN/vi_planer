@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 07.10.2026, 12:33 GMT+3
+Сгенерировано: 07.10.2026, 12:47 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `c74951a` | 2026-10-07 | ivanbolsakov | Style Registry nested functionality rows with smaller italic text. |
+| `900c6d7` | 2026-10-07 | ivanbolsakov | Publish Registry Jira, expand, and collapsible teams to GitHub Pages. |
 | `2822b8a` | 2026-10-07 | ivanbolsakov | Make Registry teams chips collapsible so rows stay one line. |
 | `236b302` | 2026-10-07 | ivanbolsakov | Add Registry Jira column and expandable project functionalities. |
 | `aa3000d` | 2026-10-07 | ivanbolsakov | Publish RICE-free v2 and Belov hydrate fix to GitHub Pages. |
@@ -424,9 +426,11 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `2822b8a` | 2026-10-07 | ivanbolsakov | HEAD -> master | Make Registry teams chips collapsible so rows stay one line. |
+| `c74951a` | 2026-10-07 | ivanbolsakov | HEAD -> master | Style Registry nested functionality rows with smaller italic text. |
+| `900c6d7` | 2026-10-07 | ivanbolsakov | origin/master | Publish Registry Jira, expand, and collapsible teams to GitHub Pages. |
+| `2822b8a` | 2026-10-07 | ivanbolsakov |  | Make Registry teams chips collapsible so rows stay one line. |
 | `236b302` | 2026-10-07 | ivanbolsakov |  | Add Registry Jira column and expandable project functionalities. |
-| `aa3000d` | 2026-10-07 | ivanbolsakov | origin/master | Publish RICE-free v2 and Belov hydrate fix to GitHub Pages. |
+| `aa3000d` | 2026-10-07 | ivanbolsakov |  | Publish RICE-free v2 and Belov hydrate fix to GitHub Pages. |
 | `d99e62b` | 2026-10-07 | ivanbolsakov |  | Remove RICE from v2 and keep Belov roles on hydrate. |
 | `5aa7003` | 2026-10-07 | ivanbolsakov |  | Publish Белов Дмитрий as default PM/PMO to GitHub Pages. |
 | `3e4d0f5` | 2026-10-07 | ivanbolsakov |  | Seed and keep Белов Дмитрий as PM/PMO in role assignments. |
