@@ -781,10 +781,17 @@ table {
 
 .portfolio-row-fn {
   background: var(--surface-2);
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--ink);
 }
 
 .portfolio-row-fn td {
   border-top-color: transparent;
+  font-size: inherit;
+  font-style: inherit;
+  font-weight: inherit;
 }
 
 .portfolio-fn-spacer {
@@ -797,21 +804,35 @@ table {
 
 .portfolio-fn-title .name {
   font-weight: 400;
-  font-size: 12px;
+  font-size: 11px;
+  font-style: italic;
   color: var(--ink);
+}
+
+.portfolio-row-fn .meta,
+.portfolio-row-fn .jira-cell,
+.portfolio-row-fn .eta-final,
+.portfolio-row-fn .team-chip,
+.portfolio-row-fn .team-chip-text,
+.portfolio-row-fn .size-badge,
+.portfolio-row-fn .metric-num {
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 400;
 }
 
 .portfolio-row-fn .status-pill {
   display: inline-block;
   max-width: 100%;
-  height: 21px;
+  height: 19px;
   margin: 0;
-  padding: 0 8px;
+  padding: 0 7px;
   border: 1px solid transparent;
   border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 19px;
+  font-size: 10px;
+  font-weight: 500;
+  font-style: italic;
+  line-height: 17px;
   box-sizing: border-box;
   white-space: nowrap;
   overflow: hidden;
