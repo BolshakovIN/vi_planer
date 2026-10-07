@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 08.10.2026, 00:43 GMT+3
+Сгенерировано: 08.10.2026, 01:10 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `d808360` | 2026-10-08 | ivanbolsakov | Add Gantt scale/depth/nesting controls and move plan start to schedule tabs. |
+| `b0dca61` | 2026-10-08 | ivanbolsakov | Publish Гантт rename to GitHub Pages. |
 | `4b5eded` | 2026-10-08 | ivanbolsakov | Rename Gantt tab label to Гантт. |
 | `68ff57e` | 2026-10-08 | ivanbolsakov | Publish Registry polish and queues removal to GitHub Pages. |
 | `e4bea62` | 2026-10-08 | ivanbolsakov | Polish Registry finance/schedule columns and remove Очередь команд. |
@@ -439,8 +441,10 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `4b5eded` | 2026-10-08 | ivanbolsakov | HEAD -> master | Rename Gantt tab label to Гантт. |
-| `68ff57e` | 2026-10-08 | ivanbolsakov | origin/master | Publish Registry polish and queues removal to GitHub Pages. |
+| `d808360` | 2026-10-08 | ivanbolsakov | HEAD -> master | Add Gantt scale/depth/nesting controls and move plan start to schedule tabs. |
+| `b0dca61` | 2026-10-08 | ivanbolsakov | origin/master | Publish Гантт rename to GitHub Pages. |
+| `4b5eded` | 2026-10-08 | ivanbolsakov |  | Rename Gantt tab label to Гантт. |
+| `68ff57e` | 2026-10-08 | ivanbolsakov |  | Publish Registry polish and queues removal to GitHub Pages. |
 | `e4bea62` | 2026-10-08 | ivanbolsakov |  | Polish Registry finance/schedule columns and remove Очередь команд. |
 | `a5116cd` | 2026-10-07 | ivanbolsakov |  | Publish Registry empty-project functionality count fix to GitHub Pages. |
 | `6d54c07` | 2026-10-07 | ivanbolsakov |  | Exclude project-card stubs from Registry functionality counts. |
