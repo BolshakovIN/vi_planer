@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 08.10.2026, 00:38 GMT+3
+Сгенерировано: 08.10.2026, 00:43 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `4b5eded` | 2026-10-08 | ivanbolsakov | Rename Gantt tab label to Гантт. |
+| `68ff57e` | 2026-10-08 | ivanbolsakov | Publish Registry polish and queues removal to GitHub Pages. |
 | `e4bea62` | 2026-10-08 | ivanbolsakov | Polish Registry finance/schedule columns and remove Очередь команд. |
 | `a5116cd` | 2026-10-07 | ivanbolsakov | Publish Registry empty-project functionality count fix to GitHub Pages. |
 | `6d54c07` | 2026-10-07 | ivanbolsakov | Exclude project-card stubs from Registry functionality counts. |
@@ -437,8 +439,10 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `e4bea62` | 2026-10-08 | ivanbolsakov | HEAD -> master | Polish Registry finance/schedule columns and remove Очередь команд. |
-| `a5116cd` | 2026-10-07 | ivanbolsakov | origin/master | Publish Registry empty-project functionality count fix to GitHub Pages. |
+| `4b5eded` | 2026-10-08 | ivanbolsakov | HEAD -> master | Rename Gantt tab label to Гантт. |
+| `68ff57e` | 2026-10-08 | ivanbolsakov | origin/master | Publish Registry polish and queues removal to GitHub Pages. |
+| `e4bea62` | 2026-10-08 | ivanbolsakov |  | Polish Registry finance/schedule columns and remove Очередь команд. |
+| `a5116cd` | 2026-10-07 | ivanbolsakov |  | Publish Registry empty-project functionality count fix to GitHub Pages. |
 | `6d54c07` | 2026-10-07 | ivanbolsakov |  | Exclude project-card stubs from Registry functionality counts. |
 | `9ef1dac` | 2026-10-07 | ivanbolsakov |  | Publish Gantt tab order and Registry ЧП/ROI sort to GitHub Pages. |
 | `9f4efe2` | 2026-10-07 | ivanbolsakov |  | Move Gantt to second tab and enable Registry ЧП/ROI column sort. |
