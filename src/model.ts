@@ -1356,10 +1356,31 @@ export function resolveLeadTeamIds(
   return person?.teamIds?.length ? [...person.teamIds] : [];
 }
 
+/** Canonical PM/PMO person in the seeded roster (OMS · архитектура). */
+export const SEED_PM_PMO_NAME = "Белов Дмитрий";
+
+function normPersonName(name: string): string {
+  return String(name ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+/** Find roster / assignment person by ФИО (case-insensitive, collapsed spaces). */
+export function findAppPersonByName(
+  people: readonly AppPerson[],
+  name: string
+): AppPerson | undefined {
+  const needle = normPersonName(name);
+  if (!needle) return undefined;
+  return people.find((p) => normPersonName(p.name) === needle);
+}
+
 /**
  * Seed a few demo app-role rows when none are stored yet:
- * first roster person → PM/PMO; first seat on each other team → Тимлид;
- * two more people → Сотрудник (rest default to Сотрудник without rows).
+ * Белов Дмитрий (OMS · архитектура) → PM/PMO when present, else first roster
+ * person; first unused seat on early teams → Тимлид; two more → Сотрудник
+ * (rest default to Сотрудник without rows).
  */
 export function seedRoleAssignments(
   teams: readonly Team[]
@@ -1368,13 +1389,14 @@ export function seedRoleAssignments(
   if (!people.length) return [];
   const used = new Set<string>();
   const out: AppRoleAssignment[] = [];
-  const first = people[0]!;
+  const pm =
+    findAppPersonByName(people, SEED_PM_PMO_NAME) ?? people[0]!;
   out.push({
-    personId: first.id,
-    personName: first.name,
+    personId: pm.id,
+    personName: pm.name,
     role: "pm_pmo",
   });
-  used.add(first.id);
+  used.add(pm.id);
   for (const team of teams) {
     const seat = (team.members ?? []).find((m) => !used.has(m.id));
     if (!seat) continue;
@@ -1400,6 +1422,33 @@ export function seedRoleAssignments(
     if (employees >= 2) break;
   }
   return out;
+}
+
+/**
+ * Keep Белов Дмитрий as PM/PMO when present in the roster or assignment list.
+ * Upserts only his row (clears teamIds); does not wipe other assignments.
+ */
+export function ensureRoleAssignments(
+  teams: readonly Team[],
+  assignments: readonly AppRoleAssignment[] | undefined
+): AppRoleAssignment[] {
+  const list = [...(assignments ?? [])];
+  const people = collectAppPeople(teams, list);
+  const belov = findAppPersonByName(people, SEED_PM_PMO_NAME);
+  if (!belov) return list;
+  const prev = findRoleAssignment(list, belov.id);
+  if (
+    prev?.role === "pm_pmo" &&
+    !(prev.teamIds?.length) &&
+    prev.personName === belov.name
+  ) {
+    return list;
+  }
+  return upsertRoleAssignment(list, {
+    personId: belov.id,
+    personName: belov.name,
+    role: "pm_pmo",
+  });
 }
 
 export function canApp(
@@ -3110,7 +3159,10 @@ export function normalizeState(raw: unknown): AppState | null {
       if (!("roleAssignments" in data)) {
         return seedRoleAssignments(teams);
       }
-      return parseRoleAssignments(data.roleAssignments);
+      return ensureRoleAssignments(
+        teams,
+        parseRoleAssignments(data.roleAssignments)
+      );
     })(),
     deletedItemIds: parseIdList(data.deletedItemIds),
     deletedProjectKeys: parseIdList(data.deletedProjectKeys),
