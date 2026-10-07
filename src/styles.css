@@ -76,9 +76,11 @@ textarea {
 }
 
 .app-shell {
-  max-width: 1400px;
-  margin: 0 auto;
+  max-width: none;
+  width: 100%;
+  margin: 0;
   padding: 12px 20px 48px;
+  box-sizing: border-box;
 }
 
 .topbar {
@@ -205,10 +207,12 @@ textarea {
 .top-actions .sync-badge {
   flex: 0 1 auto;
   white-space: nowrap;
-  font-size: clamp(10px, 1.05vw, 13px);
-  padding: clamp(4px, 0.55vw, 8px) clamp(8px, 0.95vw, 14px);
+  font-size: clamp(10px, 1vw, 12px);
+  padding: 2px 10px;
   border-radius: var(--pill-radius);
-  line-height: 1.2;
+  line-height: 1.15;
+  min-height: 0;
+  height: auto;
 }
 
 .sync-badge {
@@ -636,6 +640,34 @@ table {
   vertical-align: middle;
 }
 
+/* Единый кегль колонок правее «Проект» — как у команд (11px). */
+.portfolio-table th[data-col]:not([data-col="priority"]):not([data-col="title"]),
+.portfolio-table th[data-col]:not([data-col="priority"]):not([data-col="title"]) .th-label,
+.portfolio-table td[data-col]:not([data-col="priority"]):not([data-col="title"]),
+.portfolio-table
+  td[data-col]:not([data-col="priority"]):not([data-col="title"])
+  :is(
+    .eta-final,
+    .metric-num,
+    .meta,
+    .status-select,
+    .status-pill,
+    .team-chip,
+    .team-chip-text,
+    .size-badge,
+    .muted-inline,
+    .jira-cell
+  ) {
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.portfolio-table
+  td[data-col]:not([data-col="priority"]):not([data-col="title"])
+  :is(.eta-final, .metric-num, .status-select, .status-pill) {
+  font-weight: 500;
+}
+
 .portfolio-table .prio-input,
 .portfolio-table .prio-num {
   height: 28px;
@@ -828,21 +860,24 @@ table {
 .portfolio-teams-preview {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0;
   min-width: 0;
   flex: 1 1 auto;
+  width: 100%;
   overflow: hidden;
 }
 
 .portfolio-teams-preview .team-chip {
   min-width: 0;
   flex: 1 1 auto;
+  width: 100%;
 }
 
 .portfolio-teams-more {
   flex: 0 0 auto;
-  font-size: 11px;
-  font-weight: 600;
+  margin-left: 4px;
+  font-size: 10px;
+  font-weight: 500;
   color: var(--muted);
   line-height: 1;
 }
@@ -871,7 +906,7 @@ table {
 }
 
 .portfolio-teams:not([open]) {
-  max-height: 22px;
+  max-height: 28px;
   overflow: hidden;
 }
 
@@ -1008,6 +1043,20 @@ td.finance-cell {
   vertical-align: middle !important;
 }
 
+.finance-horizon {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+.finance-horizon .meta {
+  margin-right: 4px;
+  font-size: 10px;
+}
+
 .portfolio-table thead th.prio-cell {
   text-align: center;
 }
@@ -1096,20 +1145,35 @@ th.sortable.sorted {
 .team-chip {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   font-size: 11px;
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
 }
 
+.team-chip-with-est {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 1px 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  gap: 8px;
+}
+
 .team-chip-name {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  flex: 1 1 auto;
 }
 
 .team-chip-text {
@@ -1118,14 +1182,31 @@ th.sortable.sorted {
   white-space: nowrap;
   min-width: 0;
   flex: 1 1 0;
+  font-weight: 500;
+  color: var(--ink);
 }
 
 .team-chip-estimate {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
   flex-shrink: 0;
-  padding-left: 12px;
+  margin-left: auto;
+  min-width: 5.5rem;
+  padding-left: 6px;
+  border-left: none;
+  line-height: 1;
+  text-align: right;
+}
+
+.team-chip-est-text {
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.25;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .team-chip .team-dot,
@@ -1142,6 +1223,26 @@ th.sortable.sorted {
 .muted-inline {
   color: var(--muted);
   font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.teams-cell {
+  text-align: left;
+}
+
+.teams-cell .portfolio-teams,
+.teams-cell .portfolio-teams.is-single,
+.teams-cell .portfolio-teams-sum,
+.teams-cell .portfolio-teams-preview,
+.teams-cell .teams-stack,
+.teams-cell .portfolio-teams-full {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.teams-cell .team-chip-with-est {
+  width: 100%;
 }
 
 .team-assign-list {
@@ -3378,13 +3479,15 @@ button.cap-cell:last-child {
 }
 
 .page-foot {
-  max-width: 1400px;
-  margin: 0 auto;
+  max-width: none;
+  width: 100%;
+  margin: 0;
   padding: 8px 20px 28px;
   display: flex;
   justify-content: flex-end;
   gap: 16px;
   flex-wrap: wrap;
+  box-sizing: border-box;
 }
 
 .req-dl-btn {

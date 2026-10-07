@@ -1030,10 +1030,25 @@ export interface WorkItem {
    * Drives queue order and Gantt dependencies. null only before ensureUniquePriorities.
    */
   manualRank: number | null;
-  /** Чистая прибыль (ЧП) за 12 мес., млрд ₽; null = не задано */
+  /** Чистая прибыль (ЧП) за 12 мес., тыс. руб; null = не задано */
   cashFlow12m: number | null;
+  /** Чистая прибыль (ЧП) за 24 мес., тыс. руб; null = не задано */
+  cashFlow24m: number | null;
   /** ROI за 12 мес., % (15 = 15%); null = не задано */
   roi12m: number | null;
+  /** ROI за 24 мес., %; null = не задано */
+  roi24m: number | null;
+  /** Срок окупаемости, мес.; null = не задано (из «влияния» / Jira later) */
+  paybackMonths: number | null;
+  /**
+   * Дата начала — Jira created (ISO YYYY-MM-DD). Sync fills later; absent/null = «—».
+   */
+  startDate?: string | null;
+  /**
+   * Дата завершения базовая — first-set baseline finish (ISO YYYY-MM-DD).
+   * With startDate drives «Срок реализации базовый».
+   */
+  baselineFinishDate?: string | null;
   /** Потребность: «Отправлено» after submit. Absent = черновик. */
   demandStatus?: DemandStatus;
   /**
@@ -1136,6 +1151,11 @@ export interface AppState {
    * After `"v1"`, missing members stay empty — never re-seed on load.
    */
   teamRosterSeeded?: string;
+  /**
+   * After `"tys"`, cashFlow* values are тыс. руб (not legacy млрд).
+   * Prevents re-multiplying on every normalize.
+   */
+  cashFlowUnit?: "tys";
   /**
    * Work-item ids the user deleted. Seed merge must not resurrect these
    * (x001–x063 or later user-created ids).
@@ -1437,6 +1457,7 @@ export function mergeLiveV2States(local: AppState, remote: AppState): AppState {
       ),
       clearedDemandTeams: local.clearedDemandTeams ?? remote.clearedDemandTeams,
       teamRosterSeeded: local.teamRosterSeeded ?? remote.teamRosterSeeded,
+      cashFlowUnit: local.cashFlowUnit ?? remote.cashFlowUnit,
       portfolioPack: local.portfolioPack ?? remote.portfolioPack,
       savedAt: pickLaterSavedAt(local.savedAt, remote.savedAt),
     };
@@ -1480,6 +1501,7 @@ export function mergeLiveV2States(local: AppState, remote: AppState): AppState {
     ),
     clearedDemandTeams: remote.clearedDemandTeams ?? local.clearedDemandTeams,
     teamRosterSeeded: remote.teamRosterSeeded ?? local.teamRosterSeeded,
+    cashFlowUnit: remote.cashFlowUnit ?? local.cashFlowUnit,
     portfolioPack: remote.portfolioPack ?? local.portfolioPack,
     savedAt: pickLaterSavedAt(local.savedAt, remote.savedAt),
   };
@@ -1745,15 +1767,48 @@ export function optionalRubFromRaw(raw: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Optional ISO calendar date (YYYY-MM-DD); missing / invalid → null. */
+export function parseOptionalIsoDate(raw: unknown): string | null {
+  if (raw == null || raw === "") return null;
+  const s = String(raw).trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const t = new Date(s + "T12:00:00").getTime();
+  return Number.isFinite(t) ? s : null;
+}
+
 /**
- * Legacy ЧП was stored as full ₽ (demo values in the millions). Values ≥ 1000
- * are remapped to млрд ₽ on the same demo scale (÷10⁷ → e.g. 12.4M → 1.2).
+ * Срок реализации базовый: calendar days between дата начала and
+ * дата завершения базовая. null if either side is missing.
  */
-export function migrateCashFlowToMlrd(n: number): number {
+export function baselineDurationDays(
+  startDate: string | null | undefined,
+  baselineFinishDate: string | null | undefined
+): number | null {
+  const start = parseOptionalIsoDate(startDate);
+  const finish = parseOptionalIsoDate(baselineFinishDate);
+  if (!start || !finish) return null;
+  const ms =
+    new Date(finish + "T12:00:00").getTime() -
+    new Date(start + "T12:00:00").getTime();
+  return Math.round(ms / 86_400_000);
+}
+
+/**
+ * Migrate ЧП into тыс. руб (stored unit after cashFlowUnit === "tys").
+ * - |n| ≥ 1000: legacy full ₽ → ÷1000 (e.g. 12_400_000 → 12_400)
+ * - else: legacy млрд → ×1_000_000 (e.g. 1.2 → 1_200_000)
+ * Call only when AppState.cashFlowUnit is not yet `"tys"`.
+ */
+export function migrateCashFlowToTys(n: number): number {
   if (Math.abs(n) >= 1000) {
-    return Math.round((n / 10_000_000) * 10) / 10;
+    return Math.round(n / 1000);
   }
-  return n;
+  return Math.round(n * 1_000_000 * 10) / 10;
+}
+
+/** @deprecated Use migrateCashFlowToTys; kept for any external imports. */
+export function migrateCashFlowToMlrd(n: number): number {
+  return migrateCashFlowToTys(n);
 }
 
 /**
@@ -1795,6 +1850,27 @@ export function assignmentFinishDate(
   return trackFinishDate(a.workStartDate || planStart, days);
 }
 
+/** Earliest planned start among a team assignment’s role/team tracks. */
+export function assignmentStartDate(
+  a: TeamAssignment,
+  planStart: string,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): string | undefined {
+  if (a.roles?.length) {
+    let earliest: string | undefined;
+    for (const role of a.roles) {
+      const days = rolePlanDays(role, ranges);
+      if (days <= 0 && !role.workStartDate && !a.workStartDate) continue;
+      const start = role.workStartDate || a.workStartDate || planStart;
+      if (!earliest || start < earliest) earliest = start;
+    }
+    return earliest;
+  }
+  const days = assignmentPlanDays(a, ranges);
+  if (!a.workStartDate && days <= 0) return undefined;
+  return a.workStartDate || planStart;
+}
+
 /** Latest finish among a functionality’s team/role tracks. */
 export function itemFinishDate(
   item: WorkItem,
@@ -1807,6 +1883,20 @@ export function itemFinishDate(
     if (end && (!latest || end > latest)) latest = end;
   }
   return latest;
+}
+
+/** Earliest start among a functionality’s team/role tracks (same source as finish). */
+export function itemStartDate(
+  item: WorkItem,
+  planStart: string,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): string | undefined {
+  let earliest: string | undefined;
+  for (const a of item.assignments) {
+    const start = assignmentStartDate(a, planStart, ranges);
+    if (start && (!earliest || start < earliest)) earliest = start;
+  }
+  return earliest;
 }
 
 /**
@@ -1824,6 +1914,23 @@ export function projectFinishDate(
     if (end && (!latest || end > latest)) latest = end;
   }
   return latest;
+}
+
+/**
+ * Реестр «Дата начала»: min start date of planned role/team bars — same
+ * schedule source as {@link projectFinishDate}.
+ */
+export function projectScheduleStartDate(
+  items: WorkItem[],
+  planStart: string,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): string | undefined {
+  let earliest: string | undefined;
+  for (const item of items) {
+    const start = itemStartDate(item, planStart, ranges);
+    if (start && (!earliest || start < earliest)) earliest = start;
+  }
+  return earliest;
 }
 
 /** Calendar days for one assignment: sum of roles, else `days` or t-shirt midpoint. */
@@ -2614,16 +2721,23 @@ export function normalizeState(raw: unknown): AppState | null {
         r.manualRank == null || r.manualRank === ""
           ? null
           : Number(r.manualRank),
-      cashFlow12m: (() => {
-        const raw = optionalRubFromRaw(
-          r.cashFlow12m ?? r.chpRub ?? r.chp
-        );
-        return raw == null ? null : migrateCashFlowToMlrd(raw);
-      })(),
+      cashFlow12m: optionalRubFromRaw(r.cashFlow12m ?? r.chpRub ?? r.chp),
+      cashFlow24m: optionalRubFromRaw(r.cashFlow24m ?? r.chp24m),
       roi12m: (() => {
         const raw = optionalRubFromRaw(r.roi12m ?? r.roiRub ?? r.roi);
         return raw == null ? null : migrateRoiToPercent(raw);
       })(),
+      roi24m: (() => {
+        const raw = optionalRubFromRaw(r.roi24m);
+        return raw == null ? null : migrateRoiToPercent(raw);
+      })(),
+      paybackMonths: optionalRubFromRaw(
+        r.paybackMonths ?? r.payback ?? r.okupaemost
+      ),
+      startDate: parseOptionalIsoDate(r.startDate ?? r.createdAt),
+      baselineFinishDate: parseOptionalIsoDate(
+        r.baselineFinishDate ?? r.baselineFinish
+      ),
       ...(parseDemandStatus(r.demandStatus) === "submitted"
         ? { demandStatus: "submitted" as const }
         : {}),
@@ -2631,8 +2745,23 @@ export function normalizeState(raw: unknown): AppState | null {
     };
   });
 
+  const alreadyTys = data.cashFlowUnit === "tys";
+  const migratedItems = alreadyTys
+    ? items
+    : items.map((item) => ({
+        ...item,
+        cashFlow12m:
+          item.cashFlow12m == null
+            ? null
+            : migrateCashFlowToTys(item.cashFlow12m),
+        cashFlow24m:
+          item.cashFlow24m == null
+            ? null
+            : migrateCashFlowToTys(item.cashFlow24m),
+      }));
+
   const parsedRanges = normalizeSizeRanges(data.sizeRanges);
-  const filledItems = items.map((item) => ({
+  const filledItems = migratedItems.map((item) => ({
     ...item,
     assignments: item.assignments.map((a) => {
       const team = teams.find((t) => t.id === a.teamId);
@@ -2662,17 +2791,23 @@ export function normalizeState(raw: unknown): AppState | null {
     ]);
   }
 
-  customers = uniqCatalogNames([...customers, ...items.map((i) => i.owner)]);
-  executors = uniqCatalogNames([...executors, ...items.map((i) => i.assignee)]);
+  customers = uniqCatalogNames([
+    ...customers,
+    ...migratedItems.map((i) => i.owner),
+  ]);
+  executors = uniqCatalogNames([
+    ...executors,
+    ...migratedItems.map((i) => i.assignee),
+  ]);
   projects = uniqCatalogNames([
     ...projects,
-    ...items
+    ...migratedItems
       .filter((i) => i.type === "project")
       .map((i) => containerNameFromBacklog(i.backlog)),
   ]);
   products = uniqCatalogNames([
     ...products,
-    ...items
+    ...migratedItems
       .filter((i) => i.type === "product")
       .map((i) => containerNameFromBacklog(i.backlog)),
   ]);
@@ -2702,6 +2837,7 @@ export function normalizeState(raw: unknown): AppState | null {
       data.teamRosterSeeded != null && String(data.teamRosterSeeded).trim()
         ? String(data.teamRosterSeeded).trim()
         : undefined,
+    cashFlowUnit: "tys",
     deletedItemIds: parseIdList(data.deletedItemIds),
     deletedProjectKeys: parseIdList(data.deletedProjectKeys),
     savedAt:

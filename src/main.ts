@@ -52,7 +52,10 @@ import {
   assignmentPlanDays,
   assignmentPlanWeeks,
   itemFinishDate,
+  itemStartDate,
   projectFinishDate,
+  projectScheduleStartDate,
+  baselineDurationDays,
   totalEstimateDays,
   uniqCatalogNames,
   containerNameFromBacklog,
@@ -118,13 +121,12 @@ type Tab =
   | "demand"
   | "planning"
   | "timeline"
-  | "queuesTest"
   | "demoA"
   | "demoB"
   | "capacity"
   | "changelog"
   | "settings";
-type SortKey = "priority" | "estimate" | "eta" | "cashFlow" | "roi";
+type SortKey = "priority" | "eta" | "cashFlow" | "roi";
 type SortDir = "asc" | "desc";
 type GanttBarDragMode = "move" | "resize-left" | "resize-right";
 
@@ -133,7 +135,6 @@ const TAB_LABELS: Record<Tab, string> = {
   timeline: "Гант",
   demand: "Потребность",
   planning: "Планирование",
-  queuesTest: "Очередь команд",
   demoA: "Мониторинг",
   demoB: "Мониторинг",
   capacity: "Команды",
@@ -163,8 +164,6 @@ const TAB_ICON_SVG: Record<Tab, string> = {
     '<rect x="2.2" y="2.4" width="11.6" height="8.1" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.6 10.5v2.2h2.8v-2.2M5.2 13.2h5.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
   demoB:
     '<rect x="2.2" y="2.4" width="11.6" height="8.1" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.6 10.5v2.2h2.8v-2.2M5.2 13.2h5.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
-  queuesTest:
-    '<circle cx="3.4" cy="7.2" r="1.35"/><circle cx="8" cy="7.2" r="1.35"/><circle cx="12.6" cy="7.2" r="1.35"/><path d="M2.2 11.1h11.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
   capacity:
     '<circle cx="6.1" cy="5.1" r="2"/><path d="M2.6 12.4c.2-2.5 1.6-3.6 3.5-3.6s3.3 1.1 3.5 3.6"/><circle cx="11.1" cy="5.6" r="1.55"/><path d="M9.3 12.4c.15-1.7 1.1-2.5 2.2-2.5 1.15 0 2.05.8 2.2 2.5"/>',
   changelog:
@@ -187,9 +186,9 @@ function tabButtonHtml(id: Tab, extraClass = ""): string {
   return `<button type="button" class="${cls}" data-tab="${id}">${tabIconHtml(id, quiet)}${escapeHtml(TAB_LABELS[id])}</button>`;
 }
 
-/** Legacy deep-link / tab ids: `teams` → Очередь команд; `jiraApi` → Настройки. */
+/** Legacy deep-link / tab ids: `teams`/`queuesTest` → Реестр; `jiraApi` → Настройки. */
 function normalizeTab(tab: string | undefined | null): Tab {
-  if (tab === "teams") return "queuesTest";
+  if (tab === "teams" || tab === "queuesTest") return "portfolio";
   if (tab === "roles") return "capacity";
   if (tab === "projects") return "portfolio";
   if (tab === "jiraApi") return "settings";
@@ -198,7 +197,6 @@ function normalizeTab(tab: string | undefined | null): Tab {
     tab === "demand" ||
     tab === "planning" ||
     tab === "timeline" ||
-    tab === "queuesTest" ||
     tab === "demoA" ||
     tab === "demoB" ||
     tab === "capacity" ||
@@ -247,6 +245,9 @@ function ensureVisibleTab() {
   if (ui.tab === "demoB") ui.tab = "portfolio";
   if ((ui.tab as string) === "roles") ui.tab = "capacity";
   if ((ui.tab as string) === "jiraApi") ui.tab = "settings";
+  if ((ui.tab as string) === "queuesTest" || (ui.tab as string) === "teams") {
+    ui.tab = "portfolio";
+  }
   if (!canAccessTab(ui.tab)) {
     const fallback: Tab[] = [
       "portfolio",
@@ -254,7 +255,6 @@ function ensureVisibleTab() {
       "demand",
       "planning",
       "demoA",
-      "queuesTest",
       "capacity",
       "changelog",
       "settings",
@@ -568,35 +568,6 @@ function syncDemandRolesToTeam(team: Team) {
   }));
 }
 
-function teamLoadStripHtml(
-  team: Team,
-  loadWeeks: TeamLoadWeek[],
-  overflowWeeks: Set<number>,
-  horizonWeeks: number
-): string {
-  const weekPct = 100 / horizonWeeks;
-  const cap = SCHEDULE_CAPACITY_PW;
-  const cells = Array.from({ length: horizonWeeks }, (_, w) => {
-    const lw = loadWeeks[w];
-    const used = lw?.usedPw ?? 0;
-    const pct = utilizationPct(used, cap);
-    const isOverflow =
-      overflowWeeks.has(w) || (lw != null && isTeamWeekOverloaded(lw));
-    const cls = [
-      "cap-cell",
-      isOverflow ? "cap-cell-overflow" : pct >= 99 ? "cap-cell-full" : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-    if (isOverflow) {
-      return `<button type="button" class="${cls}" style="width:${weekPct}%" data-overload-team="${escapeAttr(team.id)}" data-overload-week="${w}" aria-label="Перегруз Н${w + 1}: расшифровка"><span style="height:${Math.min(100, pct)}%"></span></button>`;
-    }
-    const title = `Н${w + 1}: ${used.toFixed(1)} чел·нед`;
-    return `<div class="${cls}" style="width:${weekPct}%" title="${escapeAttr(title)}"><span style="height:${Math.min(100, pct)}%"></span></div>`;
-  }).join("");
-  return `<div class="cap-strip" style="--team-color:${team.color}">${cells}</div>`;
-}
-
 function statusLabel(s: ItemStatus): string {
   const map: Record<ItemStatus, string> = {
     staffing: "Комплектуется",
@@ -643,27 +614,45 @@ function teamsLabel(item: WorkItem): string {
     .join(", ");
 }
 
-function teamChipHtml(teamId: string): string {
-  const t = teamById(teamId);
-  const name = t?.name ?? teamId;
-  return `<span class="team-chip" title="${escapeAttr(name)}"><span class="team-chip-name"><span class="team-dot" style="background:${t?.color ?? "#94a3b8"}"></span><span class="team-chip-text">${escapeHtml(name)}</span></span></span>`;
+/** Team chip with size estimate for Реестр. `moreCount` — свёрнутый «+N» у правого края. */
+function teamChipWithEstimateHtml(
+  a: TeamAssignment,
+  moreCount = 0
+): string {
+  const t = teamById(a.teamId);
+  const name = t?.name ?? a.teamId;
+  const size = a.size;
+  const weeks = assignmentPlanWeeks(a, szRanges());
+  const tip = `${name} · ${size} · ~${weeks} чел·нед`;
+  const more =
+    moreCount > 0
+      ? `<span class="portfolio-teams-more">+${moreCount}</span>`
+      : "";
+  return `<span class="team-chip team-chip-with-est" title="${escapeAttr(tip)}">
+    <span class="team-chip-name">
+      <span class="team-dot" style="background:${t?.color ?? "#94a3b8"}"></span>
+      <span class="team-chip-text">${escapeHtml(name)}</span>
+    </span>
+    <span class="team-chip-estimate">
+      <span class="team-chip-est-text">(${escapeHtml(size)} · ~${weeks}н)</span>${more}
+    </span>
+  </span>`;
 }
 
-/** Compact teams list for Реестр: one line + expand, so the row stays short. */
+/** Compact teams + estimates for Реестр: one line + expand. */
 function teamsCellHtml(item: WorkItem): string {
-  const ids = item.assignments.map((a) => a.teamId);
-  if (!ids.length) return `<span class="muted">—</span>`;
-  if (ids.length === 1) {
-    return `<div class="portfolio-teams is-single">${teamChipHtml(ids[0])}</div>`;
+  const assigns = item.assignments;
+  if (!assigns.length) return `<span class="muted">—</span>`;
+  if (assigns.length === 1) {
+    return `<div class="portfolio-teams is-single">${teamChipWithEstimateHtml(assigns[0]!)}</div>`;
   }
-  const rest = ids.length - 1;
-  const full = ids.map(teamChipHtml).join("");
+  const rest = assigns.length - 1;
+  const full = assigns.map((a) => teamChipWithEstimateHtml(a)).join("");
   return `
     <details class="portfolio-teams" data-stop-edit>
-      <summary class="portfolio-teams-sum" data-stop-edit title="Показать все команды">
+      <summary class="portfolio-teams-sum" data-stop-edit title="Показать все команды и оценки">
         <span class="portfolio-teams-preview">
-          ${teamChipHtml(ids[0])}
-          <span class="portfolio-teams-more">+${rest}</span>
+          ${teamChipWithEstimateHtml(assigns[0]!, rest)}
         </span>
         <span class="portfolio-teams-collapse">Свернуть</span>
       </summary>
@@ -698,11 +687,7 @@ function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
   const dir = ui.sortDir === "asc" ? 1 : -1;
   return [...filtered].sort((a, b) => {
     let cmp = 0;
-    if (ui.sortKey === "estimate") {
-      cmp =
-        (totalEstimateWeeks(a, szRanges()) - totalEstimateWeeks(b, szRanges())) *
-        dir;
-    } else if (ui.sortKey === "cashFlow") {
+    if (ui.sortKey === "cashFlow") {
       cmp = compareNullableNum(a.cashFlow12m, b.cashFlow12m, dir);
     } else if (ui.sortKey === "roi") {
       cmp = compareNullableNum(a.roi12m, b.roi12m, dir);
@@ -736,8 +721,10 @@ type PortfolioCol =
   | "status"
   | "cashFlow"
   | "roi"
-  | "estimate"
-  | "eta";
+  | "payback"
+  | "startDate"
+  | "eta"
+  | "baselineDuration";
 
 type HideablePortfolioCol = Exclude<PortfolioCol, "priority" | "title">;
 
@@ -747,8 +734,10 @@ const HIDEABLE_PORTFOLIO_COLS: HideablePortfolioCol[] = [
   "status",
   "cashFlow",
   "roi",
-  "estimate",
+  "payback",
+  "startDate",
   "eta",
+  "baselineDuration",
 ];
 
 const ALL_PORTFOLIO_COLS: PortfolioCol[] = [
@@ -759,20 +748,24 @@ const ALL_PORTFOLIO_COLS: PortfolioCol[] = [
   "status",
   "cashFlow",
   "roi",
-  "estimate",
+  "payback",
+  "startDate",
   "eta",
+  "baselineDuration",
 ];
 
 const PORTFOLIO_COL_LABELS: Record<PortfolioCol, string> = {
   priority: "Приоритет",
   title: "Проект",
   jira: "Jira",
-  teams: "Команды",
+  teams: "Команды и оценки",
   status: "Статус",
-  cashFlow: "ЧП, млрд ₽",
-  roi: "ROI, %",
-  estimate: "Маечная оценка",
+  cashFlow: "ЧП, тыс. руб, 12 мес",
+  roi: "ROI, %, 12 мес",
+  payback: "Срок окупаемости",
+  startDate: "Дата начала",
   eta: "Дата завершения",
+  baselineDuration: "Срок реализации",
 };
 
 /** Narrow metric cols; keep finance compact so the table does not explode horizontally. */
@@ -780,18 +773,22 @@ const PORTFOLIO_COL_DEFAULTS: Record<PortfolioCol, number> = {
   priority: 96,
   title: 280,
   jira: 88,
-  teams: 220,
+  teams: 260,
   status: 130,
-  cashFlow: 84,
-  roi: 76,
-  estimate: 120,
+  cashFlow: 110,
+  roi: 96,
+  payback: 110,
+  startDate: 120,
   eta: 168,
+  baselineDuration: 120,
 };
 
 /** Labels used only for min-width measurement (stacked unit lines must not widen cols). */
 const PORTFOLIO_COL_MEASURE_LABELS: Partial<Record<PortfolioCol, string>> = {
-  cashFlow: "ЧП",
+  cashFlow: "ЧП, тыс. руб",
   roi: "ROI, %",
+  payback: "Окупаемость",
+  baselineDuration: "Срок баз.",
 };
 
 function loadColWidths(): Partial<Record<PortfolioCol, number>> {
@@ -802,10 +799,10 @@ function loadColWidths(): Partial<Record<PortfolioCol, number>> {
     // Drop legacy WSJF / RICE column widths.
     if (parsed.wsjf != null) delete parsed.wsjf;
     if (parsed.rice != null) delete parsed.rice;
-    // Drop exact prior finance defaults (110) from full-₽ era so new narrow defaults apply.
+    // Drop prior finance defaults so 12/24 stacked column widths apply.
     let migrated = false;
     for (const key of ["cashFlow", "roi"] as const) {
-      if (parsed[key] === 110) {
+      if (parsed[key] === 110 || parsed[key] === 84 || parsed[key] === 76) {
         delete parsed[key];
         migrated = true;
       }
@@ -869,7 +866,7 @@ function loadHiddenCols(): HideablePortfolioCol[] {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .filter((c) => c !== "wsjf" && c !== "rice")
+      .filter((c) => c !== "wsjf" && c !== "rice" && c !== "estimate")
       .filter((c): c is HideablePortfolioCol =>
         HIDEABLE_PORTFOLIO_COLS.includes(c as HideablePortfolioCol),
       );
@@ -1033,7 +1030,6 @@ function resizableTh(
 function sortHeader(label: string, key: SortKey, extraClass = ""): string {
   const colMap: Partial<Record<SortKey, PortfolioCol>> = {
     priority: "priority",
-    estimate: "estimate",
     eta: "eta",
     cashFlow: "cashFlow",
     roi: "roi",
@@ -1059,12 +1055,14 @@ function portfolioTheadCellsHtml(): string {
     ${sortHeader("Приоритет", "priority", "prio-cell")}
     ${resizableTh("Проект", "title", "title-cell")}
     ${resizableTh("Jira", "jira", "jira-cell")}
-    ${resizableTh("Команды", "teams")}
+    ${resizableTh("Команды и оценки", "teams")}
     ${resizableTh("Статус", "status", "status-cell")}
-    ${resizableTh("ЧП", "cashFlow", "finance-cell", "cashFlow", "млрд ₽")}
-    ${resizableTh("ROI, %", "roi", "finance-cell", "roi")}
-    ${sortHeader("Маечная оценка", "estimate", "estimate-cell")}
+    ${resizableTh("ЧП, тыс. руб", "cashFlow", "finance-cell", "cashFlow", "12 мес")}
+    ${resizableTh("ROI, %", "roi", "finance-cell", "roi", "12 мес")}
+    ${resizableTh("Срок окупаемости", "payback", "finance-cell")}
+    ${resizableTh("Дата начала", "startDate", "eta-cell")}
     ${sortHeader("Дата завершения", "eta", "eta-cell")}
+    ${resizableTh("Срок реализации", "baselineDuration", "eta-cell", undefined, "дни")}
   `;
 }
 
@@ -1128,7 +1126,7 @@ function toggleSort(key: SortKey) {
     ui.sortDir = ui.sortDir === "asc" ? "desc" : "asc";
   } else {
     ui.sortKey = key;
-    // priority: 1 first; estimate/ETA: smaller/sooner first; ЧП/ROI: larger first
+    // priority: 1 first; ETA: sooner first; ЧП/ROI: larger first
     ui.sortDir =
       key === "cashFlow" || key === "roi" ? "desc" : "asc";
   }
@@ -1202,12 +1200,14 @@ function columnsHelpHtml(): string {
         <div><span class="cols-help-k">Приоритет</span> — сквозной ранг проекта (1…N; 1 = выше). Смена — после подтверждения</div>
         <div><span class="cols-help-k">Проект</span> — клик по названию раскрывает функциональности; по строке — карточка проекта</div>
         <div><span class="cols-help-k">Jira</span> — ключ задачи (пока заглушка)</div>
-        <div><span class="cols-help-k">Команды</span> — первая + «+N»; клик раскрывает список без растягивания строки</div>
+        <div><span class="cols-help-k">Команды и оценки</span> — команда + майка и ~чел·нед; первая + «+N», клик раскрывает список</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
-        <div><span class="cols-help-k">ЧП, млрд ₽</span> — чистая прибыль за 12 мес. (сумма по проекту); клик по заголовку — сортировка</div>
-        <div><span class="cols-help-k">ROI, %</span> — ROI за 12 мес.; клик по заголовку — сортировка</div>
-        <div><span class="cols-help-k">Маечная оценка</span> — XS / S / M / L / XL / XXL (дни в Настройках)</div>
+        <div><span class="cols-help-k">ЧП, тыс. руб, 12 мес</span> — чистая прибыль (сумма по проекту); клик по заголовку — сортировка</div>
+        <div><span class="cols-help-k">ROI, %, 12 мес</span> — ROI; клик по заголовку — сортировка</div>
+        <div><span class="cols-help-k">Срок окупаемости</span> — из вкладки «влияние»; только чтение, мес.</div>
+        <div><span class="cols-help-k">Дата начала</span> — самая ранняя дата среди назначений (как дата завершения, из плана)</div>
         <div><span class="cols-help-k">Дата завершения</span> — самая поздняя дата среди функциональностей и баров ролей</div>
+        <div><span class="cols-help-k">Срок реализации</span> — календарные дни между датой начала и датой завершения; только чтение</div>
       </div>
     </details>
   `;
@@ -1244,7 +1244,7 @@ function compareNullableNum(
   return (a! - b!) * dir;
 }
 
-/** Project ЧП: sum of item cashFlow12m (same as registry cell). */
+/** Project ЧП 12м: sum of item cashFlow12m. */
 function projectCashFlow12m(items: WorkItem[]): number | null {
   const vals = items
     .map((it) => it.cashFlow12m)
@@ -1252,16 +1252,42 @@ function projectCashFlow12m(items: WorkItem[]): number | null {
   return vals.length ? vals.reduce((s, n) => s + n, 0) : null;
 }
 
-/** Project ROI: single shared value, else null (cell shows «—»). */
+/** Project ROI 12м: single shared value, else null (cell shows «—»). */
 function projectRoi12m(items: WorkItem[]): number | null {
   const rois = [
     ...new Set(
       items
         .map((it) => it.roi12m)
-        .filter((n): n is number => n != null && Number.isFinite(n)),
+        .filter((n): n is number => n != null && Number.isFinite(n))
     ),
   ];
   return rois.length === 1 ? rois[0]! : null;
+}
+
+/** Project срок окупаемости: single shared value, else null. */
+function projectPaybackMonths(items: WorkItem[]): number | null {
+  const vals = [
+    ...new Set(
+      items
+        .map((it) => it.paybackMonths)
+        .filter((n): n is number => n != null && Number.isFinite(n))
+    ),
+  ];
+  return vals.length === 1 ? vals[0]! : null;
+}
+
+function formatIsoDateOrDash(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return formatDate(iso);
+}
+
+/** Срок реализации: calendar days between schedule start and finish. */
+function formatDurationDaysCell(
+  start: string | null | undefined,
+  finish: string | null | undefined
+): string {
+  const days = baselineDurationDays(start, finish);
+  return days == null ? "—" : String(days);
 }
 
 function projectPrioMap(): Map<string, number> {
@@ -1330,13 +1356,8 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
       const prio = prioByKey.get(g.key) ?? 1;
       const assigns = uniqueAssignments(g.items);
       const teamItem: WorkItem = { ...g.items[0], assignments: assigns };
-      const total = g.items.reduce(
-        (s, it) => s + totalEstimateWeeks(it, szRanges()),
-        0
-      );
-      const sizes = [...new Set(assigns.map((a) => a.size))].join(" + ");
-      const cash = projectCashFlow12m(g.items);
-      const roi = projectRoi12m(g.items);
+      const cash12 = projectCashFlow12m(g.items);
+      const roi12 = projectRoi12m(g.items);
       const statuses = [...new Set(g.items.map((it) => it.status))];
       const statusVal = statuses.length === 1 ? statuses[0] : "";
       const statusOpts = [
@@ -1349,7 +1370,10 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
         ),
       ].join("");
       const statusClass = statusVal ? `badge-status-${statusVal}` : "";
-      const finish = projectFinishDate(g.items, state.startDate, szRanges());
+      const ranges = szRanges();
+      const startIso =
+        projectScheduleStartDate(g.items, state.startDate, ranges) ?? null;
+      const finish = projectFinishDate(g.items, state.startDate, ranges);
       const finishWait = finish
         ? weekIndex(state.startDate, finish)
         : 0;
@@ -1377,27 +1401,23 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           <td${tdAttrs("status", "status-cell")} data-stop-edit>
             <select class="status-select ${statusClass}" data-project-status="${escapeAttr(g.key)}" data-status-was="${statusVal}" data-stop-edit aria-label="Статус проекта">${statusOpts}</select>
           </td>
-          <td${tdAttrs("cashFlow", "finance-cell mono metric-num")}>${formatMlrd(cash)}</td>
-          <td${tdAttrs("roi", "finance-cell mono metric-num")}>${formatPercent(roi)}</td>
-          <td${tdAttrs("estimate", "estimate-cell mono metric-num")}>
-            <span class="size-badge">${sizes || "—"}</span>
-            <div class="meta">~${total} чел·нед</div>
-          </td>
+          <td${tdAttrs("cashFlow", "finance-cell mono metric-num")}>${formatTys(cash12)}</td>
+          <td${tdAttrs("roi", "finance-cell mono metric-num")}>${formatPercent(roi12)}</td>
+          <td${tdAttrs("payback", "finance-cell mono metric-num")}>${formatPaybackMonths(projectPaybackMonths(g.items))}</td>
+          <td${tdAttrs("startDate", "mono eta-cell")}>${formatIsoDateOrDash(startIso)}</td>
           <td${tdAttrs("eta", `mono eta-cell ${finish && finishWait > 4 ? "eta-late" : "eta-good"}`)}>
             ${finish ? `<span class="eta-final">${formatDate(finish)}</span>` : "—"}
           </td>
+          <td${tdAttrs("baselineDuration", "mono eta-cell")}>${formatDurationDaysCell(startIso, finish)}</td>
         </tr>
       `;
       if (!expanded) return projectRow;
 
-      const childRows = sortByPriority(fnItems, szRanges())
+      const childRows = sortByPriority(fnItems, ranges)
         .map((it) => {
-          const itFinish = itemFinishDate(it, state.startDate, szRanges());
+          const itStart = itemStartDate(it, state.startDate, ranges) ?? null;
+          const itFinish = itemFinishDate(it, state.startDate, ranges);
           const itWait = itFinish ? weekIndex(state.startDate, itFinish) : 0;
-          const itWeeks = totalEstimateWeeks(it, szRanges());
-          const itSizes = [...new Set(it.assignments.map((a) => a.size))].join(
-            " + "
-          );
           return `
         <tr class="portfolio-row-fn" data-fn-parent="${escapeAttr(g.key)}" data-edit="${escapeAttr(it.id)}" title="Открыть функциональность">
           <td${tdAttrs("priority", "prio-cell portfolio-fn-spacer")}></td>
@@ -1409,19 +1429,14 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           <td${tdAttrs("status", "status-cell")}>
             <span class="status-pill badge-status-${it.status}">${statusLabel(it.status)}</span>
           </td>
-          <td${tdAttrs("cashFlow", "finance-cell mono metric-num")}>${formatMlrd(it.cashFlow12m ?? null)}</td>
-          <td${tdAttrs("roi", "finance-cell mono metric-num")}>${
-            it.roi12m != null && Number.isFinite(it.roi12m)
-              ? formatPercent(it.roi12m)
-              : "—"
-          }</td>
-          <td${tdAttrs("estimate", "estimate-cell mono metric-num")}>
-            <span class="size-badge">${itSizes || "—"}</span>
-            <div class="meta">~${itWeeks} чел·нед</div>
-          </td>
+          <td${tdAttrs("cashFlow", "finance-cell mono metric-num")}>${formatTys(it.cashFlow12m)}</td>
+          <td${tdAttrs("roi", "finance-cell mono metric-num")}>${formatPercent(it.roi12m)}</td>
+          <td${tdAttrs("payback", "finance-cell mono metric-num")}>${formatPaybackMonths(it.paybackMonths)}</td>
+          <td${tdAttrs("startDate", "mono eta-cell")}>${formatIsoDateOrDash(itStart)}</td>
           <td${tdAttrs("eta", `mono eta-cell ${itFinish && itWait > 4 ? "eta-late" : "eta-good"}`)}>
             ${itFinish ? `<span class="eta-final">${formatDate(itFinish)}</span>` : "—"}
           </td>
+          <td${tdAttrs("baselineDuration", "mono eta-cell")}>${formatDurationDaysCell(itStart, itFinish)}</td>
         </tr>
       `;
         })
@@ -1489,141 +1504,6 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
           </table>
         </div>
       </div>
-    </div>
-  `;
-}
-
-/** Portfolio priority + when the team can pick up the task */
-function queuesTestHtml(
-  slices: ScheduledSlice[],
-  load: Record<string, TeamLoadWeek[]>,
-  overflowByTeam: Record<string, Set<number>>
-): string {
-  const planStart = state.startDate;
-  const horizon = 12;
-  const mode = activeScheduleMode();
-  const packing = isCapacityScheduleMode(mode);
-  const prioMap = projectPrioMap();
-  const cards = state.teams
-    .map((team) => {
-      const queue = slices
-        .filter((s) => s.teamId === team.id)
-        .sort((a, b) => {
-          const pa = a.item.manualRank ?? 9999;
-          const pb = b.item.manualRank ?? 9999;
-          if (pa !== pb) return pa - pb;
-          return a.effectiveRank - b.effectiveRank;
-        });
-      const demand = queue.reduce((sum, s) => sum + s.estimatePw, 0);
-      const weeksToClear = demand / SCHEDULE_CAPACITY_PW;
-      const freeFrom = queue.length
-        ? queue[queue.length - 1].endDate
-        : planStart;
-
-      const items =
-        queue
-          .map((s, idx) => {
-            const prio =
-              prioMap.get(demandProjectKey(s.item)) ?? s.item.manualRank ?? "—";
-            const blockedBy =
-              idx > 0
-                ? queue[idx - 1]
-                : null;
-            let takeReason = "может взять сразу (очередь свободна)";
-            let takeClass = "take-now";
-            if (s.startDate > s.plannedStartDate) {
-              takeReason =
-                mode === "teamQueue" && blockedBy
-                  ? `ждёт очередь: после #${blockedBy.item.manualRank ?? "?"} «${blockedBy.item.title}»`
-                  : "сдвиг из‑за загрузки очереди";
-              takeClass = "take-queue";
-            } else if (s.startDate > planStart) {
-              takeReason = packing
-                ? `ждёт плановый старт ${formatDate(s.plannedStartDate)}`
-                : `плановый старт ${formatDate(s.plannedStartDate)}`;
-              takeClass = "take-plan";
-            } else if (!packing) {
-              takeReason = "по заданной дате старта (без сдвига очереди)";
-            }
-            const others = s.item.assignments
-              .filter((a) => a.teamId !== team.id)
-              .map((a) => teamById(a.teamId)?.name ?? a.teamId);
-
-            return `
-            <div class="queue-item queue-item-test">
-              <div class="prio-mini prio-mini-lg">${prio}</div>
-              <div class="queue-item-body">
-                <div class="queue-item-title">
-                  <span class="badge badge-${s.item.type}">${s.item.type === "product" ? "П" : "Пр"}</span>
-                  ${escapeHtml(s.item.title)}
-                </div>
-                <div class="take-line ${takeClass}">
-                  <strong>Может взять с ${formatDate(s.startDate)}</strong>
-                  <span class="meta"> · ${escapeHtml(takeReason)}</span>
-                </div>
-                <div class="meta">
-                  ${s.size} (${s.estimatePw} чел·нед) · план ${formatDate(s.plannedStartDate)} · до ${formatDate(s.endDate)}
-                  ${others.length ? ` · ещё: ${others.map(escapeHtml).join(", ")}` : ""}
-                </div>
-                <div class="take-bar" title="Окно работы в горизонте 12 нед.">
-                  <span class="take-bar-fill" style="left:${(s.startWeek / 12) * 100}%;width:${Math.max(3, ((s.endWeek - s.startWeek + 1) / 12) * 100)}%;background:${team.color}"></span>
-                </div>
-              </div>
-              <div class="mono queue-item-dates">
-                <div class="meta">старт</div>
-                <div>${formatDate(s.startDate)}</div>
-                <div class="meta" style="margin-top:6px">конец</div>
-                <div>${formatDate(s.endDate)}</div>
-              </div>
-            </div>
-          `;
-          })
-          .join("") || `<div class="empty">Очередь пуста — команда свободна с ${formatDate(planStart)}</div>`;
-
-      return `
-        <div class="team-card">
-          <div class="team-card-head">
-            <div>
-              <h3><span class="team-dot" style="background:${team.color}"></span>${escapeHtml(team.name)}</h3>
-              <div class="meta">${escapeHtml(teamRosterFactLabel(team))} · спрос ${demand.toFixed(1)} чел·нед · ~${weeksToClear.toFixed(1)} нед. до очистки</div>
-              <div class="take-free">Очередь закрывается / слот после всего: <strong>${formatDate(freeFrom)}</strong></div>
-            </div>
-            <div class="mono" style="font-weight:600;text-align:right;font-size:12px;color:var(--muted)">
-              по приоритету<br/>портфеля
-            </div>
-          </div>
-          <div class="cap-strip-wrap">
-            <div class="cap-strip-label meta">Загрузка по расписанию — красный = пересечение работ на неделе; наведите или нажмите</div>
-            ${teamLoadStripHtml(
-              team,
-              load[team.id] ?? [],
-              overflowByTeam[team.id] ?? new Set(),
-              horizon
-            )}
-          </div>
-          ${items}
-        </div>
-      `;
-    })
-    .join("");
-
-  return `
-    <div class="callout">
-      Цифра — приоритет из Портфеля (1 = выше).
-      ${
-        mode === "teamQueue"
-          ? "Режим «Последовательная утилизация ресурса»: «Может взять с …» — после FS-предшественника и не раньше планового старта."
-          : "Режим «Как задано»: даты = заданные старты; параллельная работа может пересекаться по неделям."
-      }
-      Полоска — окно работы в ближайшие 12 недель.
-    </div>
-    <div class="panel panel-sticky-host">
-      <div class="panel-sticky">
-        <div class="panel-header">
-          <h2>Очередь команд — когда команда может взять задачу</h2>
-        </div>
-      </div>
-      ${cards}
     </div>
   `;
 }
@@ -4433,8 +4313,6 @@ function tabContentHtml(
       return demandHtml();
     case "planning":
       return planningHtml(rollups, slices);
-    case "queuesTest":
-      return queuesTestHtml(slices, load, overflowByTeam);
     case "timeline":
       return ganttPlanHtml();
     case "demoA":
@@ -4829,8 +4707,8 @@ function projectCardHtml(): string {
           </div>
           <div class="grid-2">
             <div class="field">
-              <label for="p_cashFlow12m">ЧП (12 мес., млрд ₽)</label>
-              <input id="p_cashFlow12m" type="number" step="0.1" inputmode="decimal" placeholder="напр. 1,2" value="${cash}" />
+              <label for="p_cashFlow12m">ЧП (12 мес., тыс. руб)</label>
+              <input id="p_cashFlow12m" type="number" step="0.1" inputmode="decimal" placeholder="напр. 1200" value="${cash}" />
             </div>
             <div class="field">
               <label for="p_roi12m">ROI (12 мес., %)</label>
@@ -4858,7 +4736,10 @@ function editorHtml(item: WorkItem | null): string {
       notes: "",
       manualRank: nextPriority(state.items),
       cashFlow12m: null,
+      cashFlow24m: null,
       roi12m: null,
+      roi24m: null,
+      paybackMonths: null,
     } satisfies WorkItem);
 
   const selected = new Set(draft.assignments.map((a) => a.teamId));
@@ -4954,8 +4835,8 @@ function editorHtml(item: WorkItem | null): string {
             </div>
             <div class="grid-2 finance-row">
               <div class="field">
-                <label>ЧП (12 мес., млрд ₽)</label>
-                <input id="f_cashFlow12m" type="number" step="0.1" inputmode="decimal" placeholder="напр. 1,2" title="Чистая прибыль за 12 мес. в млрд ₽" value="${draft.cashFlow12m == null ? "" : draft.cashFlow12m}" />
+                <label>ЧП (12 мес., тыс. руб)</label>
+                <input id="f_cashFlow12m" type="number" step="0.1" inputmode="decimal" placeholder="напр. 1200" title="Чистая прибыль за 12 мес. в тыс. руб" value="${draft.cashFlow12m == null ? "" : draft.cashFlow12m}" />
               </div>
               <div class="field">
                 <label>ROI (12 мес., %)</label>
@@ -5084,13 +4965,18 @@ function escapeHtml(s: string): string {
     .replaceAll('"', "&quot;");
 }
 
-/** ЧП in млрд ₽; null/empty → em dash. E.g. 1.2 → «1,2» */
-function formatMlrd(n: number | null | undefined): string {
+/** ЧП in тыс. руб; null/empty → em dash. */
+function formatTys(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
   return n.toLocaleString("ru-RU", {
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 1,
     minimumFractionDigits: 0,
   });
+}
+
+/** @deprecated alias — ЧП now тыс. руб */
+function formatMlrd(n: number | null | undefined): string {
+  return formatTys(n);
 }
 
 /** ROI as percent; null/empty → em dash. E.g. 15 → «15%» */
@@ -5101,6 +4987,16 @@ function formatPercent(n: number | null | undefined): string {
     minimumFractionDigits: 0,
   });
   return `${s}%`;
+}
+
+/** Срок окупаемости, мес.; null → em dash. */
+function formatPaybackMonths(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  const s = n.toLocaleString("ru-RU", {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 0,
+  });
+  return `${s} мес.`;
 }
 
 function escapeAttr(s: string): string {
@@ -5881,7 +5777,6 @@ function render() {
         ${tabButtonHtml("demand")}
         ${tabButtonHtml("planning")}
         ${tabButtonHtml("demoA")}
-        ${tabButtonHtml("queuesTest")}
         ${tabButtonHtml("capacity", "tab-end")}
         ${tabButtonHtml("changelog")}
         ${tabButtonHtml("settings")}
@@ -5972,7 +5867,10 @@ function refreshLiveEta() {
       assignee: "",
       manualRank: null,
       cashFlow12m: null,
+      cashFlow24m: null,
       roi12m: null,
+      roi24m: null,
+      paybackMonths: null,
     } satisfies WorkItem);
   const draft: WorkItem = {
     ...base,
@@ -6048,7 +5946,10 @@ function readForm(): Omit<WorkItem, "id"> | null {
     notes: val("f_notes").trim(),
     manualRank: priority,
     cashFlow12m: optionalNum("f_cashFlow12m"),
+    cashFlow24m: optionalNum("f_cashFlow24m"),
     roi12m: optionalNum("f_roi12m"),
+    roi24m: optionalNum("f_roi24m"),
+    paybackMonths: optionalNum("f_paybackMonths"),
   };
 }
 
@@ -6076,7 +5977,10 @@ function createDemandFunctionality(rawTitle: string) {
     notes: "",
     manualRank: nextPriority(state.items),
     cashFlow12m: null,
+    cashFlow24m: null,
     roi12m: null,
+    roi24m: null,
+    paybackMonths: null,
   };
   state.items.push(item);
   state.items = ensureUniquePriorities(state.items, szRanges());
@@ -6991,7 +6895,10 @@ function saveProjectCard() {
       notes: "",
       manualRank: nextPriority(state.items),
       cashFlow12m: draft.cashFlow12m,
+      cashFlow24m: null,
       roi12m: draft.roi12m,
+      roi24m: null,
+      paybackMonths: null,
       projectAnchor: true,
     };
     state.projects = uniqCatalogNames([...state.projects, draft.name]);
@@ -7574,7 +7481,6 @@ function bindUiRest() {
       e.stopPropagation();
       const key = th.dataset.sort as SortKey | undefined;
       if (
-        key === "estimate" ||
         key === "eta" ||
         key === "priority" ||
         key === "cashFlow" ||
