@@ -26,9 +26,6 @@ export const V2_TEAMS_BACKUP_KEY = "vi-planer-v2-teams";
 /** Active UI tab — v2 only (frozen v1 uses its own key). */
 export const V2_UI_TAB_KEY = "vi-planer-v2-ui-tab";
 
-/** Demo «who am I» — UI-only; not part of shared AppState. */
-export const V2_CURRENT_USER_KEY = "vi-planer-v2-current-user";
-
 /**
  * One-shot migration stamps stored on AppState.
  * The string `"v1"` is historical (first migrate pass), not the UI edition.

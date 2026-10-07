@@ -11,7 +11,6 @@ import {
   ensureStateAssignmentRoles,
   mergeLiveV2States,
   normalizeState,
-  ensureRoleAssignments,
   prependChangeLog,
   syncTeamRoster,
   teamCatalogHasRoster,
@@ -389,16 +388,6 @@ function restoreTeamsBackupIfEmpty(state: AppState): AppState {
   };
 }
 
-function withEnsuredAppRoles(state: AppState): AppState {
-  return {
-    ...state,
-    roleAssignments: ensureRoleAssignments(
-      state.teams,
-      state.roleAssignments
-    ),
-  };
-}
-
 /** Load pipeline used by the app and the persist regression. */
 export function hydrateV2State(
   local: AppState | null,
@@ -413,9 +402,9 @@ export function hydrateV2State(
   const roles = migrateLegacyCatalogRoles(merged.state);
   const restored = restoreTeamsBackupIfEmpty(roles.state);
   if (local && v2StateWouldShrink(restored, local)) {
-    return withEnsuredAppRoles(mergeLiveV2States(local, restored));
+    return mergeLiveV2States(local, restored);
   }
-  return withEnsuredAppRoles(restored);
+  return restored;
 }
 
 export async function loadState(): Promise<AppState> {
@@ -427,9 +416,7 @@ export async function loadState(): Promise<AppState> {
   const remote = (await loadFromApi()) ?? (await loadFromSupabase());
   const state = hydrateV2State(local, remote);
   if (v2StateWouldShrink(state, local)) {
-    const kept = withEnsuredAppRoles(
-      local ? mergeLiveV2States(local, state) : state
-    );
+    const kept = local ? mergeLiveV2States(local, state) : state;
     saveLocal(kept);
     setSyncStatus(getSupabase() || usesRemoteApi() ? "saved" : "idle");
     return kept;

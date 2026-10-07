@@ -6,7 +6,6 @@ import {
   containerNameFromBacklog,
   ensureUniquePriorities,
   makeSeedTeamMembers,
-  seedRoleAssignments,
   syncTeamRosters,
   syncTeamRoster,
   uniqCatalogNames,
@@ -1128,5 +1127,4 @@ export const SEED: AppState = {
       .map((i) => containerNameFromBacklog(i.backlog))
   ),
   items: ensureUniquePriorities(SEED_RAW.items),
-  roleAssignments: seedRoleAssignments(SEEDED_TEAMS),
 };

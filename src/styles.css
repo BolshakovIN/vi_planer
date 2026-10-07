@@ -211,69 +211,6 @@ textarea {
   line-height: 1.2;
 }
 
-.current-user-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  max-width: min(320px, 42vw);
-  margin: 0;
-  padding: 3px 8px 3px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--pill-radius);
-  background: var(--surface-2);
-  flex: 0 1 auto;
-}
-
-.current-user-label {
-  flex: 0 0 auto;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.current-user-select {
-  min-width: 0;
-  flex: 1 1 auto;
-  max-width: 180px;
-  border: none;
-  background: transparent;
-  font: inherit;
-  font-size: clamp(10px, 0.95vw, 11px);
-  font-weight: 400;
-  color: var(--ink);
-  padding: 2px 0;
-}
-
-.current-user-select:focus {
-  outline: none;
-}
-
-.current-user-role {
-  flex: 0 0 auto;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.current-user-empty {
-  font-size: 12px;
-}
-
-@media (max-width: 900px) {
-  .current-user-role {
-    display: none;
-  }
-
-  .current-user-switch {
-    max-width: min(220px, 48vw);
-    padding: 2px 6px;
-  }
-}
-
 .sync-badge {
   font-weight: 600;
   color: var(--muted);
@@ -526,6 +463,15 @@ textarea {
   width: 13px;
   height: 13px;
   opacity: 0.72;
+}
+
+.tab-demo-mark {
+  margin-left: 0.2em;
+  font-size: 10px;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--muted);
+  line-height: 1;
 }
 
 .tab.active .tab-ico,
@@ -1589,91 +1535,6 @@ th.sortable.sorted {
   font-weight: 700;
   color: var(--ink);
   text-align: right;
-}
-
-.app-roles-body {
-  gap: 14px;
-}
-
-.app-role-matrix {
-  width: 100%;
-  max-width: 42rem;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--surface-2) 70%, #fff);
-}
-
-.app-role-matrix-list {
-  margin: 8px 0 0;
-  padding-left: 1.15rem;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--muted);
-}
-
-.app-role-matrix-list strong {
-  color: var(--ink);
-  font-weight: 700;
-}
-
-.app-roles-table-wrap {
-  width: 100%;
-  overflow-x: auto;
-}
-
-.app-roles-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.app-roles-table th,
-.app-roles-table td {
-  padding: 10px 8px;
-  border-top: 1px solid var(--line);
-  text-align: left;
-  vertical-align: top;
-}
-
-.app-roles-table thead th {
-  border-top: none;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.app-role-name {
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.app-role-select,
-.app-role-teams {
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--ink);
-  max-width: 100%;
-}
-
-.app-role-teams {
-  min-width: 140px;
-  min-height: 2.4rem;
-}
-
-.app-role-teams-na {
-  display: inline-block;
-  padding-top: 6px;
 }
 
 .team-roster-del-spacer {
@@ -3896,7 +3757,7 @@ body.pdf-capturing .gantt-page .plan-board {
 }
 
 
-/* Catalog lists on Роли / Проекты tabs */
+/* Catalog pair lists */
 .catalog-pair {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -88,17 +88,6 @@ import {
   weekIndex,
   WORKING_DAYS_PER_WEEK,
   rememberDeletedIds,
-  AppRole,
-  AppPermission,
-  APP_ROLES,
-  APP_ROLE_LABELS,
-  canApp,
-  collectAppPeople,
-  findRoleAssignment,
-  parseAppRole,
-  resolveAppRole,
-  resolveLeadTeamIds,
-  upsertRoleAssignment,
 } from "./model";
 import { SEED, PORTFOLIO_PACK_ID } from "./seed";
 import {
@@ -111,7 +100,7 @@ import {
   applyCurrentPortfolioPack,
   rollbackPortfolioPack,
 } from "./storage";
-import { V2_UI_TAB_KEY, V2_CURRENT_USER_KEY } from "./v2Store";
+import { V2_UI_TAB_KEY } from "./v2Store";
 import {
   downloadMarkdownAsPdf,
   downloadPlanerReportPdf,
@@ -121,7 +110,7 @@ import {
 } from "./pdfExport";
 
 /** Release / deploy stamp in the header (DD.MM.YYYY) */
-const RELEASE_UPDATED = "03.10.2026";
+const RELEASE_UPDATED = "07.10.2026";
 
 type Tab =
   | "portfolio"
@@ -133,7 +122,6 @@ type Tab =
   | "demoB"
   | "capacity"
   | "changelog"
-  | "jiraApi"
   | "settings";
 type SortKey = "priority" | "estimate" | "eta";
 type SortDir = "asc" | "desc";
@@ -149,85 +137,16 @@ const TAB_LABELS: Record<Tab, string> = {
   demoB: "Мониторинг",
   capacity: "Команды",
   changelog: "Журнал",
-  jiraApi: "API",
   settings: "Настройки",
 };
 
-const TAB_APP_PERMISSION: Partial<Record<Tab, AppPermission>> = {
-  portfolio: "tab.portfolio",
-  demand: "tab.demand",
-  planning: "tab.planning",
-  timeline: "tab.timeline",
-  queuesTest: "tab.queuesTest",
-  demoA: "tab.demoA",
-  capacity: "tab.capacity",
-  changelog: "tab.changelog",
-  jiraApi: "tab.jiraApi",
-  settings: "tab.settings",
-};
-
-function readStoredCurrentUserId(): string {
-  try {
-    return String(localStorage.getItem(V2_CURRENT_USER_KEY) ?? "").trim();
-  } catch {
-    return "";
-  }
+/** Soft UI gates removed — everyone can use all features. */
+function currentCan(_permission?: string, _teamId?: string): boolean {
+  return true;
 }
 
-function writeStoredCurrentUserId(personId: string) {
-  try {
-    const id = personId.trim();
-    if (!id) localStorage.removeItem(V2_CURRENT_USER_KEY);
-    else localStorage.setItem(V2_CURRENT_USER_KEY, id);
-  } catch {
-    /* quota / private mode */
-  }
-}
-
-function appPeopleDirectory() {
-  return collectAppPeople(state.teams, state.roleAssignments);
-}
-
-function ensureCurrentUserId(): string {
-  const people = appPeopleDirectory();
-  if (!people.length) return "";
-  const stored = readStoredCurrentUserId();
-  if (stored && people.some((p) => p.id === stored)) return stored;
-  const pm = (state.roleAssignments ?? []).find((a) => a.role === "pm_pmo");
-  const fallback =
-    (pm && people.find((p) => p.id === pm.personId)?.id) || people[0]!.id;
-  writeStoredCurrentUserId(fallback);
-  return fallback;
-}
-
-function currentAppRole(): AppRole {
-  return resolveAppRole(state.roleAssignments, ensureCurrentUserId());
-}
-
-function currentLeadTeamIds(): string[] {
-  const personId = ensureCurrentUserId();
-  const person = appPeopleDirectory().find((p) => p.id === personId);
-  return resolveLeadTeamIds(
-    findRoleAssignment(state.roleAssignments, personId),
-    person
-  );
-}
-
-function currentCan(
-  permission: AppPermission,
-  teamId?: string
-): boolean {
-  return canApp(currentAppRole(), permission, {
-    teamId,
-    leadTeamIds: currentLeadTeamIds(),
-  });
-}
-
-function canAccessTab(tab: Tab): boolean {
-  if (tab === "demoB") return canAccessTab("portfolio");
-  const perm = TAB_APP_PERMISSION[tab];
-  if (!perm) return true;
-  return currentCan(perm);
+function canAccessTab(_tab: Tab): boolean {
+  return true;
 }
 
 const TAB_ICON_SVG: Record<Tab, string> = {
@@ -249,8 +168,6 @@ const TAB_ICON_SVG: Record<Tab, string> = {
     '<circle cx="6.1" cy="5.1" r="2"/><path d="M2.6 12.4c.2-2.5 1.6-3.6 3.5-3.6s3.3 1.1 3.5 3.6"/><circle cx="11.1" cy="5.6" r="1.55"/><path d="M9.3 12.4c.15-1.7 1.1-2.5 2.2-2.5 1.15 0 2.05.8 2.2 2.5"/>',
   changelog:
     '<path d="M3.6 2.6h8.8v10.8H4.4c-1 0-1.8-.8-1.8-1.8V4.3c0-.9.8-1.7 1-1.7z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6.4 5.8h4M6.4 8.2h4M6.4 10.6h2.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
-  jiraApi:
-    '<rect x="2.2" y="3.2" width="11.6" height="9.6" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 6.2h6M5 8.2h6M5 10.2h3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
   settings:
     '<path d="M3 5.2h10M3 10.8h10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="6.2" cy="5.2" r="1.55"/><circle cx="10.1" cy="10.8" r="1.55"/>',
 };
@@ -262,21 +179,19 @@ function tabIconHtml(tab: Tab, quiet = false): string {
 function tabButtonHtml(id: Tab, extraClass = ""): string {
   if (!canAccessTab(id)) return "";
   const quiet =
-    id === "capacity" ||
-    id === "changelog" ||
-    id === "jiraApi" ||
-    id === "settings";
+    id === "capacity" || id === "changelog" || id === "settings";
   const cls = ["tab", extraClass, ui.tab === id ? "active" : ""]
     .filter(Boolean)
     .join(" ");
   return `<button type="button" class="${cls}" data-tab="${id}">${tabIconHtml(id, quiet)}${escapeHtml(TAB_LABELS[id])}</button>`;
 }
 
-/** Legacy deep-link / tab ids: `teams` → Очередь команд. */
+/** Legacy deep-link / tab ids: `teams` → Очередь команд; `jiraApi` → Настройки. */
 function normalizeTab(tab: string | undefined | null): Tab {
   if (tab === "teams") return "queuesTest";
   if (tab === "roles") return "capacity";
   if (tab === "projects") return "portfolio";
+  if (tab === "jiraApi") return "settings";
   if (
     tab === "portfolio" ||
     tab === "demand" ||
@@ -287,7 +202,6 @@ function normalizeTab(tab: string | undefined | null): Tab {
     tab === "demoB" ||
     tab === "capacity" ||
     tab === "changelog" ||
-    tab === "jiraApi" ||
     tab === "settings"
   ) {
     return tab;
@@ -331,13 +245,13 @@ function ensureVisibleTab() {
   // Variant B retired — bounce leftover demoB bookmarks to portfolio.
   if (ui.tab === "demoB") ui.tab = "portfolio";
   if ((ui.tab as string) === "roles") ui.tab = "capacity";
+  if ((ui.tab as string) === "jiraApi") ui.tab = "settings";
   if (!canAccessTab(ui.tab)) {
     const fallback: Tab[] = [
       "portfolio",
       "timeline",
       "demoA",
       "changelog",
-      "jiraApi",
       "demand",
       "planning",
       "capacity",
@@ -2650,7 +2564,7 @@ function changeLogHtml(): string {
           <div class="toolbar">
             <button type="button" class="btn" id="clearChangeLogBtn" ${
               entries.length && currentCan("changelog.clear") ? "" : "disabled"
-            } ${currentCan("changelog.clear") ? "" : 'title="Очищать журнал может только PM/PMO"'}>Очистить</button>
+            } ${currentCan("changelog.clear") ? "" : 'title="Очистить журнал"'}>Очистить</button>
           </div>
         </div>
       </div>
@@ -4479,8 +4393,6 @@ function tabContentHtml(
       return capacityHtml();
     case "changelog":
       return changeLogHtml();
-    case "jiraApi":
-      return jiraApiHtml();
     case "settings":
       return settingsHtml(rollups);
   }
@@ -4491,7 +4403,7 @@ function jiraApiHtml(): string {
   return `
     <div class="api-page">
       <header class="settings-page-head">
-        <h2 class="settings-page-title">API — Jira (read-only)</h2>
+        <h3 class="settings-section-title">Jira API <span class="tab-demo-mark">*демо</span></h3>
         <p class="settings-page-lead">
           Практичный путь: backend проксирует Jira REST, SPA только читает уже смапленные данные.
           Токен в браузер не попадает. Запись в Jira не делаем.
@@ -4585,7 +4497,7 @@ function jiraApiHtml(): string {
           <h3 class="settings-section-title">MVP по фазам</h3>
         </div>
         <ol class="api-steps">
-          <li><strong>Сейчас</strong> — вкладка API + stubs статуса/сессии/preview; env <span class="mono">JIRA_URL</span>, <span class="mono">JIRA_ENABLED</span>.</li>
+          <li><strong>Сейчас</strong> — секция в Настройках + stubs статуса/сессии/preview; env <span class="mono">JIRA_URL</span>, <span class="mono">JIRA_ENABLED</span>.</li>
           <li><strong>Сессия</strong> — in-memory PAT + cookie; проверка <span class="mono">/myself</span>.</li>
           <li><strong>Sync-preview</strong> — JQL/поиск → список для Реестра без автозаписи.</li>
           <li><strong>Импорт</strong> — по подтверждению создать/обновить проекты и функциональности + key.</li>
@@ -4604,7 +4516,6 @@ function settingsHtml(rollups: ItemSchedule[]): string {
   const canPlan = currentCan("settings.plan");
   const canSizes = currentCan("settings.sizes");
   const canPack = currentCan("settings.portfolioPack");
-  const canRoles = currentCan("settings.appRoles");
 
   const rows = TSHIRT_SIZES.map(
     (sz) => `
@@ -4653,9 +4564,8 @@ function settingsHtml(rollups: ItemSchedule[]): string {
     <div class="settings-stack">
       <header class="settings-page-head">
         <h2 class="settings-page-title">Настройки</h2>
-        <p class="settings-page-lead">Параметры планирования, ролевая модель и исходный портфель.</p>
+        <p class="settings-page-lead">Параметры планирования, интеграции и исходный портфель.</p>
       </header>
-      ${appRolesSettingsHtml(canRoles)}
       ${
         canPlan
           ? `<div class="panel">
@@ -4740,149 +4650,9 @@ function settingsHtml(rollups: ItemSchedule[]): string {
       </div>`
           : ""
       }
+      ${jiraApiHtml()}
     </div>
   `;
-}
-
-function appRolesSettingsHtml(canEdit: boolean): string {
-  const people = appPeopleDirectory();
-  const teamOpts = (selected: readonly string[]) =>
-    state.teams
-      .map(
-        (t) =>
-          `<option value="${escapeAttr(t.id)}" ${
-            selected.includes(t.id) ? "selected" : ""
-          }>${escapeHtml(t.name)}</option>`
-      )
-      .join("");
-
-  const bodyRows = people
-    .map((p) => {
-      const assignment = findRoleAssignment(state.roleAssignments, p.id);
-      const role = assignment?.role ?? "employee";
-      const leadTeams =
-        role === "team_lead"
-          ? resolveLeadTeamIds(assignment, p)
-          : [];
-      const roleOpts = APP_ROLES.map(
-        (r) =>
-          `<option value="${r}" ${r === role ? "selected" : ""}>${escapeHtml(
-            APP_ROLE_LABELS[r]
-          )}</option>`
-      ).join("");
-      const teamCell =
-        role === "team_lead"
-          ? `<select
-              class="app-role-teams"
-              data-app-role-teams="${escapeAttr(p.id)}"
-              multiple
-              size="${Math.min(3, Math.max(1, state.teams.length))}"
-              aria-label="Команды тимлида"
-              ${canEdit ? "" : "disabled"}
-            >${teamOpts(leadTeams)}</select>`
-          : `<span class="app-role-teams-na meta">—</span>`;
-      return `
-        <tr data-app-person="${escapeAttr(p.id)}">
-          <td class="app-role-fio">
-            <div class="app-role-name">${escapeHtml(p.name)}</div>
-            <div class="meta">${
-              p.teamIds.length
-                ? escapeHtml(
-                    p.teamIds
-                      .map(
-                        (id) =>
-                          state.teams.find((t) => t.id === id)?.name ?? id
-                      )
-                      .join(", ")
-                  )
-                : "вне команд"
-            }</div>
-          </td>
-          <td>
-            <select
-              class="app-role-select"
-              data-app-role="${escapeAttr(p.id)}"
-              aria-label="Роль приложения"
-              ${canEdit ? "" : "disabled"}
-            >${roleOpts}</select>
-          </td>
-          <td class="app-role-teams-cell">${teamCell}</td>
-        </tr>`;
-    })
-    .join("");
-
-  return `
-    <div class="panel">
-      <div class="panel-header">
-        <h3 class="settings-section-title">Ролевая модель</h3>
-      </div>
-      <div class="settings-panel-body app-roles-body">
-        <p class="settings-help">
-          Кто пользуется планировщиком — отдельно от должностных ролей в «Командах»
-          (аналитик, разработчик и т.п.). Назначения хранятся в общем состоянии;
-          «Текущий пользователь» в шапке — только для демонстрации прав на этом устройстве.
-        </p>
-        <div class="app-role-matrix" role="note">
-          <div class="settings-label">Права по умолчанию</div>
-          <ul class="app-role-matrix-list">
-            <li><strong>PM/PMO</strong> — полный доступ: реестр, потребность, планирование, гант, команды, настройки и назначения ролей.</li>
-            <li><strong>Тимлид</strong> — потребность / план / гант и правка своих команд; параметры плана без загрузки портфеля и без назначения ролей.</li>
-            <li><strong>Сотрудник</strong> — просмотр реестра, ганта, мониторинга и журнала.</li>
-          </ul>
-        </div>
-        ${
-          people.length
-            ? `<div class="app-roles-table-wrap">
-          <table class="app-roles-table">
-            <thead>
-              <tr>
-                <th>ФИО</th>
-                <th>Роль</th>
-                <th>Команды тимлида</th>
-              </tr>
-            </thead>
-            <tbody>${bodyRows}</tbody>
-          </table>
-        </div>`
-            : `<p class="meta">Нет людей в командах — добавьте ФИО на вкладке «Команды».</p>`
-        }
-        ${
-          canEdit
-            ? ""
-            : `<p class="settings-help">Назначать роли может только PM/PMO. Сейчас: ${escapeHtml(
-                APP_ROLE_LABELS[currentAppRole()]
-              )}.</p>`
-        }
-      </div>
-    </div>
-  `;
-}
-
-function currentUserSwitcherHtml(): string {
-  const people = appPeopleDirectory();
-  const currentId = ensureCurrentUserId();
-  const role = currentAppRole();
-  if (!people.length) {
-    return `<label class="current-user-switch no-print" title="Нет людей в справочнике">
-      <span class="current-user-label">Я</span>
-      <span class="current-user-empty meta">—</span>
-    </label>`;
-  }
-  const opts = people
-    .map((p) => {
-      const r = resolveAppRole(state.roleAssignments, p.id);
-      return `<option value="${escapeAttr(p.id)}" ${
-        p.id === currentId ? "selected" : ""
-      }>${escapeHtml(p.name)} · ${escapeHtml(APP_ROLE_LABELS[r])}</option>`;
-    })
-    .join("");
-  return `<label class="current-user-switch no-print" title="Текущий пользователь (демо прав)">
-    <span class="current-user-label">Я</span>
-    <select id="currentUserSelect" class="current-user-select" aria-label="Текущий пользователь">
-      ${opts}
-    </select>
-    <span class="current-user-role">${escapeHtml(APP_ROLE_LABELS[role])}</span>
-  </label>`;
 }
 
 function readSizeRangesFromInputs(): SizeRanges | null {
@@ -6038,7 +5808,6 @@ function render() {
           </button>
         </div>
         <div class="top-actions">
-          ${currentUserSwitcherHtml()}
           ${editionSwitcherHtml()}
           <span class="release-stamp" title="Дата релиза">updated ${RELEASE_UPDATED}</span>
           <span class="sync-badge" id="syncStatus" data-status="${getSyncStatus()}">${syncStatusLabel(getSyncStatus())}</span>
@@ -6063,7 +5832,6 @@ function render() {
         ${tabButtonHtml("queuesTest")}
         ${tabButtonHtml("capacity", "tab-end")}
         ${tabButtonHtml("changelog")}
-        ${tabButtonHtml("jiraApi")}
         ${tabButtonHtml("settings")}
       </div>
       ${ui.tab === "portfolio" ? metricsHtml(rollups, slices) : ""}
@@ -7327,7 +7095,7 @@ function bind() {
 }
 
 function bindJiraApiTab() {
-  if (ui.tab !== "jiraApi") return;
+  if (ui.tab !== "settings") return;
   const box = document.querySelector("#jiraApiStatus");
   if (!box) return;
 
@@ -7386,69 +7154,6 @@ function bindUiRest() {
   document.querySelector("#brandHomeBtn")?.addEventListener("click", () => {
     setActiveTab("portfolio");
     render();
-  });
-
-  document.querySelector("#currentUserSelect")?.addEventListener("change", (e) => {
-    const sel = e.currentTarget as HTMLSelectElement;
-    writeStoredCurrentUserId(sel.value);
-    render();
-  });
-
-  document.querySelectorAll<HTMLSelectElement>("[data-app-role]").forEach((sel) => {
-    sel.addEventListener("change", () => {
-      if (!currentCan("settings.appRoles")) return;
-      const personId = sel.dataset.appRole;
-      if (!personId) return;
-      const person = appPeopleDirectory().find((p) => p.id === personId);
-      const role = parseAppRole(sel.value);
-      if (!role) return;
-      const prev = findRoleAssignment(state.roleAssignments, personId);
-      const teamIds =
-        role === "team_lead"
-          ? prev?.teamIds?.length
-            ? prev.teamIds
-            : person?.teamIds?.slice(0, 1) ?? []
-          : undefined;
-      state.roleAssignments = upsertRoleAssignment(state.roleAssignments, {
-        personId,
-        personName: person?.name ?? prev?.personName ?? personId,
-        role,
-        ...(teamIds?.length ? { teamIds } : {}),
-      });
-      logChange(
-        `Роль приложения: ${person?.name ?? personId} → ${APP_ROLE_LABELS[role]}`,
-        "settings"
-      );
-      persist();
-    });
-  });
-
-  document.querySelectorAll<HTMLSelectElement>("[data-app-role-teams]").forEach((sel) => {
-    sel.addEventListener("change", () => {
-      if (!currentCan("settings.appRoles")) return;
-      const personId = sel.dataset.appRoleTeams;
-      if (!personId) return;
-      const person = appPeopleDirectory().find((p) => p.id === personId);
-      const prev = findRoleAssignment(state.roleAssignments, personId);
-      const role = prev?.role ?? "team_lead";
-      if (role !== "team_lead") return;
-      const teamIds = Array.from(sel.selectedOptions).map((o) => o.value);
-      state.roleAssignments = upsertRoleAssignment(state.roleAssignments, {
-        personId,
-        personName: person?.name ?? prev?.personName ?? personId,
-        role: "team_lead",
-        teamIds,
-      });
-      logChange(
-        `Тимлид ${person?.name ?? personId}: команды ${
-          teamIds
-            .map((id) => state.teams.find((t) => t.id === id)?.name ?? id)
-            .join(", ") || "—"
-        }`,
-        "settings"
-      );
-      persist();
-    });
   });
 
   document.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((btn) => {
