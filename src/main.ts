@@ -123,15 +123,15 @@ type Tab =
   | "capacity"
   | "changelog"
   | "settings";
-type SortKey = "priority" | "estimate" | "eta";
+type SortKey = "priority" | "estimate" | "eta" | "cashFlow" | "roi";
 type SortDir = "asc" | "desc";
 type GanttBarDragMode = "move" | "resize-left" | "resize-right";
 
 const TAB_LABELS: Record<Tab, string> = {
   portfolio: "Реестр",
+  timeline: "Гант",
   demand: "Потребность",
   planning: "Планирование",
-  timeline: "Гант",
   queuesTest: "Очередь команд",
   demoA: "Мониторинг",
   demoB: "Мониторинг",
@@ -250,11 +250,12 @@ function ensureVisibleTab() {
     const fallback: Tab[] = [
       "portfolio",
       "timeline",
-      "demoA",
-      "changelog",
       "demand",
       "planning",
+      "demoA",
+      "queuesTest",
       "capacity",
+      "changelog",
       "settings",
     ];
     ui.tab = fallback.find((t) => canAccessTab(t)) ?? "portfolio";
@@ -697,13 +698,19 @@ function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
   return [...filtered].sort((a, b) => {
     let cmp = 0;
     if (ui.sortKey === "estimate") {
-      cmp = totalEstimateWeeks(a, szRanges()) - totalEstimateWeeks(b, szRanges());
+      cmp =
+        (totalEstimateWeeks(a, szRanges()) - totalEstimateWeeks(b, szRanges())) *
+        dir;
+    } else if (ui.sortKey === "cashFlow") {
+      cmp = compareNullableNum(a.cashFlow12m, b.cashFlow12m, dir);
+    } else if (ui.sortKey === "roi") {
+      cmp = compareNullableNum(a.roi12m, b.roi12m, dir);
     } else {
       const ea = byId.get(a.id)?.endDate ?? "9999-99-99";
       const eb = byId.get(b.id)?.endDate ?? "9999-99-99";
-      cmp = ea < eb ? -1 : ea > eb ? 1 : 0;
+      cmp = (ea < eb ? -1 : ea > eb ? 1 : 0) * dir;
     }
-    if (cmp !== 0) return cmp * dir;
+    if (cmp !== 0) return cmp;
     return a.title.localeCompare(b.title, "ru");
   });
 }
@@ -1027,6 +1034,8 @@ function sortHeader(label: string, key: SortKey, extraClass = ""): string {
     priority: "priority",
     estimate: "estimate",
     eta: "eta",
+    cashFlow: "cashFlow",
+    roi: "roi",
   };
   const col = colMap[key];
   if (!col) {
@@ -1051,8 +1060,8 @@ function portfolioTheadCellsHtml(): string {
     ${resizableTh("Jira", "jira", "jira-cell")}
     ${resizableTh("Команды", "teams")}
     ${resizableTh("Статус", "status", "status-cell")}
-    ${resizableTh("ЧП", "cashFlow", "finance-cell", undefined, "млрд ₽")}
-    ${resizableTh("ROI, %", "roi", "finance-cell")}
+    ${resizableTh("ЧП", "cashFlow", "finance-cell", "cashFlow", "млрд ₽")}
+    ${resizableTh("ROI, %", "roi", "finance-cell", "roi")}
     ${sortHeader("Маечная оценка", "estimate", "estimate-cell")}
     ${sortHeader("Дата завершения", "eta", "eta-cell")}
   `;
@@ -1118,8 +1127,9 @@ function toggleSort(key: SortKey) {
     ui.sortDir = ui.sortDir === "asc" ? "desc" : "asc";
   } else {
     ui.sortKey = key;
-    // priority: 1 first (asc); estimate/ETA: smaller/sooner first
-    ui.sortDir = "asc";
+    // priority: 1 first; estimate/ETA: smaller/sooner first; ЧП/ROI: larger first
+    ui.sortDir =
+      key === "cashFlow" || key === "roi" ? "desc" : "asc";
   }
   render();
 }
@@ -1193,8 +1203,8 @@ function columnsHelpHtml(): string {
         <div><span class="cols-help-k">Jira</span> — ключ задачи (пока заглушка)</div>
         <div><span class="cols-help-k">Команды</span> — первая + «+N»; клик раскрывает список без растягивания строки</div>
         <div><span class="cols-help-k">Статус</span> — стадия готовности</div>
-        <div><span class="cols-help-k">ЧП, млрд ₽</span> — чистая прибыль за 12 мес. (сумма по проекту)</div>
-        <div><span class="cols-help-k">ROI, %</span> — ROI за 12 мес.</div>
+        <div><span class="cols-help-k">ЧП, млрд ₽</span> — чистая прибыль за 12 мес. (сумма по проекту); клик по заголовку — сортировка</div>
+        <div><span class="cols-help-k">ROI, %</span> — ROI за 12 мес.; клик по заголовку — сортировка</div>
         <div><span class="cols-help-k">Маечная оценка</span> — XS / S / M / L / XL / XXL (дни в Настройках)</div>
         <div><span class="cols-help-k">Дата завершения</span> — самая поздняя дата среди функциональностей и баров ролей</div>
       </div>
@@ -1217,6 +1227,40 @@ function groupByProjectKey(
     title: key,
     items: grouped,
   }));
+}
+
+/** Nulls/non-finite always last; dir applies only to real numbers. */
+function compareNullableNum(
+  a: number | null | undefined,
+  b: number | null | undefined,
+  dir: number,
+): number {
+  const aOk = a != null && Number.isFinite(a);
+  const bOk = b != null && Number.isFinite(b);
+  if (!aOk && !bOk) return 0;
+  if (!aOk) return 1;
+  if (!bOk) return -1;
+  return (a! - b!) * dir;
+}
+
+/** Project ЧП: sum of item cashFlow12m (same as registry cell). */
+function projectCashFlow12m(items: WorkItem[]): number | null {
+  const vals = items
+    .map((it) => it.cashFlow12m)
+    .filter((n): n is number => n != null && Number.isFinite(n));
+  return vals.length ? vals.reduce((s, n) => s + n, 0) : null;
+}
+
+/** Project ROI: single shared value, else null (cell shows «—»). */
+function projectRoi12m(items: WorkItem[]): number | null {
+  const rois = [
+    ...new Set(
+      items
+        .map((it) => it.roi12m)
+        .filter((n): n is number => n != null && Number.isFinite(n)),
+    ),
+  ];
+  return rois.length === 1 ? rois[0]! : null;
 }
 
 function projectPrioMap(): Map<string, number> {
@@ -1251,7 +1295,26 @@ function uniqueAssignments(items: WorkItem[]): TeamAssignment[] {
 function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): string {
   const visible = filteredItems(rollups);
   const order = new Map(visible.map((it, i) => [it.id, i]));
+  const financeDir = ui.sortDir === "asc" ? 1 : -1;
   const groups = groupByProjectKey(visible).sort((a, b) => {
+    if (ui.sortKey === "cashFlow") {
+      const cmp = compareNullableNum(
+        projectCashFlow12m(a.items),
+        projectCashFlow12m(b.items),
+        financeDir,
+      );
+      if (cmp !== 0) return cmp;
+      return a.title.localeCompare(b.title, "ru");
+    }
+    if (ui.sortKey === "roi") {
+      const cmp = compareNullableNum(
+        projectRoi12m(a.items),
+        projectRoi12m(b.items),
+        financeDir,
+      );
+      if (cmp !== 0) return cmp;
+      return a.title.localeCompare(b.title, "ru");
+    }
     const ia = Math.min(...a.items.map((it) => order.get(it.id) ?? 9999));
     const ib = Math.min(...b.items.map((it) => order.get(it.id) ?? 9999));
     return ia - ib;
@@ -1271,19 +1334,8 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
         0
       );
       const sizes = [...new Set(assigns.map((a) => a.size))].join(" + ");
-      const cashVals = g.items
-        .map((it) => it.cashFlow12m)
-        .filter((n): n is number => n != null && Number.isFinite(n));
-      const cash = cashVals.length
-        ? cashVals.reduce((s, n) => s + n, 0)
-        : null;
-      const rois = [
-        ...new Set(
-          g.items
-            .map((it) => it.roi12m)
-            .filter((n): n is number => n != null && Number.isFinite(n))
-        ),
-      ];
+      const cash = projectCashFlow12m(g.items);
+      const roi = projectRoi12m(g.items);
       const statuses = [...new Set(g.items.map((it) => it.status))];
       const statusVal = statuses.length === 1 ? statuses[0] : "";
       const statusOpts = [
@@ -1324,9 +1376,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
             <select class="status-select ${statusClass}" data-project-status="${escapeAttr(g.key)}" data-status-was="${statusVal}" data-stop-edit aria-label="Статус проекта">${statusOpts}</select>
           </td>
           <td${tdAttrs("cashFlow", "finance-cell mono metric-num")}>${formatMlrd(cash)}</td>
-          <td${tdAttrs("roi", "finance-cell mono metric-num")}>${
-            rois.length === 1 ? formatPercent(rois[0]) : "—"
-          }</td>
+          <td${tdAttrs("roi", "finance-cell mono metric-num")}>${formatPercent(roi)}</td>
           <td${tdAttrs("estimate", "estimate-cell mono metric-num")}>
             <span class="size-badge">${sizes || "—"}</span>
             <div class="meta">~${total} чел·нед</div>
@@ -5825,9 +5875,9 @@ function render() {
       </div>
       <div class="tabs no-print">
         ${tabButtonHtml("portfolio")}
+        ${tabButtonHtml("timeline")}
         ${tabButtonHtml("demand")}
         ${tabButtonHtml("planning")}
-        ${tabButtonHtml("timeline")}
         ${tabButtonHtml("demoA")}
         ${tabButtonHtml("queuesTest")}
         ${tabButtonHtml("capacity", "tab-end")}
@@ -7520,7 +7570,13 @@ function bindUiRest() {
       if ((e.target as HTMLElement).closest("[data-col-resize]")) return;
       e.stopPropagation();
       const key = th.dataset.sort as SortKey | undefined;
-      if (key === "estimate" || key === "eta" || key === "priority")
+      if (
+        key === "estimate" ||
+        key === "eta" ||
+        key === "priority" ||
+        key === "cashFlow" ||
+        key === "roi"
+      )
         toggleSort(key);
     });
   });
