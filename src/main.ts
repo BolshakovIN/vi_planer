@@ -31,6 +31,7 @@ import {
   snapToMonday,
   addDays,
   addWeeks,
+  addMonths,
   ensureUniquePriorities,
   findPriorityConflict,
   nextPriority,
@@ -129,6 +130,10 @@ type Tab =
 type SortKey = "priority" | "eta" | "cashFlow" | "roi";
 type SortDir = "asc" | "desc";
 type GanttBarDragMode = "move" | "resize-left" | "resize-right";
+type GanttScale = "week" | "month" | "quarter";
+type GanttDepthMonths = 3 | 6 | 9 | 12;
+/** Max tree level shown on Gantt (project … assignee). */
+type GanttTreeLevel = "project" | "fn" | "team" | "role";
 
 const TAB_LABELS: Record<Tab, string> = {
   portfolio: "Реестр",
@@ -277,8 +282,14 @@ interface UiState {
   /** Реестр project card (group key); null when closed */
   editingProjectKey: string | null;
   creatingProject: boolean;
-  /** Gantt horizon in weeks */
+  /** Gantt horizon in weeks (derived from ganttDepthMonths) */
   ganttWeeks: number;
+  /** Gantt axis unit: week ticks or month bands */
+  ganttScale: GanttScale;
+  /** Gantt display depth: 3 / 6 / 9 months */
+  ganttDepthMonths: GanttDepthMonths;
+  /** Gantt hierarchy cutoff: project … role/assignee */
+  ganttTreeLevel: GanttTreeLevel;
   /**
    * Gantt / Очередь / Мониторинг schedule mode — see SCHEDULE_MODE_META.
    * Controlled by the two toggle buttons (none active → `manual`).
@@ -358,7 +369,10 @@ const ui: UiState = {
   creating: false,
   editingProjectKey: null,
   creatingProject: false,
-  ganttWeeks: 16,
+  ganttWeeks: 26,
+  ganttScale: "week",
+  ganttDepthMonths: 6,
+  ganttTreeLevel: "role",
   scheduleMode: "teamQueue",
   hiddenCols: [],
   colPickerOpen: false,
@@ -712,6 +726,276 @@ const GANTT_LABEL_COL_KEY = "vi-planer-gantt-label-col";
 const GANTT_LABEL_COL_DEFAULT = 240;
 const GANTT_LABEL_COL_MIN = 160;
 const GANTT_LABEL_COL_MAX = 480;
+const GANTT_SCALE_KEY = "vi-planer-gantt-scale";
+const GANTT_DEPTH_KEY = "vi-planer-gantt-depth";
+const GANTT_TREE_LEVEL_KEY = "vi-planer-gantt-tree-level";
+const GANTT_DEPTH_OPTIONS: GanttDepthMonths[] = [3, 6, 9, 12];
+/** Max weeks for 12‑month horizon (~52–53). */
+const GANTT_WEEKS_MAX = 56;
+const GANTT_TREE_LEVEL_OPTIONS: {
+  id: GanttTreeLevel;
+  label: string;
+  head: string;
+}[] = [
+  {
+    id: "project",
+    label: "Проект",
+    head: "Проект",
+  },
+  {
+    id: "fn",
+    label: "Проект → функциональность",
+    head: "Проект / функциональность",
+  },
+  {
+    id: "team",
+    label: "Проект → функциональность → команда",
+    head: "Проект / функциональность / команда",
+  },
+  {
+    id: "role",
+    label: "Проект → функциональность → команда → исполнитель",
+    head: "Проект / функциональность / команда / исполнитель",
+  },
+];
+const MONTH_SHORT_RU = [
+  "янв",
+  "фев",
+  "мар",
+  "апр",
+  "май",
+  "июн",
+  "июл",
+  "авг",
+  "сен",
+  "окт",
+  "ноя",
+  "дек",
+] as const;
+
+function normalizeGanttScale(raw: string | null | undefined): GanttScale {
+  if (raw === "month" || raw === "quarter") return raw;
+  return "week";
+}
+
+function normalizeGanttDepth(raw: string | number | null | undefined): GanttDepthMonths {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  return (GANTT_DEPTH_OPTIONS as number[]).includes(n)
+    ? (n as GanttDepthMonths)
+    : 6;
+}
+
+function loadGanttScale(): GanttScale {
+  try {
+    return normalizeGanttScale(localStorage.getItem(GANTT_SCALE_KEY));
+  } catch {
+    return "week";
+  }
+}
+
+function saveGanttScale(scale: GanttScale): void {
+  try {
+    localStorage.setItem(GANTT_SCALE_KEY, scale);
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadGanttDepth(): GanttDepthMonths {
+  try {
+    return normalizeGanttDepth(localStorage.getItem(GANTT_DEPTH_KEY));
+  } catch {
+    return 6;
+  }
+}
+
+function saveGanttDepth(depth: GanttDepthMonths): void {
+  try {
+    localStorage.setItem(GANTT_DEPTH_KEY, String(depth));
+  } catch {
+    /* ignore */
+  }
+}
+
+function normalizeGanttTreeLevel(
+  raw: string | null | undefined
+): GanttTreeLevel {
+  if (raw === "project" || raw === "fn" || raw === "team" || raw === "role") {
+    return raw;
+  }
+  return "role";
+}
+
+function loadGanttTreeLevel(): GanttTreeLevel {
+  try {
+    return normalizeGanttTreeLevel(localStorage.getItem(GANTT_TREE_LEVEL_KEY));
+  } catch {
+    return "role";
+  }
+}
+
+function saveGanttTreeLevel(level: GanttTreeLevel): void {
+  try {
+    localStorage.setItem(GANTT_TREE_LEVEL_KEY, level);
+  } catch {
+    /* ignore */
+  }
+}
+
+function ganttTreeLevelMeta(level: GanttTreeLevel = ui.ganttTreeLevel) {
+  return (
+    GANTT_TREE_LEVEL_OPTIONS.find((o) => o.id === level) ??
+    GANTT_TREE_LEVEL_OPTIONS[GANTT_TREE_LEVEL_OPTIONS.length - 1]!
+  );
+}
+
+function ganttTreeLevelFilterHtml(level: GanttTreeLevel): string {
+  const current = ganttTreeLevelMeta(level);
+  const items = GANTT_TREE_LEVEL_OPTIONS.map(
+    (o) =>
+      `<button type="button" class="gantt-tree-opt${o.id === level ? " is-active" : ""}" data-gantt-tree-level="${o.id}" role="option" aria-selected="${o.id === level ? "true" : "false"}">${escapeHtml(o.label)}</button>`
+  ).join("");
+  return `
+    <div class="gantt-seg gantt-tree-filter" role="group" aria-label="Вложенность">
+      <span class="gantt-seg-label">Вложенность</span>
+      <details class="gantt-tree-picker">
+        <summary class="gantt-seg-select gantt-tree-summary" aria-label="Вложенность дерева Гантта">
+          <span class="gantt-tree-summary-text">${escapeHtml(current.label)}</span>
+        </summary>
+        <div class="gantt-tree-menu" role="listbox" aria-label="Уровень вложенности">${items}</div>
+      </details>
+    </div>`;
+}
+
+/** Weeks covering planStart .. planStart + depth months. */
+function ganttHorizonWeeks(depth: GanttDepthMonths = ui.ganttDepthMonths): number {
+  const end = addMonths(state.startDate, depth);
+  const weeks = weekIndex(state.startDate, end) + 1;
+  return Math.max(4, Math.min(GANTT_WEEKS_MAX, weeks));
+}
+
+function syncGanttWeeksFromDepth(): number {
+  const weeks = ganttHorizonWeeks(ui.ganttDepthMonths);
+  ui.ganttWeeks = weeks;
+  return weeks;
+}
+
+function formatMonthShortRu(iso: string): string {
+  const m = Number(iso.slice(5, 7)) - 1;
+  const y = iso.slice(2, 4);
+  return `${MONTH_SHORT_RU[m] ?? "—"} ’${y}`;
+}
+
+type GanttAxisBand = {
+  startWeek: number;
+  endWeek: number;
+  label: string;
+};
+
+function ganttAxisBandsByKey(
+  planStart: string,
+  weeks: number,
+  keyOf: (iso: string) => string,
+  labelOf: (iso: string) => string
+): GanttAxisBand[] {
+  const bands: GanttAxisBand[] = [];
+  let w = 0;
+  while (w < weeks) {
+    const monday = addWeeks(planStart, w);
+    const key = keyOf(monday);
+    let end = w;
+    while (end + 1 < weeks && keyOf(addWeeks(planStart, end + 1)) === key) {
+      end += 1;
+    }
+    bands.push({
+      startWeek: w,
+      endWeek: end,
+      label: labelOf(monday),
+    });
+    w = end + 1;
+  }
+  return bands;
+}
+
+function ganttMonthBands(planStart: string, weeks: number): GanttAxisBand[] {
+  return ganttAxisBandsByKey(
+    planStart,
+    weeks,
+    (iso) => iso.slice(0, 7),
+    formatMonthShortRu
+  );
+}
+
+function formatQuarterRu(iso: string): string {
+  const m = Number(iso.slice(5, 7));
+  const q = Math.ceil(m / 3);
+  const y = iso.slice(2, 4);
+  const romans = ["I", "II", "III", "IV"] as const;
+  return `${romans[q - 1] ?? "—"} кв. ’${y}`;
+}
+
+function ganttQuarterBands(planStart: string, weeks: number): GanttAxisBand[] {
+  return ganttAxisBandsByKey(
+    planStart,
+    weeks,
+    (iso) => {
+      const y = iso.slice(0, 4);
+      const q = Math.ceil(Number(iso.slice(5, 7)) / 3);
+      return `${y}-Q${q}`;
+    },
+    formatQuarterRu
+  );
+}
+
+function ganttScaleBands(
+  planStart: string,
+  weeks: number,
+  scale: GanttScale
+): GanttAxisBand[] | null {
+  if (scale === "month") return ganttMonthBands(planStart, weeks);
+  if (scale === "quarter") return ganttQuarterBands(planStart, weeks);
+  return null;
+}
+
+function ganttScaleToggleHtml(scale: GanttScale): string {
+  return `
+    <div class="gantt-seg" role="group" aria-label="Диапазон">
+      <span class="gantt-seg-label">Диапазон</span>
+      <div class="gantt-seg-btns">
+        <button type="button" class="gantt-seg-btn${scale === "week" ? " is-active" : ""}" data-gantt-scale="week">Неделя</button>
+        <button type="button" class="gantt-seg-btn${scale === "month" ? " is-active" : ""}" data-gantt-scale="month">Месяц</button>
+        <button type="button" class="gantt-seg-btn${scale === "quarter" ? " is-active" : ""}" data-gantt-scale="quarter">Квартал</button>
+      </div>
+    </div>`;
+}
+
+function ganttDepthToggleHtml(depth: GanttDepthMonths): string {
+  const btns = GANTT_DEPTH_OPTIONS.map(
+    (m) =>
+      `<button type="button" class="gantt-seg-btn${depth === m ? " is-active" : ""}" data-gantt-depth="${m}">${m} мес.</button>`
+  ).join("");
+  return `
+    <div class="gantt-seg" role="group" aria-label="Глубина">
+      <span class="gantt-seg-label">Глубина</span>
+      <div class="gantt-seg-btns">${btns}</div>
+    </div>`;
+}
+
+/** Compact plan-start date control for Гантт / Планирование toolbars. */
+function planStartCtrlHtml(editable = currentCan("settings.plan")): string {
+  const disabled = editable ? "" : " disabled";
+  return `
+    <label class="gantt-seg plan-start-ctrl plan-start-anchor" title="Якорь шкалы недель (округляется к понедельнику)">
+      <span class="gantt-seg-label">Старт планирования</span>
+      <input
+        type="date"
+        class="plan-start-date-input gantt-plan-start-input"
+        value="${state.startDate}"
+        aria-label="Старт планирования"
+        ${disabled}
+      />
+    </label>`;
+}
 
 type PortfolioCol =
   | "priority"
@@ -997,11 +1281,41 @@ function measureColMinWidth(label: string, col?: PortfolioCol): number {
   return min;
 }
 
-function colWidthStyle(col: PortfolioCol): string {
+function colPixelWidth(col: PortfolioCol): number {
   const stored = loadColWidths()[col];
   const min = measureColMinWidth(measureLabelForCol(col), col);
-  const width = Math.max(min, stored ?? PORTFOLIO_COL_DEFAULTS[col]);
+  return Math.max(min, stored ?? PORTFOLIO_COL_DEFAULTS[col]);
+}
+
+function colWidthStyle(col: PortfolioCol): string {
+  const min = measureColMinWidth(measureLabelForCol(col), col);
+  const width = colPixelWidth(col);
   return `width:${width}px;min-width:${min}px`;
+}
+
+/** Sum of visible column widths — keep thead/body tables the same pixel width. */
+function portfolioTablePixelWidth(): number {
+  return ALL_PORTFOLIO_COLS.filter((col) => isColVisible(col)).reduce(
+    (sum, col) => sum + colPixelWidth(col),
+    0
+  );
+}
+
+function portfolioTableWidthStyle(): string {
+  const w = portfolioTablePixelWidth();
+  return `width:${w}px;min-width:${w}px`;
+}
+
+function syncPortfolioTableWidths(): void {
+  const w = portfolioTablePixelWidth();
+  document
+    .querySelectorAll<HTMLTableElement>(
+      ".portfolio-thead-table, .portfolio-body-table"
+    )
+    .forEach((table) => {
+      table.style.width = `${w}px`;
+      table.style.minWidth = `${w}px`;
+    });
 }
 
 function resizableTh(
@@ -1166,20 +1480,6 @@ function metricsHtml(_rollups: ItemSchedule[], slices: ScheduledSlice[]): string
         <div class="value">${overloaded}</div>
         <div class="hint">очередь длиннее 8 недель</div>
       </div>
-      <label
-        class="metric metric-plan-start plan-start-anchor"
-        title="Изменить старт планирования"
-      >
-        <div class="label">Старт планирования</div>
-        <div class="value">${formatDate(state.startDate)}</div>
-        <div class="hint">якорь шкалы Gantt (пн) · нажмите, чтобы изменить</div>
-        <input
-          type="date"
-          class="plan-start-date-input metric-plan-start-input"
-          value="${state.startDate}"
-          aria-label="Старт планирования"
-        />
-      </label>
     </div>
   `;
 }
@@ -1484,7 +1784,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
         </div>
         <div class="table-scroll-top" aria-hidden="true"><div class="table-scroll-top-inner"></div></div>
         <div class="portfolio-thead-scroll">
-          <table class="portfolio-table portfolio-thead-table">
+          <table class="portfolio-table portfolio-thead-table" style="${portfolioTableWidthStyle()}">
             ${portfolioColgroupHtml()}
             <thead>
               <tr>
@@ -1496,7 +1796,7 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
       </div>
       <div class="table-scroll-wrap">
         <div class="table-scroll">
-          <table class="portfolio-table portfolio-body-table">
+          <table class="portfolio-table portfolio-body-table" style="${portfolioTableWidthStyle()}">
             ${portfolioColgroupHtml()}
             <tbody id="portfolioBody">
               ${rows || `<tr><td colspan="${visiblePortfolioColCount()}" class="empty">Нет проектов по фильтру</td></tr>`}
@@ -1906,7 +2206,7 @@ function applyGanttBarPreview(
 
 function bindGanttBarEdit() {
   if (!currentCan("gantt.edit")) return;
-  const weeks = Math.max(4, Math.min(52, Math.round(ui.ganttWeeks) || 16));
+  const weeks = syncGanttWeeksFromDepth();
 
   document.querySelectorAll<HTMLElement>(".gantt-bar").forEach((bar) => {
     bar.addEventListener("pointerdown", (e) => {
@@ -2538,7 +2838,7 @@ function demoMedian(nums: number[]): number {
 }
 
 function demoHorizonWeeks(): number {
-  return Math.max(4, Math.min(52, Math.round(ui.ganttWeeks) || 16));
+  return syncGanttWeeksFromDepth();
 }
 
 interface DemoCompletenessRow {
@@ -3405,7 +3705,22 @@ function collectPlanPersonPlacements(
   return out;
 }
 
-function planTrackBg(weeks: number): string {
+function planTrackBg(weeks: number, scale: GanttScale = "week"): string {
+  const bands = ganttScaleBands(state.startDate, weeks, scale);
+  if (bands) {
+    if (bands.length <= 1) return "transparent";
+    const stops: string[] = ["transparent 0"];
+    for (const band of bands.slice(1)) {
+      const pct = (band.startWeek / weeks) * 100;
+      stops.push(
+        `transparent ${pct}%`,
+        `var(--line) ${pct}%`,
+        `var(--line) calc(${pct}% + 1px)`,
+        `transparent calc(${pct}% + 1px)`
+      );
+    }
+    return `linear-gradient(90deg, ${stops.join(", ")})`;
+  }
   const weekPct = 100 / weeks;
   return `repeating-linear-gradient(90deg, transparent 0, transparent calc(${weekPct}% - 1px), var(--line) calc(${weekPct}% - 1px), var(--line) ${weekPct}%)`;
 }
@@ -3465,8 +3780,27 @@ function planWeekConflictAriaLabel(
 
 function planAxisHtml(
   weeks: number,
-  conflictWeeks?: Map<number, PlanWeekPersonConflict[]>
+  conflictWeeks?: Map<number, PlanWeekPersonConflict[]>,
+  scale: GanttScale = "week"
 ): string {
+  const bands = ganttScaleBands(state.startDate, weeks, scale);
+  if (bands) {
+    return bands
+      .map((band) => {
+        const span = band.endWeek - band.startWeek + 1;
+        const width = (span / weeks) * 100;
+        const start = addWeeks(state.startDate, band.startWeek);
+        const end = addWeeks(state.startDate, band.endWeek);
+        const [, sm, sd] = start.split("-");
+        const [, em, ed] = end.split("-");
+        const range =
+          band.startWeek === band.endWeek
+            ? `${sd}.${sm}`
+            : `${sd}.${sm}–${ed}.${em}`;
+        return `<div class="plan-axis-tick plan-axis-tick-month" style="width:${width}%" title="${escapeAttr(band.label)}"><span>${escapeHtml(band.label)}</span><span>${range}</span></div>`;
+      })
+      .join("");
+  }
   const weekPct = 100 / weeks;
   return Array.from({ length: weeks }, (_, w) => {
     const monday = addWeeks(state.startDate, w);
@@ -3833,8 +4167,12 @@ function ganttTeamBarColor(teamColor: string): string {
   return `color-mix(in srgb, ${teamColor} 72%, transparent)`;
 }
 
-function planTrackHtml(inner: string, weeks: number): string {
-  return `<div class="plan-track" style="background:${planTrackBg(weeks)}">${inner}</div>`;
+function planTrackHtml(
+  inner: string,
+  weeks: number,
+  scale: GanttScale = "week"
+): string {
+  return `<div class="plan-track" style="background:${planTrackBg(weeks, scale)}">${inner}</div>`;
 }
 
 type GanttRoleBar = {
@@ -3885,8 +4223,13 @@ function collectGanttRoleBars(ranges = szRanges()): GanttRoleBar[] {
 function ganttPlanHtml(): string {
   /** Resource-intersection UI belongs on Планирование only. */
   const showConflicts = false;
-  const weeks = Math.max(4, Math.min(52, Math.round(ui.ganttWeeks) || 16));
-  ui.ganttWeeks = weeks;
+  const scale = ui.ganttScale;
+  const treeLevel = ui.ganttTreeLevel;
+  const treeMeta = ganttTreeLevelMeta(treeLevel);
+  const showFn = treeLevel !== "project";
+  const showTeam = treeLevel === "team" || treeLevel === "role";
+  const showRole = treeLevel === "role";
+  const weeks = syncGanttWeeksFromDepth();
   const ranges = szRanges();
   const bars = collectGanttRoleBars(ranges);
   const prioMap = projectPrioMap();
@@ -3914,7 +4257,7 @@ function ganttPlanHtml(): string {
               const assigns = item.assignments;
               const itemSpans: { startWeek: number; endWeek: number }[] = [];
               const itemTeamColors: string[] = [];
-              const execRows = assigns
+              const teamBlocks = assigns
                 .map((a) => {
                   const team = teamById(a.teamId);
                   const roles = planningDemandRoles(a);
@@ -3940,6 +4283,7 @@ function ganttPlanHtml(): string {
                       if (member) {
                         teamSpans.push({ startWeek, endWeek });
                       }
+                      if (!showRole) return "";
                       const bar = member
                         ? ganttLevelBarHtml(
                             startWeek,
@@ -3955,7 +4299,7 @@ function ganttPlanHtml(): string {
                         <div class="plan-cell">
                           <span class="plan-exec-name plan-fio-name">${escapeHtml(left)}${conflict && member ? planConflictMarkHtml("Конфликт ресурса") : ""}</span>
                         </div>
-                        ${planTrackHtml(bar, weeks)}
+                        ${planTrackHtml(bar, weeks, scale)}
                       </div>`;
                     })
                     .join("");
@@ -3965,6 +4309,7 @@ function ganttPlanHtml(): string {
                       itemTeamColors.push(teamColor);
                     }
                   }
+                  if (!showTeam) return "";
                   const teamAgg = planAggregateSpan(teamSpans);
                   const teamBar = teamAgg
                     ? ganttLevelBarHtml(
@@ -3977,12 +4322,21 @@ function ganttPlanHtml(): string {
                         conflict
                       )
                     : "";
+                  const teamLabel = escapeHtml(team?.name ?? a.teamId);
+                  if (!showRole) {
+                    return `<div class="plan-row plan-exec-row plan-team-flat">
+                      <div class="plan-cell">
+                        <span class="plan-exec-name">${teamLabel}</span>
+                      </div>
+                      ${planTrackHtml(teamBar, weeks, scale)}
+                    </div>`;
+                  }
                   return `<details class="plan-team" data-gantt-team="${escapeAttr(teamKey)}"${teamOpen ? " open" : ""}>
                     <summary class="plan-row plan-exec-row plan-team-sum">
                       <div class="plan-cell">
-                        <span class="plan-exec-name">${escapeHtml(team?.name ?? a.teamId)}</span>
+                        <span class="plan-exec-name">${teamLabel}</span>
                       </div>
-                      ${planTrackHtml(teamBar, weeks)}
+                      ${planTrackHtml(teamBar, weeks, scale)}
                     </summary>
                     ${roleRows}
                   </details>`;
@@ -3991,6 +4345,7 @@ function ganttPlanHtml(): string {
               if (itemSpans.length) {
                 projectSpans.push(...itemSpans);
               }
+              if (!showFn) return "";
               const fnAgg = planAggregateSpan(itemSpans);
               const fnBar = fnAgg
                 ? ganttLevelBarHtml(
@@ -4002,14 +4357,23 @@ function ganttPlanHtml(): string {
                     `${item.title} · ${planWeekRangeLabel(fnAgg.startWeek, fnAgg.endWeek)}`
                   )
                 : "";
+              const fnTitle = escapeHtml(item.title);
+              if (!showTeam) {
+                return `<div class="plan-row plan-fn-flat">
+                  <div class="plan-cell">
+                    <span class="plan-fn-title">${fnTitle}</span>
+                  </div>
+                  ${planTrackHtml(fnBar, weeks, scale)}
+                </div>`;
+              }
               return `<details class="plan-fn" data-gantt-fn="${item.id}"${fnOpen ? " open" : ""}>
                 <summary class="plan-row plan-fn-sum">
                   <div class="plan-cell">
-                    <span class="plan-fn-title">${escapeHtml(item.title)}</span>
+                    <span class="plan-fn-title">${fnTitle}</span>
                   </div>
-                  ${planTrackHtml(fnBar, weeks)}
+                  ${planTrackHtml(fnBar, weeks, scale)}
                 </summary>
-                ${execRows || `<div class="plan-row plan-team-row"><div class="plan-cell"><span class="plan-exec-name">Команда не назначена</span></div>${planTrackHtml("", weeks)}</div>`}
+                ${teamBlocks || `<div class="plan-row plan-team-row"><div class="plan-cell"><span class="plan-exec-name">Команда не назначена</span></div>${planTrackHtml("", weeks, scale)}</div>`}
               </details>`;
             })
             .join("");
@@ -4025,14 +4389,17 @@ function ganttPlanHtml(): string {
                 `${g.title}${projectStatus ? ` · ${statusLabel(projectStatus)}` : ""} · ${planWeekRangeLabel(projectAgg.startWeek, projectAgg.endWeek)}`
               )
             : "";
+          const projectHead = `
+            <div class="plan-cell">
+              <span class="plan-project-title">${prioBadgeHtml(prioMap.get(g.key))}${escapeHtml(g.title)}</span>
+              <span class="plan-project-meta">${g.items.length} функц.</span>
+            </div>
+            ${planTrackHtml(projectBar, weeks, scale)}`;
+          if (!showFn) {
+            return `<div class="plan-row plan-project-sum plan-project-flat" data-gantt-project="${escapeAttr(g.key)}">${projectHead}</div>`;
+          }
           return `<details class="plan-project" data-gantt-project="${escapeAttr(g.key)}"${open ? " open" : ""}>
-            <summary class="plan-row plan-project-sum">
-              <div class="plan-cell">
-                <span class="plan-project-title">${prioBadgeHtml(prioMap.get(g.key))}${escapeHtml(g.title)}</span>
-                <span class="plan-project-meta">${g.items.length} функц.</span>
-              </div>
-              ${planTrackHtml(projectBar, weeks)}
-            </summary>
+            <summary class="plan-row plan-project-sum">${projectHead}</summary>
             ${fnRows}
           </details>`;
         })
@@ -4041,18 +4408,14 @@ function ganttPlanHtml(): string {
 
   return `
     <div class="gantt-page">
-      <div class="panel-header need-page-head">
-        <div>
-          <h2>Гантт — итоговый ресурсный план</h2>
-          <p class="meta">Проект → функциональность → команда → роль. Полоски — назначения с вкладки «Планирование».</p>
-        </div>
-        <div class="gantt-head-actions">
-          ${treeExpandControlsHtml("gantt")}
-          <div class="gantt-weeks-ctrl-right">
-            <label for="ganttWeeks">Горизонт</label>
-            <input id="ganttWeeks" type="range" min="4" max="52" step="1" value="${weeks}" />
-            <span class="mono" id="ganttWeeksLabel">${weeks} нед.</span>
-          </div>
+      <div class="panel-header need-page-head gantt-page-head">
+        <h2>Гантт — итоговый ресурсный план</h2>
+        <div class="gantt-view-ctrls">
+          ${planStartCtrlHtml()}
+          ${ganttTreeLevelFilterHtml(treeLevel)}
+          ${ganttScaleToggleHtml(scale)}
+          ${ganttDepthToggleHtml(ui.ganttDepthMonths)}
+          ${showFn ? treeExpandControlsHtml("gantt") : ""}
         </div>
       </div>
       <div class="need-stats gantt-stats">
@@ -4060,6 +4423,7 @@ function ganttPlanHtml(): string {
         <div class="need-stat"><div class="label">Расположено</div><div class="value">${placedKeys.size}</div></div>
         <div class="need-stat"><div class="label">Задач</div><div class="value">${bars.length}</div></div>
         <div class="need-stat"><div class="label">Исполнителей</div><div class="value">${assignees.size}</div></div>
+        <div class="need-stat"><div class="label">Горизонт</div><div class="value">${ui.ganttDepthMonths} мес. · ${weeks} нед.</div></div>
         ${
           showConflicts
             ? `<div class="need-stat"><div class="label">Конфликтов ресурса</div><div class="value${conflictCount ? " is-pending" : ""}">${conflictCount}</div></div>`
@@ -4068,8 +4432,8 @@ function ganttPlanHtml(): string {
       </div>
       <div class="plan-board gantt-board">
         <div class="plan-row plan-board-head">
-          <div class="plan-cell plan-head-label">Проект / функциональность / команда / роль</div>
-          <div class="plan-axis">${planAxisHtml(weeks)}</div>
+          <div class="plan-cell plan-head-label">${escapeHtml(treeMeta.head)}</div>
+          <div class="plan-axis">${planAxisHtml(weeks, undefined, scale)}</div>
         </div>
         ${body}
       </div>
@@ -4265,18 +4629,19 @@ function planningHtml(
 
   return `
     <div class="plan-page">
-      <div class="panel-header need-page-head">
-        <div>
-          <h2>Планирование потребности</h2>
-          <p class="meta">У тимлида несколько проектов с запросом на ресурс. Слева — проекты по функциональностям, справа — шкала назначений.</p>
-        </div>
-        <div class="plan-head-actions">
-          ${treeExpandControlsHtml("plan")}
-          <div class="plan-team-filter-actions">
-            <button type="button" class="plan-team-filter-btn${conflictsOnly ? " is-on" : ""}" data-plan-conflicts-only title="Показать только пересечения по исполнителям" aria-pressed="${conflictsOnly ? "true" : "false"}">Конфликты</button>
-            <button type="button" class="plan-team-filter-btn" data-plan-teams-clear>Сбросить фильтр</button>
-            <button type="button" class="plan-team-filter-btn is-primary" data-plan-teams-all>Выбрать все</button>
+      <div class="panel-header need-page-head gantt-page-head plan-page-head">
+        <h2>Планирование потребности</h2>
+        <div class="gantt-view-ctrls">
+          ${planStartCtrlHtml()}
+          <div class="gantt-seg" role="group" aria-label="Фильтр команд">
+            <span class="gantt-seg-label">Фильтр</span>
+            <div class="gantt-seg-btns plan-team-filter-actions">
+              <button type="button" class="gantt-seg-btn${conflictsOnly ? " is-active" : ""}" data-plan-conflicts-only title="Показать только пересечения по исполнителям" aria-pressed="${conflictsOnly ? "true" : "false"}">Конфликты</button>
+              <button type="button" class="gantt-seg-btn" data-plan-teams-clear>Сбросить</button>
+              <button type="button" class="gantt-seg-btn" data-plan-teams-all>Все</button>
+            </div>
           </div>
+          ${treeExpandControlsHtml("plan")}
         </div>
       </div>
       <div class="plan-teams">
@@ -4443,7 +4808,6 @@ function settingsHtml(rollups: ItemSchedule[]): string {
   const active = state.items.filter((i) => i.status !== "done");
   const ends = rollups.map((s) => s.endWeek);
   const horizon = ends.length ? Math.max(...ends) + 1 : 0;
-  const canPlan = currentCan("settings.plan");
   const canSizes = currentCan("settings.sizes");
   const canPack = currentCan("settings.portfolioPack");
 
@@ -4494,32 +4858,8 @@ function settingsHtml(rollups: ItemSchedule[]): string {
     <div class="settings-stack">
       <header class="settings-page-head">
         <h2 class="settings-page-title">Настройки</h2>
-        <p class="settings-page-lead">Параметры планирования, интеграции и исходный портфель.</p>
+        <p class="settings-page-lead">Маечные оценки, интеграции и исходный портфель.</p>
       </header>
-      ${
-        canPlan
-          ? `<div class="panel">
-        <div class="panel-header">
-          <h3 class="settings-section-title">Старт планирования</h3>
-        </div>
-        <div class="settings-plan-start">
-          <label class="settings-plan-start-field plan-start-anchor">
-            <span class="settings-label">Дата (понедельник)</span>
-            <input
-              type="date"
-              class="plan-start-date-input settings-plan-start-input"
-              value="${state.startDate}"
-              aria-label="Старт планирования"
-            />
-          </label>
-          <p class="settings-help settings-plan-start-hint">
-            Якорь шкалы недель Gantt. При смене шкала сдвигается; абсолютные даты работ сохраняются.
-            Дата округляется к понедельнику.
-          </p>
-        </div>
-      </div>`
-          : ""
-      }
       ${
         canSizes
           ? `<div class="panel panel-sticky-host">
@@ -7657,17 +7997,36 @@ function bindUiRest() {
     persist();
   });
 
-  const ganttWeeks = document.querySelector<HTMLInputElement>("#ganttWeeks");
-  ganttWeeks?.addEventListener("input", () => {
-    const n = Math.max(4, Math.min(52, Number(ganttWeeks.value) || 16));
-    ui.ganttWeeks = n;
-    const label = document.querySelector("#ganttWeeksLabel");
-    if (label) label.textContent = `${n} нед.`;
+  document.querySelectorAll<HTMLButtonElement>("[data-gantt-scale]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = normalizeGanttScale(btn.dataset.ganttScale);
+      if (next === ui.ganttScale) return;
+      ui.ganttScale = next;
+      saveGanttScale(next);
+      render();
+    });
   });
-  ganttWeeks?.addEventListener("change", () => {
-    ui.ganttWeeks = Math.max(4, Math.min(52, Number(ganttWeeks.value) || 16));
-    render();
+  document.querySelectorAll<HTMLButtonElement>("[data-gantt-depth]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = normalizeGanttDepth(btn.dataset.ganttDepth);
+      if (next === ui.ganttDepthMonths) return;
+      ui.ganttDepthMonths = next;
+      saveGanttDepth(next);
+      syncGanttWeeksFromDepth();
+      render();
+    });
   });
+  document
+    .querySelectorAll<HTMLButtonElement>("[data-gantt-tree-level]")
+    .forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const next = normalizeGanttTreeLevel(btn.dataset.ganttTreeLevel);
+        if (next === ui.ganttTreeLevel) return;
+        ui.ganttTreeLevel = next;
+        saveGanttTreeLevel(next);
+        render();
+      });
+    });
 
   document.querySelectorAll<HTMLInputElement>("[data-team-name]").forEach((input) => {
     const commitName = () => {
@@ -8124,6 +8483,7 @@ function applyPortfolioColWidth(col: PortfolioCol, width: number, min: number) {
       el.style.width = `${width}px`;
       el.style.minWidth = `${min}px`;
     });
+  syncPortfolioTableWidths();
 }
 
 function bindPortfolioTableScroll() {
@@ -8354,7 +8714,7 @@ function buildGanttPdfData(): GanttPdfData {
       : Math.max(...bars.map((b) => b.endWeek)) + 1;
   const weeks = Math.max(
     4,
-    Math.min(52, Math.max(Math.round(ui.ganttWeeks) || 16, contentWeeks))
+    Math.min(GANTT_WEEKS_MAX, Math.max(syncGanttWeeksFromDepth(), contentWeeks))
   );
   const prioMap = projectPrioMap();
   const step = ganttPdfWeekLabelStep(weeks);
@@ -8476,6 +8836,10 @@ async function bootstrap() {
   ui.hiddenCols = loadHiddenCols();
   ui.scheduleMode = loadScheduleMode();
   saveScheduleMode(ui.scheduleMode);
+  ui.ganttScale = loadGanttScale();
+  ui.ganttDepthMonths = loadGanttDepth();
+  ui.ganttTreeLevel = loadGanttTreeLevel();
+  syncGanttWeeksFromDepth();
   ui.tab = readStoredUiTab();
   ensureVisibleTab();
   const ranked = ensureUniquePriorities(state.items, szRanges());

@@ -2001,6 +2001,17 @@ export function addWeeks(isoDate: string, weeks: number): string {
   return addDays(isoDate, weeks * 7);
 }
 
+/** Add calendar months; clamps day to last day of target month. */
+export function addMonths(isoDate: string, months: number): string {
+  const d = new Date(isoDate + "T12:00:00");
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, last));
+  return d.toISOString().slice(0, 10);
+}
+
 /** Pick the critical-path slice: latest finish; ties → longer estimate */
 export function pickBottleneck(slices: ScheduledSlice[]): ScheduledSlice {
   return slices.reduce((best, cur) => {
