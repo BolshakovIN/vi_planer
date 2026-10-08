@@ -1641,9 +1641,11 @@ function projectPrioMap(): Map<string, number> {
 
 function prioBadgeHtml(
   prio: number | string | null | undefined,
-  title = "Приоритет проекта"
+  title = "Приоритет проекта",
+  extraClass = ""
 ): string {
-  return `<span class="prio-mini" title="${escapeAttr(title)}">${prio ?? "—"}</span>`;
+  const cls = ["prio-mini", extraClass].filter(Boolean).join(" ");
+  return `<span class="${cls}" title="${escapeAttr(title)}">${prio ?? "—"}</span>`;
 }
 
 function teamRosterFactLabel(team: Team): string {
@@ -2893,7 +2895,7 @@ function demandFnHtml(item: WorkItem, fnPrio?: Map<string, number>): string {
   return `<details class="need-fn" data-need-fn="${item.id}"${open ? " open" : ""}>
     <summary class="need-fn-sum">
         <span class="need-fn-left">
-        <span class="need-fn-title">${prioBadgeHtml(fnPrio?.get(item.id), "Приоритет функциональности (меняется в Реестре)")}${escapeHtml(item.title)}</span>
+        <span class="need-fn-title">${prioBadgeHtml(fnPrio?.get(item.id), "Приоритет функциональности (меняется в Реестре)", "prio-mini-fn")}${escapeHtml(item.title)}</span>
       </span>
       <span class="need-fn-actions">
         <span class="need-fn-req">запрошено ${days} дн.</span>

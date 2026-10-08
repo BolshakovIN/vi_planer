@@ -773,12 +773,32 @@ table {
 .portfolio-fn-prio {
   background: var(--surface-2);
   padding-left: 14px !important;
+  font-style: normal;
 }
 
-.portfolio-table .prio-input.prio-input-fn {
-  height: 24px;
-  width: 36px;
-  font-size: 12px;
+/* Nested fn priority: upright mono chip — not italic like the title */
+.portfolio-table .prio-input.prio-input-fn,
+.portfolio-row-fn .prio-input.prio-input-fn {
+  height: 20px;
+  width: 30px;
+  min-width: 30px;
+  padding: 0 3px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  letter-spacing: -0.02em;
+  background: var(--surface);
+  color: var(--neutral-ink);
+  border: 1px solid color-mix(in srgb, var(--neutral) 35%, var(--line));
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--surface) 80%, transparent);
+}
+
+.portfolio-table .prio-input.prio-input-fn:hover,
+.portfolio-table .prio-input.prio-input-fn:focus {
+  background: #fff;
+  border-color: var(--neutral);
 }
 
 .portfolio-fn-title {
@@ -2184,7 +2204,26 @@ body.prio-dragging {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 12px;
   font-weight: 700;
+  font-style: normal;
   vertical-align: middle;
+}
+
+/* Functionality priority badge (Потребность / nested) — outlined, not italic title text */
+.prio-mini.prio-mini-fn {
+  min-width: 18px;
+  height: 16px;
+  padding: 0 4px;
+  margin-right: 8px;
+  font-size: 10px;
+  font-style: normal;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--neutral) 35%, var(--line));
+  color: var(--neutral-ink);
+  flex-shrink: 0;
+}
+
+.need-fn-title .prio-mini-fn {
+  vertical-align: text-top;
 }
 
 .metric-num {
