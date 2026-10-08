@@ -3489,7 +3489,7 @@ function planFnTeamsMarkHtml(item: WorkItem, selectedSet: Set<string>): string {
     })
     .join("");
   const aria = `Команды функциональности: ${teams.map((x) => x.team.name).join(", ")}`;
-  return `<span class="plan-fn-teams" tabindex="0" aria-label="${escapeAttr(aria)}">${PLAN_FN_TEAMS_SVG}<span class="plan-fn-teams-n">+${others.length}</span><span class="plan-conflict-tip plan-fn-teams-tip" role="tooltip"><span class="plan-fn-teams-head">Команды в функциональности (${teams.length})</span><ul class="plan-fn-teams-list">${rows}</ul></span></span>`;
+  return `<span class="plan-fn-teams" role="button" tabindex="0" aria-haspopup="dialog" aria-expanded="false" aria-label="${escapeAttr(aria)}" title="Показать все команды">${PLAN_FN_TEAMS_SVG}<span class="plan-fn-teams-n">+${others.length}</span><span class="plan-conflict-tip plan-fn-teams-tip" role="dialog"><span class="plan-fn-teams-head">Команды в функциональности (${teams.length})</span><ul class="plan-fn-teams-list">${rows}</ul></span></span>`;
 }
 
 function treeExpandControlsHtml(scope: "plan" | "gantt" | "gantt-fact"): string {
@@ -5321,6 +5321,7 @@ function placePlanConflictTip(mark: HTMLElement, tip: HTMLElement) {
 
 function clearPlanConflictTip(mark: HTMLElement, tip: HTMLElement) {
   mark.classList.remove("is-tip-open");
+  if (mark.hasAttribute("aria-expanded")) mark.setAttribute("aria-expanded", "false");
   tip.classList.remove("is-fixed");
   tip.style.left = "";
   tip.style.top = "";
@@ -5335,18 +5336,11 @@ function bindPlanConflictTips() {
   hideOpenPlanConflictTip();
   document
     .querySelectorAll<HTMLElement>(
-      ".plan-conflict-mark, .plan-axis-tick.is-conflict-week, .plan-fn-teams"
+      ".plan-conflict-mark, .plan-axis-tick.is-conflict-week"
     )
     .forEach((mark) => {
       const tip = mark.querySelector<HTMLElement>(".plan-conflict-tip");
       if (!tip) return;
-      if (mark.classList.contains("plan-fn-teams")) {
-        // Icon sits inside <summary>: don't toggle the row on click.
-        mark.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        });
-      }
       const show = () => placePlanConflictTip(mark, tip);
       const hide = () => clearPlanConflictTip(mark, tip);
       mark.addEventListener("mouseenter", show);
@@ -5354,6 +5348,53 @@ function bindPlanConflictTips() {
       mark.addEventListener("focus", show);
       mark.addEventListener("blur", hide);
     });
+}
+
+let planFnTeamsOutsideBound = false;
+
+/** Планирование: team list opens on click (not hover); one at a time. */
+function bindPlanFnTeamsPopups() {
+  document.querySelectorAll<HTMLElement>(".plan-fn-teams").forEach((mark) => {
+    const tip = mark.querySelector<HTMLElement>(".plan-conflict-tip");
+    if (!tip) return;
+    const toggle = () => {
+      const isOpen = mark.classList.contains("is-tip-open");
+      hideOpenPlanConflictTip();
+      if (!isOpen) {
+        placePlanConflictTip(mark, tip);
+        mark.setAttribute("aria-expanded", "true");
+      }
+    };
+    // Icon sits inside <summary>: never toggle the functionality row.
+    mark.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (tip.contains(e.target as Node)) return; // clicks inside the list keep it open
+      toggle();
+    });
+    mark.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        e.stopPropagation();
+        toggle();
+      } else if (e.key === "Escape") {
+        hideOpenPlanConflictTip();
+      }
+    });
+  });
+  if (planFnTeamsOutsideBound) return;
+  planFnTeamsOutsideBound = true;
+  document.addEventListener("click", (e) => {
+    const open = planConflictTipOpen;
+    if (!open || !open.mark.classList.contains("plan-fn-teams")) return;
+    if (open.mark.contains(e.target as Node)) return;
+    hideOpenPlanConflictTip();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    const open = planConflictTipOpen;
+    if (open?.mark.classList.contains("plan-fn-teams")) hideOpenPlanConflictTip();
+  });
 }
 
 function bindOverloadExplain() {
@@ -7292,6 +7333,7 @@ function bindUiRest() {
 
   bindOverloadExplain();
   bindPlanConflictTips();
+  bindPlanFnTeamsPopups();
 
   document.querySelector("#resetFilters")?.addEventListener("click", () => {
     ui.typeFilter = "all";

@@ -5517,7 +5517,8 @@ body.pdf-capturing .gantt-page .plan-board {
   background: var(--neutral-soft);
   color: var(--neutral-ink);
   line-height: 1;
-  cursor: help;
+  cursor: pointer;
+  user-select: none;
   outline: none;
 }
 
@@ -5551,11 +5552,18 @@ body.pdf-capturing .gantt-page .plan-board {
   z-index: 40;
 }
 
-.plan-fn-teams:hover .plan-fn-teams-tip,
-.plan-fn-teams:focus-visible .plan-fn-teams-tip,
 .plan-fn-teams.is-tip-open .plan-fn-teams-tip {
   opacity: 1;
   visibility: visible;
+}
+
+.plan-fn-teams-tip {
+  cursor: default;
+  user-select: text;
+}
+
+.plan-fn-teams.is-tip-open .plan-fn-teams-tip {
+  pointer-events: auto;
 }
 
 .plan-fn-teams-head {
