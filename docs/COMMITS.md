@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 08.10.2026, 15:25 GMT+3
+Сгенерировано: 08.10.2026, 16:15 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,11 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `bf9f8fb` | 2026-10-08 | ivanbolsakov | Merge master into need-fn-priority-badge for deploy. |
+| `b396c81` | 2026-10-08 | ivanbolsakov | Style functionality priority chips to stand out from italic titles. |
+| `26de98e` | 2026-10-08 | ivanbolsakov | Publish plan/timeline days split and partial demand status. |
+| `e987960` | 2026-10-08 | MSupreme1990 | Реестр: редактируемый приоритет функциональностей внутри проекта |
+| `6bf42d0` | 2026-10-08 | MSupreme1990 | Потребность: показывать приоритет функциональности |
 | `f6c04b5` | 2026-10-08 | ivanbolsakov | Publish Гантт/факт tab and planning role days counters. |
 | `c1b75b9` | 2026-10-08 | ivanbolsakov | Publish bugfixes and Gantt cleanup to GitHub Pages. |
 | `7329bf2` | 2026-10-08 | ivanbolsakov | Fix portfolio column resize sync and remove dead Gantt code. |
@@ -445,7 +450,12 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `f6c04b5` | 2026-10-08 | ivanbolsakov | HEAD -> master, origin/master | Publish Гантт/факт tab and planning role days counters. |
+| `bf9f8fb` | 2026-10-08 | ivanbolsakov | HEAD -> master, need-fn-priority-badge | Merge master into need-fn-priority-badge for deploy. |
+| `b396c81` | 2026-10-08 | ivanbolsakov |  | Style functionality priority chips to stand out from italic titles. |
+| `26de98e` | 2026-10-08 | ivanbolsakov | origin/master | Publish plan/timeline days split and partial demand status. |
+| `e987960` | 2026-10-08 | MSupreme1990 | origin/need-fn-priority-badge | Реестр: редактируемый приоритет функциональностей внутри проекта |
+| `6bf42d0` | 2026-10-08 | MSupreme1990 |  | Потребность: показывать приоритет функциональности |
+| `f6c04b5` | 2026-10-08 | ivanbolsakov |  | Publish Гантт/факт tab and planning role days counters. |
 | `c1b75b9` | 2026-10-08 | ivanbolsakov |  | Publish bugfixes and Gantt cleanup to GitHub Pages. |
 | `7329bf2` | 2026-10-08 | ivanbolsakov |  | Fix portfolio column resize sync and remove dead Gantt code. |
 | `22a58de` | 2026-10-08 | ivanbolsakov |  | Publish Gantt controls and plan-start move to GitHub Pages. |
