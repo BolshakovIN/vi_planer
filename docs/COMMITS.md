@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 08.10.2026, 16:15 GMT+3
+Сгенерировано: 08.10.2026, 23:54 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,17 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `0160649` | 2026-10-08 | ivanbolsakov | Journal: drop clear button and style project filter like toolbar. |
+| `7e1e5e9` | 2026-10-08 | MSupreme1990 | Журнал: нормальный размер шрифта описания и фильтра |
+| `1aae8c6` | 2026-10-08 | MSupreme1990 | Журнал приоритетов: причина изменения приоритета проекта |
+| `98b8870` | 2026-10-08 | MSupreme1990 | Реестр: при нескольких командах в колонке только значок «N команд» |
+| `4a3daa9` | 2026-10-08 | MSupreme1990 | Окно команд: закрывать при нажатии мыши мимо (pointerdown) |
+| `ebf051d` | 2026-10-08 | MSupreme1990 | Реестр: все команды и оценки — во всплывающем окне по клику на значок |
+| `907efe4` | 2026-10-08 | MSupreme1990 | Планирование: убрать нативную подсказку браузера у значка команд |
+| `c76763c` | 2026-10-08 | MSupreme1990 | Планирование: список команд функциональности открывается по клику |
+| `398e442` | 2026-10-08 | MSupreme1990 | Планирование: значок команд функциональности со всплывающим списком |
+| `374e290` | 2026-10-08 | MSupreme1990 | Меню в новом порядке; на Планировании видно другие команды функциональности |
+| `07b736f` | 2026-10-08 | ivanbolsakov | Publish functionality priority editing and chip styling to GitHub Pages. |
 | `bf9f8fb` | 2026-10-08 | ivanbolsakov | Merge master into need-fn-priority-badge for deploy. |
 | `b396c81` | 2026-10-08 | ivanbolsakov | Style functionality priority chips to stand out from italic titles. |
 | `26de98e` | 2026-10-08 | ivanbolsakov | Publish plan/timeline days split and partial demand status. |
@@ -450,10 +461,21 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `bf9f8fb` | 2026-10-08 | ivanbolsakov | HEAD -> master, need-fn-priority-badge | Merge master into need-fn-priority-badge for deploy. |
+| `0160649` | 2026-10-08 | ivanbolsakov | HEAD -> master, priority-journal | Journal: drop clear button and style project filter like toolbar. |
+| `7e1e5e9` | 2026-10-08 | MSupreme1990 | origin/priority-journal | Журнал: нормальный размер шрифта описания и фильтра |
+| `1aae8c6` | 2026-10-08 | MSupreme1990 |  | Журнал приоритетов: причина изменения приоритета проекта |
+| `98b8870` | 2026-10-08 | MSupreme1990 | origin/menu-order-plan-teams | Реестр: при нескольких командах в колонке только значок «N команд» |
+| `4a3daa9` | 2026-10-08 | MSupreme1990 |  | Окно команд: закрывать при нажатии мыши мимо (pointerdown) |
+| `ebf051d` | 2026-10-08 | MSupreme1990 |  | Реестр: все команды и оценки — во всплывающем окне по клику на значок |
+| `907efe4` | 2026-10-08 | MSupreme1990 |  | Планирование: убрать нативную подсказку браузера у значка команд |
+| `c76763c` | 2026-10-08 | MSupreme1990 |  | Планирование: список команд функциональности открывается по клику |
+| `398e442` | 2026-10-08 | MSupreme1990 |  | Планирование: значок команд функциональности со всплывающим списком |
+| `374e290` | 2026-10-08 | MSupreme1990 |  | Меню в новом порядке; на Планировании видно другие команды функциональности |
+| `07b736f` | 2026-10-08 | ivanbolsakov | origin/master | Publish functionality priority editing and chip styling to GitHub Pages. |
+| `bf9f8fb` | 2026-10-08 | ivanbolsakov | origin/need-fn-priority-badge, need-fn-priority-badge | Merge master into need-fn-priority-badge for deploy. |
 | `b396c81` | 2026-10-08 | ivanbolsakov |  | Style functionality priority chips to stand out from italic titles. |
-| `26de98e` | 2026-10-08 | ivanbolsakov | origin/master | Publish plan/timeline days split and partial demand status. |
-| `e987960` | 2026-10-08 | MSupreme1990 | origin/need-fn-priority-badge | Реестр: редактируемый приоритет функциональностей внутри проекта |
+| `26de98e` | 2026-10-08 | ivanbolsakov |  | Publish plan/timeline days split and partial demand status. |
+| `e987960` | 2026-10-08 | MSupreme1990 |  | Реестр: редактируемый приоритет функциональностей внутри проекта |
 | `6bf42d0` | 2026-10-08 | MSupreme1990 |  | Потребность: показывать приоритет функциональности |
 | `f6c04b5` | 2026-10-08 | ivanbolsakov |  | Publish Гантт/факт tab and planning role days counters. |
 | `c1b75b9` | 2026-10-08 | ivanbolsakov |  | Publish bugfixes and Gantt cleanup to GitHub Pages. |
@@ -635,7 +657,6 @@
 | `430c927` | 2026-09-15 | ivanbolsakov |  | Show product/project name under Тип from the renamed field. |
 | `3a18517` | 2026-09-15 | ivanbolsakov |  | Deploy Pages build with функциональность UI updates. |
 | `dc242fd` | 2026-09-15 | Ivan |  | Rename portfolio rows to функциональность and show product/project under Тип. (#1) |
-| `90b944e` | 2026-09-15 | ivanbolsakov | origin/feature/functionality-type-name | Rename portfolio rows to функциональность and show product/project under Тип. |
 | `27c9b77` | 2026-09-15 | ivanbolsakov |  | Migrate portfolio prioritization from WSJF to RICE. |
 | `eac8389` | 2026-09-15 | ivanbolsakov |  | Fix Russian genitive plural: «оценка маек», not «майки». |
 | `978511b` | 2026-09-15 | ivanbolsakov |  | Keep portfolio column headers sticky under the filters toolbar. |
