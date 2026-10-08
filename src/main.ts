@@ -120,6 +120,7 @@ type Tab =
   | "demand"
   | "planning"
   | "timeline"
+  | "timelineFact"
   | "demoA"
   | "demoB"
   | "capacity"
@@ -135,6 +136,7 @@ type GanttTreeLevel = "project" | "fn" | "team" | "role";
 const TAB_LABELS: Record<Tab, string> = {
   portfolio: "Реестр",
   timeline: "Гантт",
+  timelineFact: "Гантт/факт",
   demand: "Потребность",
   planning: "Планирование",
   demoA: "Мониторинг",
@@ -162,6 +164,8 @@ const TAB_ICON_SVG: Record<Tab, string> = {
     '<rect x="2.4" y="3.4" width="11.2" height="10.2" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.4 6.4h11.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.4 2.3v2.4M10.6 2.3v2.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
   timeline:
     '<rect x="2" y="3" width="7.6" height="2.3" rx="0.6"/><rect x="4.2" y="6.85" width="9.8" height="2.3" rx="0.6"/><rect x="3.1" y="10.7" width="6.2" height="2.3" rx="0.6"/>',
+  timelineFact:
+    '<rect x="2" y="3" width="7.6" height="2.3" rx="0.6"/><rect x="4.2" y="6.85" width="9.8" height="2.3" rx="0.6"/><rect x="3.1" y="10.7" width="6.2" height="2.3" rx="0.6"/><path d="M11.2 11.2l1.1 1.1 2.2-2.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
   demoA:
     '<rect x="2.2" y="2.4" width="11.6" height="8.1" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.6 10.5v2.2h2.8v-2.2M5.2 13.2h5.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
   demoB:
@@ -199,6 +203,7 @@ function normalizeTab(tab: string | undefined | null): Tab {
     tab === "demand" ||
     tab === "planning" ||
     tab === "timeline" ||
+    tab === "timelineFact" ||
     tab === "demoA" ||
     tab === "demoB" ||
     tab === "capacity" ||
@@ -254,6 +259,7 @@ function ensureVisibleTab() {
     const fallback: Tab[] = [
       "portfolio",
       "timeline",
+      "timelineFact",
       "demand",
       "planning",
       "demoA",
@@ -285,6 +291,13 @@ interface UiState {
   ganttDepthMonths: GanttDepthMonths;
   /** Gantt hierarchy cutoff: project … role/assignee */
   ganttTreeLevel: GanttTreeLevel;
+  /** Гантт/факт — independent of Гантт filters/collapse */
+  ganttFactScale: GanttScale;
+  ganttFactDepthMonths: GanttDepthMonths;
+  ganttFactTreeLevel: GanttTreeLevel;
+  ganttFactCollapsedProjects: Record<string, true>;
+  ganttFactCollapsedItems: Record<string, true>;
+  ganttFactCollapsedTeams: Record<string, true>;
   /**
    * Gantt / Очередь / Мониторинг schedule mode — see SCHEDULE_MODE_META.
    * Controlled by the two toggle buttons (none active → `manual`).
@@ -367,6 +380,12 @@ const ui: UiState = {
   ganttScale: "week",
   ganttDepthMonths: 6,
   ganttTreeLevel: "role",
+  ganttFactScale: "week",
+  ganttFactDepthMonths: 6,
+  ganttFactTreeLevel: "role",
+  ganttFactCollapsedProjects: {},
+  ganttFactCollapsedItems: {},
+  ganttFactCollapsedTeams: {},
   scheduleMode: "teamQueue",
   hiddenCols: [],
   colPickerOpen: false,
@@ -719,6 +738,10 @@ const AUTO_CAPACITY_SCHEDULE_KEY = "vi-planer-auto-capacity-schedule";
 const GANTT_SCALE_KEY = "vi-planer-gantt-scale";
 const GANTT_DEPTH_KEY = "vi-planer-gantt-depth";
 const GANTT_TREE_LEVEL_KEY = "vi-planer-gantt-tree-level";
+/** Independent from Гантт — Гантт/факт view prefs */
+const GANTT_FACT_SCALE_KEY = "vi-planer-gantt-fact-scale";
+const GANTT_FACT_DEPTH_KEY = "vi-planer-gantt-fact-depth";
+const GANTT_FACT_TREE_LEVEL_KEY = "vi-planer-gantt-fact-tree-level";
 const GANTT_DEPTH_OPTIONS: GanttDepthMonths[] = [3, 6, 9, 12];
 /** Max weeks for 12‑month horizon (~52–53). */
 const GANTT_WEEKS_MAX = 56;
@@ -832,6 +855,56 @@ function saveGanttTreeLevel(level: GanttTreeLevel): void {
   }
 }
 
+function loadGanttFactScale(): GanttScale {
+  try {
+    return normalizeGanttScale(localStorage.getItem(GANTT_FACT_SCALE_KEY));
+  } catch {
+    return "week";
+  }
+}
+
+function saveGanttFactScale(scale: GanttScale): void {
+  try {
+    localStorage.setItem(GANTT_FACT_SCALE_KEY, scale);
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadGanttFactDepth(): GanttDepthMonths {
+  try {
+    return normalizeGanttDepth(localStorage.getItem(GANTT_FACT_DEPTH_KEY));
+  } catch {
+    return 6;
+  }
+}
+
+function saveGanttFactDepth(depth: GanttDepthMonths): void {
+  try {
+    localStorage.setItem(GANTT_FACT_DEPTH_KEY, String(depth));
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadGanttFactTreeLevel(): GanttTreeLevel {
+  try {
+    return normalizeGanttTreeLevel(
+      localStorage.getItem(GANTT_FACT_TREE_LEVEL_KEY)
+    );
+  } catch {
+    return "role";
+  }
+}
+
+function saveGanttFactTreeLevel(level: GanttTreeLevel): void {
+  try {
+    localStorage.setItem(GANTT_FACT_TREE_LEVEL_KEY, level);
+  } catch {
+    /* ignore */
+  }
+}
+
 function ganttTreeLevelMeta(level: GanttTreeLevel = ui.ganttTreeLevel) {
   return (
     GANTT_TREE_LEVEL_OPTIONS.find((o) => o.id === level) ??
@@ -839,11 +912,14 @@ function ganttTreeLevelMeta(level: GanttTreeLevel = ui.ganttTreeLevel) {
   );
 }
 
-function ganttTreeLevelFilterHtml(level: GanttTreeLevel): string {
+function ganttTreeLevelFilterHtml(
+  level: GanttTreeLevel,
+  dataAttr = "gantt-tree-level"
+): string {
   const current = ganttTreeLevelMeta(level);
   const items = GANTT_TREE_LEVEL_OPTIONS.map(
     (o) =>
-      `<button type="button" class="gantt-tree-opt${o.id === level ? " is-active" : ""}" data-gantt-tree-level="${o.id}" role="option" aria-selected="${o.id === level ? "true" : "false"}">${escapeHtml(o.label)}</button>`
+      `<button type="button" class="gantt-tree-opt${o.id === level ? " is-active" : ""}" data-${dataAttr}="${o.id}" role="option" aria-selected="${o.id === level ? "true" : "false"}">${escapeHtml(o.label)}</button>`
   ).join("");
   return `
     <div class="gantt-seg gantt-tree-filter" role="group" aria-label="Вложенность">
@@ -944,22 +1020,28 @@ function ganttScaleBands(
   return null;
 }
 
-function ganttScaleToggleHtml(scale: GanttScale): string {
+function ganttScaleToggleHtml(
+  scale: GanttScale,
+  dataAttr = "gantt-scale"
+): string {
   return `
     <div class="gantt-seg" role="group" aria-label="Диапазон">
       <span class="gantt-seg-label">Диапазон</span>
       <div class="gantt-seg-btns">
-        <button type="button" class="gantt-seg-btn${scale === "week" ? " is-active" : ""}" data-gantt-scale="week">Неделя</button>
-        <button type="button" class="gantt-seg-btn${scale === "month" ? " is-active" : ""}" data-gantt-scale="month">Месяц</button>
-        <button type="button" class="gantt-seg-btn${scale === "quarter" ? " is-active" : ""}" data-gantt-scale="quarter">Квартал</button>
+        <button type="button" class="gantt-seg-btn${scale === "week" ? " is-active" : ""}" data-${dataAttr}="week">Неделя</button>
+        <button type="button" class="gantt-seg-btn${scale === "month" ? " is-active" : ""}" data-${dataAttr}="month">Месяц</button>
+        <button type="button" class="gantt-seg-btn${scale === "quarter" ? " is-active" : ""}" data-${dataAttr}="quarter">Квартал</button>
       </div>
     </div>`;
 }
 
-function ganttDepthToggleHtml(depth: GanttDepthMonths): string {
+function ganttDepthToggleHtml(
+  depth: GanttDepthMonths,
+  dataAttr = "gantt-depth"
+): string {
   const btns = GANTT_DEPTH_OPTIONS.map(
     (m) =>
-      `<button type="button" class="gantt-seg-btn${depth === m ? " is-active" : ""}" data-gantt-depth="${m}">${m} мес.</button>`
+      `<button type="button" class="gantt-seg-btn${depth === m ? " is-active" : ""}" data-${dataAttr}="${m}">${m} мес.</button>`
   ).join("");
   return `
     <div class="gantt-seg" role="group" aria-label="Глубина">
@@ -3340,7 +3422,7 @@ function planConflictMarkHtml(
   return `<span class="plan-conflict-mark" tabindex="0" aria-label="${label}">${PLAN_CONFLICT_MARK_SVG}<span class="plan-conflict-tip" role="tooltip">${tip}</span></span>`;
 }
 
-function treeExpandControlsHtml(scope: "plan" | "gantt"): string {
+function treeExpandControlsHtml(scope: "plan" | "gantt" | "gantt-fact"): string {
   return `<div class="tree-expand-controls" role="group" aria-label="Свернуть или развернуть дерево">
     <button type="button" class="tree-expand-btn" data-tree-expand="${scope}" title="Развернуть все" aria-label="Развернуть все">${TREE_EXPAND_SVG}</button>
     <button type="button" class="tree-expand-btn" data-tree-collapse="${scope}" title="Свернуть все" aria-label="Свернуть все">${TREE_COLLAPSE_SVG}</button>
@@ -3387,6 +3469,28 @@ function setGanttTreeExpanded(expanded: boolean) {
     ui.ganttCollapsedTeams = collectDatasetKeys(
       "[data-gantt-team]",
       "ganttTeam"
+    );
+  }
+  render();
+}
+
+function setGanttFactTreeExpanded(expanded: boolean) {
+  if (expanded) {
+    ui.ganttFactCollapsedProjects = {};
+    ui.ganttFactCollapsedItems = {};
+    ui.ganttFactCollapsedTeams = {};
+  } else {
+    ui.ganttFactCollapsedProjects = collectDatasetKeys(
+      "[data-gantt-fact-project]",
+      "ganttFactProject"
+    );
+    ui.ganttFactCollapsedItems = collectDatasetKeys(
+      "[data-gantt-fact-fn]",
+      "ganttFactFn"
+    );
+    ui.ganttFactCollapsedTeams = collectDatasetKeys(
+      "[data-gantt-fact-team]",
+      "ganttFactTeam"
     );
   }
   render();
@@ -3644,16 +3748,75 @@ function collectGanttRoleBars(ranges = szRanges()): GanttRoleBar[] {
   return out;
 }
 
+type GanttBoardView = {
+  title: string;
+  rootClass: string;
+  scale: GanttScale;
+  depth: GanttDepthMonths;
+  treeLevel: GanttTreeLevel;
+  collapsedProjects: Record<string, true>;
+  collapsedItems: Record<string, true>;
+  collapsedTeams: Record<string, true>;
+  attrProject: string;
+  attrFn: string;
+  attrTeam: string;
+  treeScope: "gantt" | "gantt-fact";
+  scaleAttr: string;
+  depthAttr: string;
+  treeLevelAttr: string;
+};
+
 function ganttPlanHtml(): string {
+  return ganttBoardHtml({
+    title: "Гантт — итоговый ресурсный план",
+    rootClass: "gantt-page",
+    scale: ui.ganttScale,
+    depth: ui.ganttDepthMonths,
+    treeLevel: ui.ganttTreeLevel,
+    collapsedProjects: ui.ganttCollapsedProjects,
+    collapsedItems: ui.ganttCollapsedItems,
+    collapsedTeams: ui.ganttCollapsedTeams,
+    attrProject: "gantt-project",
+    attrFn: "gantt-fn",
+    attrTeam: "gantt-team",
+    treeScope: "gantt",
+    scaleAttr: "gantt-scale",
+    depthAttr: "gantt-depth",
+    treeLevelAttr: "gantt-tree-level",
+  });
+}
+
+/** Same board as Гантт, fully independent filters/collapse/prefs. */
+function ganttFactHtml(): string {
+  return ganttBoardHtml({
+    title: "Гантт/факт — итоговый ресурсный план",
+    rootClass: "gantt-page gantt-fact-page",
+    scale: ui.ganttFactScale,
+    depth: ui.ganttFactDepthMonths,
+    treeLevel: ui.ganttFactTreeLevel,
+    collapsedProjects: ui.ganttFactCollapsedProjects,
+    collapsedItems: ui.ganttFactCollapsedItems,
+    collapsedTeams: ui.ganttFactCollapsedTeams,
+    attrProject: "gantt-fact-project",
+    attrFn: "gantt-fact-fn",
+    attrTeam: "gantt-fact-team",
+    treeScope: "gantt-fact",
+    scaleAttr: "gantt-fact-scale",
+    depthAttr: "gantt-fact-depth",
+    treeLevelAttr: "gantt-fact-tree-level",
+  });
+}
+
+function ganttBoardHtml(view: GanttBoardView): string {
   /** Resource-intersection UI belongs on Планирование only. */
   const showConflicts = false;
-  const scale = ui.ganttScale;
-  const treeLevel = ui.ganttTreeLevel;
+  const scale = view.scale;
+  const treeLevel = view.treeLevel;
   const treeMeta = ganttTreeLevelMeta(treeLevel);
   const showFn = treeLevel !== "project";
   const showTeam = treeLevel === "team" || treeLevel === "role";
   const showRole = treeLevel === "role";
-  const weeks = ganttHorizonWeeks();
+  const weeks = ganttHorizonWeeks(view.depth);
   const ranges = szRanges();
   const bars = collectGanttRoleBars(ranges);
   const prioMap = projectPrioMap();
@@ -3673,11 +3836,11 @@ function ganttPlanHtml(): string {
   const body = groups.length
     ? groups
         .map((g) => {
-          const open = !ui.ganttCollapsedProjects[g.key];
+          const open = !view.collapsedProjects[g.key];
           const projectSpans: { startWeek: number; endWeek: number }[] = [];
           const fnRows = g.items
             .map((item) => {
-              const fnOpen = !ui.ganttCollapsedItems[item.id];
+              const fnOpen = !view.collapsedItems[item.id];
               const assigns = item.assignments;
               const itemSpans: { startWeek: number; endWeek: number }[] = [];
               const itemTeamColors: string[] = [];
@@ -3688,7 +3851,7 @@ function ganttPlanHtml(): string {
                   const conflict = false;
                   if (!roles.length) return "";
                   const teamKey = `${item.id}:${a.teamId}`;
-                  const teamOpen = !ui.ganttCollapsedTeams[teamKey];
+                  const teamOpen = !view.collapsedTeams[teamKey];
                   const teamColor = team?.color ?? "#484f55";
                   const teamSpans: { startWeek: number; endWeek: number }[] =
                     [];
@@ -3755,7 +3918,7 @@ function ganttPlanHtml(): string {
                       ${planTrackHtml(teamBar, weeks, scale)}
                     </div>`;
                   }
-                  return `<details class="plan-team" data-gantt-team="${escapeAttr(teamKey)}"${teamOpen ? " open" : ""}>
+                  return `<details class="plan-team" data-${view.attrTeam}="${escapeAttr(teamKey)}"${teamOpen ? " open" : ""}>
                     <summary class="plan-row plan-exec-row plan-team-sum">
                       <div class="plan-cell">
                         <span class="plan-exec-name">${teamLabel}</span>
@@ -3790,7 +3953,7 @@ function ganttPlanHtml(): string {
                   ${planTrackHtml(fnBar, weeks, scale)}
                 </div>`;
               }
-              return `<details class="plan-fn" data-gantt-fn="${item.id}"${fnOpen ? " open" : ""}>
+              return `<details class="plan-fn" data-${view.attrFn}="${item.id}"${fnOpen ? " open" : ""}>
                 <summary class="plan-row plan-fn-sum">
                   <div class="plan-cell">
                     <span class="plan-fn-title">${fnTitle}</span>
@@ -3820,9 +3983,9 @@ function ganttPlanHtml(): string {
             </div>
             ${planTrackHtml(projectBar, weeks, scale)}`;
           if (!showFn) {
-            return `<div class="plan-row plan-project-sum plan-project-flat" data-gantt-project="${escapeAttr(g.key)}">${projectHead}</div>`;
+            return `<div class="plan-row plan-project-sum plan-project-flat" data-${view.attrProject}="${escapeAttr(g.key)}">${projectHead}</div>`;
           }
-          return `<details class="plan-project" data-gantt-project="${escapeAttr(g.key)}"${open ? " open" : ""}>
+          return `<details class="plan-project" data-${view.attrProject}="${escapeAttr(g.key)}"${open ? " open" : ""}>
             <summary class="plan-row plan-project-sum">${projectHead}</summary>
             ${fnRows}
           </details>`;
@@ -3831,15 +3994,15 @@ function ganttPlanHtml(): string {
     : `<div class="plan-empty meta">Нет проектов. Добавьте их в Реестре и назначьте команды в Потребности.</div>`;
 
   return `
-    <div class="gantt-page">
+    <div class="${view.rootClass}">
       <div class="panel-header need-page-head gantt-page-head">
-        <h2>Гантт — итоговый ресурсный план</h2>
+        <h2>${escapeHtml(view.title)}</h2>
         <div class="gantt-view-ctrls">
           ${planStartCtrlHtml()}
-          ${ganttTreeLevelFilterHtml(treeLevel)}
-          ${ganttScaleToggleHtml(scale)}
-          ${ganttDepthToggleHtml(ui.ganttDepthMonths)}
-          ${showFn ? treeExpandControlsHtml("gantt") : ""}
+          ${ganttTreeLevelFilterHtml(treeLevel, view.treeLevelAttr)}
+          ${ganttScaleToggleHtml(scale, view.scaleAttr)}
+          ${ganttDepthToggleHtml(view.depth, view.depthAttr)}
+          ${showFn ? treeExpandControlsHtml(view.treeScope) : ""}
         </div>
       </div>
       <div class="need-stats gantt-stats">
@@ -3847,7 +4010,7 @@ function ganttPlanHtml(): string {
         <div class="need-stat"><div class="label">Расположено</div><div class="value">${placedKeys.size}</div></div>
         <div class="need-stat"><div class="label">Задач</div><div class="value">${bars.length}</div></div>
         <div class="need-stat"><div class="label">Исполнителей</div><div class="value">${assignees.size}</div></div>
-        <div class="need-stat"><div class="label">Горизонт</div><div class="value">${ui.ganttDepthMonths} мес. · ${weeks} нед.</div></div>
+        <div class="need-stat"><div class="label">Горизонт</div><div class="value">${view.depth} мес. · ${weeks} нед.</div></div>
         ${
           showConflicts
             ? `<div class="need-stat"><div class="label">Конфликтов ресурса</div><div class="value${conflictCount ? " is-pending" : ""}">${conflictCount}</div></div>`
@@ -3989,12 +4152,14 @@ function planningHtml(
                           )
                         : `<button type="button" class="plan-bar-empty" data-plan-task-open="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" title="Поставить на таймлайн"></button>`;
                       const leftLabel = planRoleLeftLabel(role, member);
+                      const roleDays = `${days}/${onTimeline ? days : "—"}`;
                       const rowCls = personConflict
                         ? " plan-role-row is-person-conflict"
                         : " plan-role-row";
                       return `${planTaskFormHtml(item, a.teamId, role.id)}<div class="plan-row${rowCls}">
                         <div class="plan-cell">
                           <span class="plan-exec-name plan-fio-name">${leftLabel}${personConflict ? planConflictMarkHtml(conflictAria, conflictTipHtml) : ""}</span>
+                          <span class="plan-fn-days plan-role-days" title="Запрошено / согласовано дней">${roleDays}</span>
                           ${planPlaceOpenBtnHtml(item.id, a.teamId, role.id, onTimeline)}
                         </div>
                         ${planTrackHtml(bar, weeks)}
@@ -4104,6 +4269,8 @@ function tabContentHtml(
       return planningHtml(rollups, slices);
     case "timeline":
       return ganttPlanHtml();
+    case "timelineFact":
+      return ganttFactHtml();
     case "demoA":
       return demoVariantAHtml(load, overflowByTeam);
     case "demoB":
@@ -5523,7 +5690,7 @@ function render() {
           ${editionSwitcherHtml()}
           <span class="release-stamp" title="Дата релиза">updated ${RELEASE_UPDATED}</span>
           <span class="sync-badge" id="syncStatus" data-status="${getSyncStatus()}">${syncStatusLabel(getSyncStatus())}</span>
-          <button class="btn" id="exportPdfBtn">${ui.tab === "timeline" ? "Экспорт Гантта" : "Экспорт PDF"}</button>
+          <button class="btn" id="exportPdfBtn">${ui.tab === "timeline" || ui.tab === "timelineFact" ? "Экспорт Гантта" : "Экспорт PDF"}</button>
         </div>
         <p class="subtitle">
           Единый портфель проектов и продуктов: сквозной приоритет, несколько команд на функциональность
@@ -5538,6 +5705,7 @@ function render() {
       <div class="tabs no-print">
         ${tabButtonHtml("portfolio")}
         ${tabButtonHtml("timeline")}
+        ${tabButtonHtml("timelineFact")}
         ${tabButtonHtml("demand")}
         ${tabButtonHtml("planning")}
         ${tabButtonHtml("demoA")}
@@ -6456,7 +6624,7 @@ function bindPlanningTab() {
 }
 
 function bindGanttTab() {
-  const root = document.querySelector(".gantt-page");
+  const root = document.querySelector(".gantt-page:not(.gantt-fact-page)");
   if (!root) return;
 
   root
@@ -6490,6 +6658,49 @@ function bindGanttTab() {
       else ui.ganttCollapsedTeams[key] = true;
     });
   });
+}
+
+function bindGanttFactTab() {
+  const root = document.querySelector(".gantt-fact-page");
+  if (!root) return;
+
+  root
+    .querySelector("[data-tree-expand='gantt-fact']")
+    ?.addEventListener("click", () => setGanttFactTreeExpanded(true));
+  root
+    .querySelector("[data-tree-collapse='gantt-fact']")
+    ?.addEventListener("click", () => setGanttFactTreeExpanded(false));
+
+  root
+    .querySelectorAll<HTMLDetailsElement>("[data-gantt-fact-project]")
+    .forEach((el) => {
+      el.addEventListener("toggle", () => {
+        const key = el.dataset.ganttFactProject;
+        if (!key) return;
+        if (el.open) delete ui.ganttFactCollapsedProjects[key];
+        else ui.ganttFactCollapsedProjects[key] = true;
+      });
+    });
+  root
+    .querySelectorAll<HTMLDetailsElement>("[data-gantt-fact-fn]")
+    .forEach((el) => {
+      el.addEventListener("toggle", () => {
+        const id = el.dataset.ganttFactFn;
+        if (!id) return;
+        if (el.open) delete ui.ganttFactCollapsedItems[id];
+        else ui.ganttFactCollapsedItems[id] = true;
+      });
+    });
+  root
+    .querySelectorAll<HTMLDetailsElement>("[data-gantt-fact-team]")
+    .forEach((el) => {
+      el.addEventListener("toggle", () => {
+        const key = el.dataset.ganttFactTeam;
+        if (!key) return;
+        if (el.open) delete ui.ganttFactCollapsedTeams[key];
+        else ui.ganttFactCollapsedTeams[key] = true;
+      });
+    });
 }
 
 function applyPlanBarPreview(
@@ -6890,6 +7101,7 @@ function bindUiRest() {
   bindDemandTab();
   bindPlanningTab();
   bindGanttTab();
+  bindGanttFactTab();
 
   document.querySelectorAll<HTMLInputElement>(".set-range").forEach((input) => {
     input.addEventListener("input", () => applySizeRangesFromInputs());
@@ -7444,6 +7656,40 @@ function bindUiRest() {
         if (next === ui.ganttTreeLevel) return;
         ui.ganttTreeLevel = next;
         saveGanttTreeLevel(next);
+        render();
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLButtonElement>("[data-gantt-fact-scale]")
+    .forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const next = normalizeGanttScale(btn.dataset.ganttFactScale);
+        if (next === ui.ganttFactScale) return;
+        ui.ganttFactScale = next;
+        saveGanttFactScale(next);
+        render();
+      });
+    });
+  document
+    .querySelectorAll<HTMLButtonElement>("[data-gantt-fact-depth]")
+    .forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const next = normalizeGanttDepth(btn.dataset.ganttFactDepth);
+        if (next === ui.ganttFactDepthMonths) return;
+        ui.ganttFactDepthMonths = next;
+        saveGanttFactDepth(next);
+        render();
+      });
+    });
+  document
+    .querySelectorAll<HTMLButtonElement>("[data-gantt-fact-tree-level]")
+    .forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const next = normalizeGanttTreeLevel(btn.dataset.ganttFactTreeLevel);
+        if (next === ui.ganttFactTreeLevel) return;
+        ui.ganttFactTreeLevel = next;
+        saveGanttFactTreeLevel(next);
         render();
       });
     });
@@ -8132,9 +8378,11 @@ function buildGanttPdfData(): GanttPdfData {
     bars.length === 0
       ? 0
       : Math.max(...bars.map((b) => b.endWeek)) + 1;
+  const depth =
+    ui.tab === "timelineFact" ? ui.ganttFactDepthMonths : ui.ganttDepthMonths;
   const weeks = Math.max(
     4,
-    Math.min(GANTT_WEEKS_MAX, Math.max(ganttHorizonWeeks(), contentWeeks))
+    Math.min(GANTT_WEEKS_MAX, Math.max(ganttHorizonWeeks(depth), contentWeeks))
   );
   const prioMap = projectPrioMap();
   const step = ganttPdfWeekLabelStep(weeks);
@@ -8227,9 +8475,11 @@ async function exportPortfolioReportPdf() {
   }
 
   const stamp = new Date().toISOString().slice(0, 10);
-  const exportGantt = ui.tab === "timeline";
+  const exportGantt = ui.tab === "timeline" || ui.tab === "timelineFact";
   const filename = exportGantt
-    ? `VI-Planer-gantt-${stamp}.pdf`
+    ? ui.tab === "timelineFact"
+      ? `VI-Planer-gantt-fact-${stamp}.pdf`
+      : `VI-Planer-gantt-${stamp}.pdf`
     : `VI-Planer-report-${stamp}.pdf`;
 
   try {
@@ -8259,6 +8509,9 @@ async function bootstrap() {
   ui.ganttScale = loadGanttScale();
   ui.ganttDepthMonths = loadGanttDepth();
   ui.ganttTreeLevel = loadGanttTreeLevel();
+  ui.ganttFactScale = loadGanttFactScale();
+  ui.ganttFactDepthMonths = loadGanttFactDepth();
+  ui.ganttFactTreeLevel = loadGanttFactTreeLevel();
   ui.tab = readStoredUiTab();
   ensureVisibleTab();
   const ranked = ensureUniquePriorities(state.items, szRanges());

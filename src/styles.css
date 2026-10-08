@@ -5381,12 +5381,17 @@ body.pdf-capturing .gantt-page .plan-board {
 }
 
 .plan-project-meta,
-.plan-fn-days {
+.plan-fn-days,
+.plan-role-days {
   font-size: 10px;
   font-weight: 400;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.plan-role-days {
+  flex-shrink: 0;
 }
 
 .plan-fn-title {
