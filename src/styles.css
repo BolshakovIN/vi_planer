@@ -63,6 +63,7 @@
   --table-head-pad-x: 8px;
   --table-head-min-h: 32px;
   --table-head-shadow: 0 1px 0 var(--line);
+  --table-head-color: #484f55;
   font-family: ViSans, Arial, sans-serif;
   color: var(--ink);
   background: var(--bg);
@@ -1199,7 +1200,7 @@ th {
   line-height: 1.2;
   text-transform: uppercase;
   letter-spacing: var(--table-head-ls);
-  color: var(--muted);
+  color: var(--table-head-color);
   background: var(--surface-2);
   white-space: nowrap;
   vertical-align: middle;
@@ -4367,7 +4368,7 @@ body.pdf-capturing .gantt-page .plan-board {
   font-weight: var(--table-head-fw);
   letter-spacing: var(--table-head-ls);
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--table-head-color);
   background: var(--surface-2);
   border-top: none;
   border-bottom: none;
@@ -4562,7 +4563,7 @@ body.pdf-capturing .gantt-page .plan-board {
   text-align: left;
   font-size: var(--table-head-fs);
   font-weight: var(--table-head-fw);
-  color: var(--muted);
+  color: var(--table-head-color);
   text-transform: uppercase;
   letter-spacing: var(--table-head-ls);
   border-bottom: none;
@@ -4875,7 +4876,7 @@ body.pdf-capturing .gantt-page .plan-board {
   font-weight: var(--table-head-fw);
   letter-spacing: var(--table-head-ls);
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--table-head-color);
   background: var(--surface-2);
   white-space: nowrap;
   border-bottom: none;
@@ -4925,7 +4926,7 @@ body.pdf-capturing .gantt-page .plan-board {
   font-weight: var(--table-head-fw);
   letter-spacing: var(--table-head-ls);
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--table-head-color);
   background: var(--surface-2);
   vertical-align: middle;
   border-bottom: none;
@@ -5618,7 +5619,7 @@ body.pdf-capturing .gantt-page .plan-board {
 .plan-head-label {
   font-size: var(--table-head-fs);
   font-weight: var(--table-head-fw);
-  color: var(--muted);
+  color: var(--table-head-color);
   text-transform: uppercase;
   letter-spacing: var(--table-head-ls);
 }
@@ -5638,7 +5639,7 @@ body.pdf-capturing .gantt-page .plan-board {
   gap: 0;
   font-size: 9px;
   line-height: 1.15;
-  color: var(--muted);
+  color: var(--table-head-color);
   font-variant-numeric: tabular-nums;
 }
 
@@ -6377,7 +6378,7 @@ body.plan-dragging {
   font-weight: var(--table-head-fw);
   letter-spacing: var(--table-head-ls);
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--table-head-color);
   background: var(--surface-2);
   border-radius: var(--control-radius) var(--control-radius) 0 0;
   box-shadow: var(--table-head-shadow);
