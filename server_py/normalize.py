@@ -444,4 +444,55 @@ def normalize_state(raw: Any) -> dict[str, Any] | None:
         "teams": teams,
         "sizeRanges": parsed_ranges,
         "items": ensure_unique_priorities(items, parsed_ranges),
+        "priorityLog": normalize_priority_log(raw.get("priorityLog")),
     }
+
+
+PRIORITY_LOG_MAX = 2000
+
+
+def _http_links(raw: Any) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for v in raw:
+        s = str(v or "").strip()
+        if s.lower().startswith(("http://", "https://")):
+            out.append(s)
+    return out
+
+
+def normalize_priority_log(raw: Any) -> list[dict[str, Any]]:
+    """Журнал приоритетов проектов: keep well-formed entries (see src/model.ts)."""
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for r in raw:
+        if not isinstance(r, dict):
+            continue
+        title = str(r.get("projectTitle") or r.get("projectKey") or "").strip()
+        try:
+            frm = int(round(float(r.get("from"))))
+            to = int(round(float(r.get("to"))))
+        except (TypeError, ValueError):
+            continue
+        if not title:
+            continue
+        at = str(r.get("at") or "")
+        date_s = str(r.get("date") or "")[:10] or at[:10]
+        out.append(
+            {
+                "id": str(r.get("id") or uid("prio")),
+                "at": at,
+                "date": date_s,
+                "projectKey": str(r.get("projectKey") or title),
+                "projectTitle": title,
+                "from": frm,
+                "to": to,
+                "comment": str(r.get("comment") or "").strip(),
+                "links": _http_links(r.get("links")),
+            }
+        )
+        if len(out) >= PRIORITY_LOG_MAX:
+            break
+    return out

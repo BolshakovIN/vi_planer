@@ -28,6 +28,10 @@ import {
   normalizeSizeRanges,
   hasTeam,
   uid,
+  type PriorityLogEntry,
+  sanitizeLinks,
+  sortPriorityLog,
+  PRIORITY_LOG_MAX,
   snapToMonday,
   addDays,
   addWeeks,
@@ -277,6 +281,10 @@ function ensureVisibleTab() {
 }
 
 interface UiState {
+  /** Журнал: priority-change reasons or the general activity log. */
+  journalView: "priority" | "all";
+  /** Журнал → приоритеты: project filter ("" = all). */
+  journalProject: string;
   tab: Tab;
   typeFilter: "all" | ItemType;
   teamFilter: string;
@@ -373,6 +381,8 @@ const SCHEDULE_MODE_META: Record<
 };
 
 const ui: UiState = {
+  journalView: "priority",
+  journalProject: "",
   tab: "portfolio",
   typeFilter: "all",
   teamFilter: "all",
@@ -2304,7 +2314,103 @@ function refillBacklogSelect(type: ItemType, keep: string) {
   if (next) sel.innerHTML = next.innerHTML;
 }
 
-function changeLogHtml(): string {
+function linkLabel(href: string): string {
+  try {
+    const u = new URL(href);
+    const path = u.pathname === "/" ? "" : u.pathname;
+    const s = `${u.hostname}${path}`;
+    return s.length > 48 ? `${s.slice(0, 45)}…` : s;
+  } catch {
+    return href;
+  }
+}
+
+function priorityJournalHtml(): string {
+  const all = state.priorityLog ?? [];
+  const projects = [...new Set(all.map((e) => e.projectTitle))].sort((a, b) =>
+    a.localeCompare(b, "ru")
+  );
+  const filter = projects.includes(ui.journalProject) ? ui.journalProject : "";
+  const entries = filter ? all.filter((e) => e.projectTitle === filter) : all;
+  const rows = entries
+    .map((e) => {
+      const up = e.to < e.from;
+      const dir = e.to === e.from ? "" : up ? "повышен" : "понижен";
+      const links = e.links.length
+        ? `<ul class="prio-log-links">${e.links
+            .map(
+              (l) =>
+                `<li><a href="${escapeAttr(l)}" target="_blank" rel="noopener noreferrer" title="${escapeAttr(l)}">${escapeHtml(linkLabel(l))}</a></li>`
+            )
+            .join("")}</ul>`
+        : `<span class="muted">—</span>`;
+      return `<tr>
+        <td class="mono prio-log-date">${escapeHtml(formatDate(e.date))}</td>
+        <td class="prio-log-project">${escapeHtml(e.projectTitle)}</td>
+        <td class="prio-log-move">
+          <span class="prio-mini">${e.from}</span><span class="prio-log-arrow">→</span><span class="prio-mini prio-mini-to">${e.to}</span>
+          ${dir ? `<span class="prio-log-dir ${up ? "is-up" : "is-down"}">${dir}</span>` : ""}
+        </td>
+        <td class="prio-log-comment">${escapeHtml(e.comment) || `<span class="muted">—</span>`}</td>
+        <td class="prio-log-links-cell">${links}</td>
+        <td class="mono meta prio-log-at">${escapeHtml(formatLogAt(e.at))}</td>
+      </tr>`;
+    })
+    .join("");
+  const table = entries.length
+    ? `<div class="prio-log-scroll"><table class="prio-log-table">
+        <thead><tr>
+          <th>Дата изменения</th><th>Проект</th><th>Приоритет</th><th>Причина</th><th>Материалы</th><th>Записано</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`
+    : `<p class="change-log-empty meta">${
+        all.length
+          ? "Нет изменений по выбранному проекту."
+          : "Пока нет записей. Когда в Реестре меняется приоритет проекта, здесь появится запись с датой, причиной и ссылками."
+      }</p>`;
+  return `
+    <div class="prio-log-toolbar">
+      <select id="journalProject" aria-label="Фильтр по проекту">
+        <option value="">Все проекты</option>
+        ${projects
+          .map(
+            (p) =>
+              `<option value="${escapeAttr(p)}"${p === filter ? " selected" : ""}>${escapeHtml(p)}</option>`
+          )
+          .join("")}
+      </select>
+      <span class="meta">${entries.length} ${entries.length === 1 ? "запись" : entries.length >= 2 && entries.length <= 4 ? "записи" : "записей"}</span>
+    </div>
+    ${table}`;
+}
+
+function journalHtml(): string {
+  const view = ui.journalView;
+  const seg = (id: "priority" | "all", label: string) =>
+    `<button type="button" class="gantt-seg-btn${view === id ? " is-active" : ""}" data-journal-view="${id}" aria-pressed="${view === id ? "true" : "false"}">${label}</button>`;
+  const switcher = `<div class="gantt-seg" role="group" aria-label="Раздел журнала">
+      <div class="gantt-seg-btns">${seg("priority", "Приоритеты проектов")}${seg("all", "Все изменения")}</div>
+    </div>`;
+  if (view === "all") return changeLogHtml(switcher);
+  return `
+    <div class="panel panel-sticky-host change-log-panel prio-log-panel">
+      <div class="panel-sticky">
+        <div class="panel-header">
+          <div>
+            <h2>Журнал</h2>
+            <p class="meta" style="margin:4px 0 0">
+              Изменения приоритета проектов: дата, причина и материалы. Синхронизируется вместе с данными.
+            </p>
+          </div>
+          <div class="toolbar">${switcher}</div>
+        </div>
+      </div>
+      ${priorityJournalHtml()}
+    </div>`;
+}
+
+function changeLogHtml(switcher = ""): string {
   const entries = state.changeLog ?? [];
   const rows =
     entries.length === 0
@@ -2325,12 +2431,13 @@ function changeLogHtml(): string {
       <div class="panel-sticky">
         <div class="panel-header">
           <div>
-            <h2>Журнал изменений</h2>
+            <h2>Журнал</h2>
             <p class="meta" style="margin:4px 0 0">
               Последние действия с портфелем (до ${CHANGE_LOG_MAX} записей). Синхронизируется вместе с данными.
             </p>
           </div>
           <div class="toolbar">
+            ${switcher}
             <button type="button" class="btn" id="clearChangeLogBtn" ${
               entries.length && currentCan("changelog.clear") ? "" : "disabled"
             } ${currentCan("changelog.clear") ? "" : 'title="Очистить журнал"'}>Очистить</button>
@@ -4418,7 +4525,7 @@ function tabContentHtml(
     case "capacity":
       return capacityHtml();
     case "changelog":
-      return changeLogHtml();
+      return journalHtml();
     case "settings":
       return settingsHtml(rollups);
   }
@@ -5498,6 +5605,153 @@ function confirmPopHtml(
   `;
 }
 
+function todayIsoLocal(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+type PriorityReason = { date: string; comment: string; links: string[] };
+
+/**
+ * Окно «Причина изменения приоритета проекта»: дата, комментарий, ссылки.
+ * Built on document.body (outside render()) so it can sit over the project card.
+ */
+function openPriorityReasonModal(o: {
+  projectTitle: string;
+  from: number;
+  to: number;
+  onSave: (r: PriorityReason) => void;
+  onCancel: () => void;
+}) {
+  document.querySelector("#prioReasonModal")?.remove();
+  closeAppPop();
+  const wrap = document.createElement("div");
+  wrap.className = "modal-backdrop prio-reason-backdrop";
+  wrap.id = "prioReasonModal";
+  wrap.setAttribute("data-stop-edit", "");
+  wrap.innerHTML = `
+    <div class="modal prio-reason-modal" role="dialog" aria-modal="true" aria-labelledby="prioReasonTitle">
+      <div class="modal-head">
+        <h3 id="prioReasonTitle">Изменение приоритета проекта</h3>
+      </div>
+      <div class="modal-body">
+        <div class="prio-reason-summary">
+          <span class="prio-reason-project">${escapeHtml(o.projectTitle)}</span>
+          <span class="prio-reason-move"><span class="prio-mini">${o.from}</span>→<span class="prio-mini prio-mini-to">${o.to}</span></span>
+        </div>
+        <div class="field">
+          <label for="prioReasonDate">Дата изменения</label>
+          <input id="prioReasonDate" type="date" value="${todayIsoLocal()}" required />
+        </div>
+        <div class="field">
+          <label for="prioReasonComment">Причина изменения <span class="prio-reason-req">*</span></label>
+          <textarea id="prioReasonComment" rows="4" placeholder="Почему меняется приоритет: решение комитета, новые вводные, риски…"></textarea>
+        </div>
+        <div class="field">
+          <label for="prioReasonLinks">Ссылки на материалы</label>
+          <textarea id="prioReasonLinks" rows="3" placeholder="https://… — по одной ссылке в строке"></textarea>
+          <div class="meta">Протокол, презентация, задача в Jira и т.п. Необязательно.</div>
+        </div>
+        <div class="prio-reason-error" id="prioReasonError" role="alert" hidden></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" id="prioReasonCancel">Отмена</button>
+        <button type="button" class="btn btn-primary" id="prioReasonSave">Сохранить</button>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap);
+  const $ = <T extends HTMLElement>(id: string) => wrap.querySelector<T>(`#${id}`)!;
+  const dateEl = $<HTMLInputElement>("prioReasonDate");
+  const commentEl = $<HTMLTextAreaElement>("prioReasonComment");
+  const linksEl = $<HTMLTextAreaElement>("prioReasonLinks");
+  const errEl = $<HTMLDivElement>("prioReasonError");
+  let done = false;
+  const close = () => {
+    wrap.remove();
+    document.removeEventListener("keydown", onKey, true);
+  };
+  const cancel = () => {
+    if (done) return;
+    done = true;
+    close();
+    o.onCancel();
+  };
+  const showErr = (msg: string, focus: HTMLElement) => {
+    errEl.textContent = msg;
+    errEl.hidden = false;
+    focus.focus();
+  };
+  const save = () => {
+    if (done) return;
+    const date = dateEl.value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      showErr("Укажите дату изменения.", dateEl);
+      return;
+    }
+    const comment = commentEl.value.trim();
+    if (!comment) {
+      showErr("Опишите причину изменения приоритета.", commentEl);
+      return;
+    }
+    const rawLinks = linksEl.value
+      .split(/[\s,]+/)
+      .map((x) => x.trim())
+      .filter(Boolean);
+    const links = sanitizeLinks(rawLinks);
+    if (links.length !== rawLinks.length) {
+      const bad = rawLinks.filter((x) => !sanitizeLinks([x]).length);
+      showErr(
+        `Не похоже на ссылку: ${bad.slice(0, 2).join(", ")}. Ссылки должны начинаться с http:// или https://`,
+        linksEl
+      );
+      return;
+    }
+    done = true;
+    close();
+    o.onSave({ date, comment, links });
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      cancel();
+    }
+  };
+  document.addEventListener("keydown", onKey, true);
+  $("prioReasonCancel").addEventListener("click", cancel);
+  $("prioReasonSave").addEventListener("click", save);
+  wrap.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (e.target === wrap) cancel();
+  });
+  wrap.addEventListener("pointerdown", (e) => e.stopPropagation());
+  commentEl.focus();
+}
+
+function recordPriorityChange(
+  projectKey: string,
+  projectTitle: string,
+  from: number,
+  to: number,
+  r: PriorityReason
+) {
+  const entry: PriorityLogEntry = {
+    id: uid("prio"),
+    at: new Date().toISOString(),
+    date: r.date,
+    projectKey,
+    projectTitle,
+    from,
+    to,
+    comment: r.comment,
+    links: r.links,
+  };
+  state.priorityLog = sortPriorityLog([entry, ...(state.priorityLog ?? [])]).slice(
+    0,
+    PRIORITY_LOG_MAX
+  );
+}
+
 function askAppConfirm(
   anchor: HTMLElement,
   textHtml: string,
@@ -5904,8 +6158,8 @@ function render() {
         ${tabButtonHtml("timelineFact")}
         ${tabButtonHtml("demoA")}
         ${tabButtonHtml("capacity", "tab-end")}
-        ${tabButtonHtml("changelog")}
         ${tabButtonHtml("settings")}
+        ${tabButtonHtml("changelog")}
       </div>
       ${ui.tab === "portfolio" ? metricsHtml(rollups, slices) : ""}
       <div class="tab-print-root" id="tabPrintRoot">
@@ -7109,7 +7363,11 @@ function saveProjectCard() {
     persist();
   };
 
-  const applyEdit = (opts: { confirmStatus: boolean; confirmPrio: boolean }) => {
+  const applyEdit = (opts: {
+    confirmStatus: boolean;
+    confirmPrio: boolean;
+    reason?: PriorityReason;
+  }) => {
     const key = ui.editingProjectKey;
     if (!key) return;
     const group = projectCardGroup(key);
@@ -7155,8 +7413,14 @@ function saveProjectCard() {
         draft.priority,
         szRanges()
       );
+      const nowPrio = projectPrioMap().get(nextKey) ?? draft.priority;
+      if (opts.reason) {
+        recordPriorityChange(nextKey, draft.name, prevPrio, nowPrio, opts.reason);
+      }
       logChange(
-        `Приоритет проекта «${draft.name}»: #${prevPrio} → #${draft.priority}`,
+        `Приоритет проекта «${draft.name}»: #${prevPrio} → #${nowPrio}${
+          opts.reason ? `. Причина: ${opts.reason.comment}` : ""
+        }`,
         "priority"
       );
     }
@@ -7179,15 +7443,20 @@ function saveProjectCard() {
   const statusChanged = draft.status !== wasStatus;
   const prioChanged = draft.priority !== prevPrio;
 
+  let reason: PriorityReason | undefined;
   const run = (confirmStatus: boolean, confirmPrio: boolean) => {
-    applyEdit({ confirmStatus, confirmPrio });
+    applyEdit({ confirmStatus, confirmPrio, reason });
   };
 
   if (prioChanged && rankInput) {
-    askPrioConfirm(
-      rankInput,
-      `Сменить приоритет проекта «${escapeHtml(group.title)}» на <span class="accent">${draft.priority}</span>?`,
-      () => {
+    const maxPrio = Math.max(1, projectPrioMap().size);
+    openPriorityReasonModal({
+      projectTitle: group.title,
+      from: prevPrio,
+      to: Math.min(draft.priority, maxPrio),
+      onCancel: () => undefined,
+      onSave: (r) => {
+        reason = r;
         if (statusChanged && statusSel) {
           askAppConfirm(
             statusSel,
@@ -7200,8 +7469,7 @@ function saveProjectCard() {
         }
         run(false, true);
       },
-      () => undefined
-    );
+    });
     return;
   }
 
@@ -7546,29 +7814,35 @@ function bindUiRest() {
       armSuppressPortfolioRowEdit();
       const group = groupByProjectKey(state.items).find((g) => g.key === key);
       const title = group?.title ?? key;
+      const max = Number(input.max) || priority;
+      const target = Math.min(priority, max);
+      input.value = String(target);
+      if (target === now) return;
       confirming = true;
-      askPrioConfirm(
-        input,
-        `Сменить приоритет проекта «${escapeHtml(title)}» на <span class="accent">${priority}</span>?`,
-        () => {
+      openPriorityReasonModal({
+        projectTitle: title,
+        from: now,
+        to: target,
+        onSave: (reason) => {
           confirming = false;
           state.items = moveProjectGroupToPriority(
             state.items,
             key,
-            priority,
+            target,
             szRanges()
           );
+          recordPriorityChange(key, title, now, target, reason);
           logChange(
-            `Приоритет проекта «${title}»: #${now} → #${priority}`,
+            `Приоритет проекта «${title}»: #${now} → #${target}. Причина: ${reason.comment}`,
             "priority"
           );
           persist();
         },
-        () => {
+        onCancel: () => {
           confirming = false;
           revert();
-        }
-      );
+        },
+      });
     };
     input.addEventListener("click", (e) => e.stopPropagation());
     input.addEventListener("mousedown", (e) => e.stopPropagation());
@@ -8391,6 +8665,21 @@ function bindUiRest() {
       () => undefined
     );
   });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-journal-view]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const v = btn.dataset.journalView === "all" ? "all" : "priority";
+      if (ui.journalView === v) return;
+      ui.journalView = v;
+      render();
+    });
+  });
+  document
+    .querySelector<HTMLSelectElement>("#journalProject")
+    ?.addEventListener("change", (e) => {
+      ui.journalProject = (e.currentTarget as HTMLSelectElement).value;
+      render();
+    });
 
   document.querySelector("#clearChangeLogBtn")?.addEventListener("click", (e) => {
     if (!currentCan("changelog.clear")) return;

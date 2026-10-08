@@ -288,6 +288,7 @@ export function applyCurrentPortfolioPack(
     "system"
   );
   next.portfolioPack = PORTFOLIO_PACK_ID;
+  next.priorityLog = current.priorityLog ?? [];
   next.clearedDemandTeams =
     current.clearedDemandTeams ?? next.clearedDemandTeams;
   if (current.teams.length) {

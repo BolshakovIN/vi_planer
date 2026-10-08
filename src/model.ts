@@ -1168,6 +1168,94 @@ export interface ChangeLogEntry {
 /** Cap persisted activity log to avoid localStorage/cloud bloat. */
 export const CHANGE_LOG_MAX = 150;
 
+/**
+ * Журнал приоритетов: one entry per project-priority change with the reason.
+ * Kept separately from changeLog (which is capped and clearable).
+ */
+export interface PriorityLogEntry {
+  id: string;
+  /** ISO timestamp when the entry was recorded */
+  at: string;
+  /** Дата изменения chosen by the user, YYYY-MM-DD */
+  date: string;
+  projectKey: string;
+  projectTitle: string;
+  from: number;
+  to: number;
+  /** Причина изменения */
+  comment: string;
+  /** Ссылки на материалы (http/https only) */
+  links: string[];
+}
+
+export const PRIORITY_LOG_MAX = 2000;
+
+/** Keep only well-formed http(s) URLs. */
+export function sanitizeLinks(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const v of raw) {
+    const s = String(v ?? "").trim();
+    if (!s) continue;
+    try {
+      const u = new URL(s);
+      if (u.protocol === "http:" || u.protocol === "https:") out.push(u.href);
+    } catch {
+      /* skip */
+    }
+  }
+  return out;
+}
+
+export function parsePriorityLog(raw: unknown): PriorityLogEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: PriorityLogEntry[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const from = Number(r.from);
+    const to = Number(r.to);
+    const projectTitle = String(r.projectTitle ?? r.projectKey ?? "").trim();
+    if (!projectTitle || !Number.isFinite(from) || !Number.isFinite(to)) continue;
+    const atRaw = String(r.at ?? "");
+    const at = Number.isFinite(Date.parse(atRaw))
+      ? new Date(atRaw).toISOString()
+      : new Date().toISOString();
+    const dateRaw = String(r.date ?? "").slice(0, 10);
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : at.slice(0, 10);
+    out.push({
+      id: String(r.id ?? uid("prio")),
+      at,
+      date,
+      projectKey: String(r.projectKey ?? projectTitle),
+      projectTitle,
+      from: Math.round(from),
+      to: Math.round(to),
+      comment: String(r.comment ?? "").trim(),
+      links: sanitizeLinks(r.links),
+    });
+    if (out.length >= PRIORITY_LOG_MAX) break;
+  }
+  return out;
+}
+
+/** Newest change date first; same date → newest recorded first. */
+export function sortPriorityLog(log: PriorityLogEntry[]): PriorityLogEntry[] {
+  return [...log].sort((a, b) =>
+    a.date !== b.date ? (a.date < b.date ? 1 : -1) : a.at < b.at ? 1 : a.at > b.at ? -1 : 0
+  );
+}
+
+/** Union by id (local and cloud copies both keep every reason). */
+export function mergePriorityLogs(
+  a: PriorityLogEntry[] | undefined,
+  b: PriorityLogEntry[] | undefined
+): PriorityLogEntry[] {
+  const byId = new Map<string, PriorityLogEntry>();
+  for (const e of [...(a ?? []), ...(b ?? [])]) if (!byId.has(e.id)) byId.set(e.id, e);
+  return sortPriorityLog([...byId.values()]).slice(0, PRIORITY_LOG_MAX);
+}
+
 export interface AppState {
   teams: Team[];
   items: WorkItem[];
@@ -1190,6 +1278,8 @@ export interface AppState {
   portfolioNotes: string;
   /** In-app журнал изменений (newest first). */
   changeLog: ChangeLogEntry[];
+  /** Журнал изменений приоритета проектов с причинами. */
+  priorityLog?: PriorityLogEntry[];
   /**
    * Which portfolio data pack is loaded.
    * `xlsx-prio-2026-10-v4` — таблица приоритезации; `…-rolled-back` — откат.
@@ -1513,6 +1603,7 @@ export function mergeLiveV2States(local: AppState, remote: AppState): AppState {
       teamRosterSeeded: local.teamRosterSeeded ?? remote.teamRosterSeeded,
       cashFlowUnit: local.cashFlowUnit ?? remote.cashFlowUnit,
       portfolioPack: local.portfolioPack ?? remote.portfolioPack,
+      priorityLog: mergePriorityLogs(local.priorityLog, remote.priorityLog),
       savedAt: pickLaterSavedAt(local.savedAt, remote.savedAt),
     };
   }
@@ -1557,6 +1648,7 @@ export function mergeLiveV2States(local: AppState, remote: AppState): AppState {
     teamRosterSeeded: remote.teamRosterSeeded ?? local.teamRosterSeeded,
     cashFlowUnit: remote.cashFlowUnit ?? local.cashFlowUnit,
     portfolioPack: remote.portfolioPack ?? local.portfolioPack,
+    priorityLog: mergePriorityLogs(remote.priorityLog, local.priorityLog),
     savedAt: pickLaterSavedAt(local.savedAt, remote.savedAt),
   };
 }
@@ -2948,6 +3040,7 @@ export function normalizeState(raw: unknown): AppState | null {
     portfolioNotes:
       data.portfolioNotes != null ? String(data.portfolioNotes) : "",
     changeLog: parseChangeLog(data.changeLog),
+    priorityLog: sortPriorityLog(parsePriorityLog(data.priorityLog)),
     portfolioPack:
       data.portfolioPack != null && String(data.portfolioPack).trim()
         ? String(data.portfolioPack).trim()
