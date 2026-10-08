@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 08.10.2026, 01:10 GMT+3
+Сгенерировано: 08.10.2026, 14:24 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,8 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `7329bf2` | 2026-10-08 | ivanbolsakov | Fix portfolio column resize sync and remove dead Gantt code. |
+| `22a58de` | 2026-10-08 | ivanbolsakov | Publish Gantt controls and plan-start move to GitHub Pages. |
 | `d808360` | 2026-10-08 | ivanbolsakov | Add Gantt scale/depth/nesting controls and move plan start to schedule tabs. |
 | `b0dca61` | 2026-10-08 | ivanbolsakov | Publish Гантт rename to GitHub Pages. |
 | `4b5eded` | 2026-10-08 | ivanbolsakov | Rename Gantt tab label to Гантт. |
@@ -441,8 +443,10 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `d808360` | 2026-10-08 | ivanbolsakov | HEAD -> master | Add Gantt scale/depth/nesting controls and move plan start to schedule tabs. |
-| `b0dca61` | 2026-10-08 | ivanbolsakov | origin/master | Publish Гантт rename to GitHub Pages. |
+| `7329bf2` | 2026-10-08 | ivanbolsakov | HEAD -> master | Fix portfolio column resize sync and remove dead Gantt code. |
+| `22a58de` | 2026-10-08 | ivanbolsakov | origin/master | Publish Gantt controls and plan-start move to GitHub Pages. |
+| `d808360` | 2026-10-08 | ivanbolsakov |  | Add Gantt scale/depth/nesting controls and move plan start to schedule tabs. |
+| `b0dca61` | 2026-10-08 | ivanbolsakov |  | Publish Гантт rename to GitHub Pages. |
 | `4b5eded` | 2026-10-08 | ivanbolsakov |  | Rename Gantt tab label to Гантт. |
 | `68ff57e` | 2026-10-08 | ivanbolsakov |  | Publish Registry polish and queues removal to GitHub Pages. |
 | `e4bea62` | 2026-10-08 | ivanbolsakov |  | Polish Registry finance/schedule columns and remove Очередь команд. |
