@@ -121,7 +121,7 @@ import {
 } from "./pdfExport";
 
 /** Release / deploy stamp in the header (DD.MM.YYYY) */
-const RELEASE_UPDATED = "07.10.2026";
+const RELEASE_UPDATED = "08.10.2026";
 
 type Tab =
   | "portfolio"
@@ -1724,10 +1724,12 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
     const ib = Math.min(...b.items.map((it) => order.get(it.id) ?? 9999));
     return ia - ib;
   });
+  const ranges = szRanges();
   const prioByKey = new Map(
-    orderedProjectGroups(state.items, szRanges()).map((g, i) => [g.key, i + 1])
+    orderedProjectGroups(state.items, ranges).map((g, i) => [g.key, i + 1])
   );
   const projectCount = Math.max(1, prioByKey.size);
+  const fnPrio = functionalityPriorityMap(state.items, ranges);
 
   const rows = groups
     .map((g) => {
@@ -1748,7 +1750,6 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
         ),
       ].join("");
       const statusClass = statusVal ? `badge-status-${statusVal}` : "";
-      const ranges = szRanges();
       const startIso =
         projectScheduleStartDate(g.items, state.startDate, ranges) ?? null;
       const finish = projectFinishDate(g.items, state.startDate, ranges);
@@ -1791,7 +1792,6 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
       `;
       if (!expanded) return projectRow;
 
-      const fnPrio = functionalityPriorityMap(state.items, ranges);
       const childRows = sortByPriority(fnItems, ranges)
         .map((it) => {
           const itPrio = fnPrio.get(it.id) ?? 1;
@@ -3093,8 +3093,9 @@ function demandHtml(): string {
   if (selectedGroup) {
     const items = selectedGroup.items;
     const fnCount = items.length;
+    const needRanges = szRanges();
     const totalDays = items.reduce(
-      (s, it) => s + totalEstimateDays(it, szRanges()),
+      (s, it) => s + totalEstimateDays(it, needRanges),
       0
     );
     const roleEntries = items.flatMap((it) =>
@@ -3104,23 +3105,19 @@ function demandHtml(): string {
         return (roles.length ? roles : [null]).map((role) => ({ it, a, role }));
       })
     );
-    const pendingCount = roleEntries.filter((x) =>
-      x.role
-        ? resolveRoleDemandStatus(x.role, x.a, x.it) === "pending"
-        : resolveAssignmentDemandStatus(x.a, x.it) === "pending"
-    ).length;
-    const partialCount = roleEntries.filter((x) =>
-      x.role
-        ? resolveRoleDemandStatus(x.role, x.a, x.it) === "partial"
-        : resolveAssignmentDemandStatus(x.a, x.it) === "partial"
-    ).length;
-    const approvedCount = roleEntries.filter((x) =>
-      x.role
-        ? resolveRoleDemandStatus(x.role, x.a, x.it) === "approved"
-        : resolveAssignmentDemandStatus(x.a, x.it) === "approved"
-    ).length;
+    let pendingCount = 0;
+    let partialCount = 0;
+    let approvedCount = 0;
+    for (const x of roleEntries) {
+      const st = x.role
+        ? resolveRoleDemandStatus(x.role, x.a, x.it)
+        : resolveAssignmentDemandStatus(x.a, x.it);
+      if (st === "pending") pendingCount += 1;
+      else if (st === "partial") partialCount += 1;
+      else if (st === "approved") approvedCount += 1;
+    }
     const open = !ui.needCollapsedProjects[selectedGroup.key];
-    const fnPrio = functionalityPriorityMap(state.items, szRanges());
+    const fnPrio = functionalityPriorityMap(state.items, needRanges);
     const fns = items.map((it) => demandFnHtml(it, fnPrio)).join("");
     const tree = `<details class="need-project" data-need-project="${escapeAttr(selectedGroup.key)}"${open ? " open" : ""}>
       <summary class="need-project-sum">
@@ -4273,6 +4270,7 @@ function planningHtml(
   const selectedSet = new Set(selected);
   const focusId = planFocusTeamId(selected);
   const ranges = szRanges();
+  const prioMap = projectPrioMap();
   const byItem = new Map(rollups.map((r) => [r.item.id, r]));
 
   const chips = state.teams
@@ -4442,7 +4440,7 @@ function planningHtml(
           return `<details class="plan-project" data-plan-project="${escapeAttr(g.key)}"${open ? " open" : ""}>
             <summary class="plan-row plan-project-sum">
               <div class="plan-cell">
-                <span class="plan-project-title">${prioBadgeHtml(projectPrioMap().get(g.key))}${escapeHtml(g.title)}</span>
+                <span class="plan-project-title">${prioBadgeHtml(prioMap.get(g.key))}${escapeHtml(g.title)}</span>
                 <span class="plan-project-meta">${g.items.length} функц.</span>
               </div>
               ${planTrackHtml("", weeks)}
@@ -6103,16 +6101,33 @@ function editionSwitcherHtml(): string {
   </nav>`;
 }
 
+/** Full portfolio schedule is heavy — skip on tabs that don't display it. */
+function tabNeedsSchedule(tab: Tab): boolean {
+  return (
+    tab === "portfolio" ||
+    tab === "planning" ||
+    tab === "demoA" ||
+    tab === "demoB" ||
+    tab === "settings"
+  );
+}
+
 function render() {
   closePrioPop();
   closeColPickerOutside();
   closeOverloadPop();
   ensureVisibleTab();
   syncTeamRosters(state.teams);
-  const { slices, rollups, load } = scheduleState();
-  const overflowByTeam = scheduledOverloadWeeks(load);
-  lastScheduledLoad = load;
-  lastOverflowByTeam = overflowByTeam;
+  let slices: ScheduledSlice[] = [];
+  let rollups: ItemSchedule[] = [];
+  let load: Record<string, TeamLoadWeek[]> = {};
+  let overflowByTeam: Record<string, Set<number>> = {};
+  if (tabNeedsSchedule(ui.tab)) {
+    ({ slices, rollups, load } = scheduleState());
+    overflowByTeam = scheduledOverloadWeeks(load);
+    lastScheduledLoad = load;
+    lastOverflowByTeam = overflowByTeam;
+  }
   const root = document.querySelector("#app");
   if (!root) return;
 
