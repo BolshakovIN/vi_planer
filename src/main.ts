@@ -80,6 +80,8 @@ import {
   AssignmentRole,
   fillAssignmentRoles,
   rolePlanDays,
+  roleTimelineDays,
+  roleIsUnderPlan,
   resolveRoleDemandStatus,
   isArchitectureRole,
   submittedAssignmentRoles,
@@ -336,7 +338,10 @@ interface UiState {
   ganttCollapsedItems: Record<string, true>;
   /** Collapsed team rows under a Gantt functionality (`itemId:teamId`). */
   ganttCollapsedTeams: Record<string, true>;
-  /** Inline «Новая задача на таймлайн» */
+  /**
+   * Inline timeline placement. `days` = scheduled length (may differ from plan);
+   * plan days are never overwritten from this form.
+   */
   planTaskForm: {
     itemId: string;
     teamId: string;
@@ -2731,6 +2736,7 @@ function demandGroupedItems(): { key: string; title: string; items: WorkItem[] }
 
 function demandStatusClass(status: AssignmentDemandStatus): string {
   if (status === "pending") return "need-st-pending";
+  if (status === "partial") return "need-st-partial";
   if (status === "approved") return "need-st-approved";
   return "need-st-draft";
 }
@@ -2760,13 +2766,21 @@ function demandRoleRowHtml(
   a: TeamAssignment,
   role: AssignmentRole
 ): string {
-  const days = rolePlanDays(role, szRanges());
+  const ranges = szRanges();
+  const planDays = rolePlanDays(role, ranges);
+  const under = roleIsUnderPlan(role, ranges);
+  const onTimeline = Boolean(rolePlacedOnTimeline(a.teamId, role));
+  const factDays = onTimeline ? roleTimelineDays(role, ranges) : null;
+  const ratio = `${planDays}/${factDays ?? "—"}`;
+  const ratioTip = under
+    ? `На таймлайне меньше плана: ${factDays} из ${planDays} дн.`
+    : "План / на таймлайне";
   const st = resolveRoleDemandStatus(role, a);
   const editKey = `${item.id}:${a.teamId}:${role.id}`;
   const editing = ui.needDaysEdit === editKey;
   const daysCell = editing
-    ? `<input type="number" class="need-days-input" min="1" step="1" inputmode="numeric" value="${days}" data-need-days="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" aria-label="Дни" /> <span class="meta">дн.</span>`
-    : `<button type="button" class="need-row-days-val" data-need-edit-days="${editKey}" title="Изменить дни">${days} дн.</button>`;
+    ? `<span class="need-plan-fact${under ? " is-under-plan" : ""}" title="${escapeAttr(ratioTip)}"><input type="number" class="need-days-input" min="1" step="1" inputmode="numeric" value="${planDays}" data-need-days="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" aria-label="Дни плана" /> / ${factDays ?? "—"}</span>`
+    : `<button type="button" class="need-row-days-val need-plan-fact${under ? " is-under-plan" : ""}" data-need-edit-days="${editKey}" title="${escapeAttr(`${ratioTip}. Нажмите, чтобы изменить план`)}">${ratio}</button>`;
   const statusOpts = ASSIGNMENT_DEMAND_STATUSES.map(
     (s) =>
       `<option value="${s}"${s === st ? " selected" : ""}>${ASSIGNMENT_DEMAND_LABELS[s]}</option>`
@@ -2775,13 +2789,16 @@ function demandRoleRowHtml(
     st === "draft"
       ? `<button type="button" class="btn btn-primary need-send-btn" data-need-send="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}">Отправить</button>`
       : `<button type="button" class="btn need-change-btn" data-need-revert="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}">Изменить</button>`;
-  return `<div class="need-row need-role-row">
+  const statusDisabled = under
+    ? ` disabled title="${escapeAttr("Пока на таймлайне меньше плана — статус «Частично согласовано»")}"`
+    : "";
+  return `<div class="need-row need-role-row${under ? " is-under-plan" : ""}">
     <span class="need-row-left">
       <span class="need-role-name">${escapeHtml(role.name)}</span>
       <span class="need-row-days">${daysCell}</span>
     </span>
     <span class="need-row-right">
-      <select class="need-st-select ${demandStatusClass(st)}" data-need-status="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}">${statusOpts}</select>
+      <select class="need-st-select ${demandStatusClass(st)}" data-need-status="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}"${statusDisabled}>${statusOpts}</select>
       ${action}
       <button type="button" class="need-role-del" data-need-role-del="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" title="Удалить роль" aria-label="Удалить роль ${escapeAttr(role.name)}">×</button>
     </span>
@@ -2856,7 +2873,11 @@ function withDemandTeams(
 }
 
 function demandFnHtml(item: WorkItem): string {
-  const days = totalEstimateDays(item, szRanges());
+  const ranges = szRanges();
+  const planDays = totalEstimateDays(item, ranges);
+  const factDays = agreedRolePlanDays(item.assignments, ranges);
+  const fnUnder = assignsHaveUnderPlan(item.assignments, ranges);
+  const ratio = `${planDays}/${factDays || "—"}`;
   const open = !ui.needCollapsedItems[item.id];
   const used = new Set(item.assignments.map((a) => a.teamId));
   const unused = state.teams.filter((t) => !used.has(t.id));
@@ -2887,7 +2908,7 @@ function demandFnHtml(item: WorkItem): string {
         <span class="need-fn-title">${escapeHtml(item.title)}</span>
       </span>
       <span class="need-fn-actions">
-        <span class="need-fn-req">запрошено ${days} дн.</span>
+        <span class="need-fn-req need-plan-fact${fnUnder ? " is-under-plan" : ""}" title="${fnUnder ? "На таймлайне меньше плана из Потребности" : "План / на таймлайне"}">${ratio}</span>
         ${addBtn}
         <button type="button" class="need-fn-x" data-need-del-fn="${item.id}" title="Удалить функциональность" aria-label="Удалить функциональность ${escapeAttr(item.title)}">×</button>
       </span>
@@ -2957,6 +2978,11 @@ function demandHtml(): string {
         ? resolveRoleDemandStatus(x.role, x.a, x.it) === "pending"
         : resolveAssignmentDemandStatus(x.a, x.it) === "pending"
     ).length;
+    const partialCount = roleEntries.filter((x) =>
+      x.role
+        ? resolveRoleDemandStatus(x.role, x.a, x.it) === "partial"
+        : resolveAssignmentDemandStatus(x.a, x.it) === "partial"
+    ).length;
     const approvedCount = roleEntries.filter((x) =>
       x.role
         ? resolveRoleDemandStatus(x.role, x.a, x.it) === "approved"
@@ -2980,6 +3006,7 @@ function demandHtml(): string {
         <div class="need-stat"><div class="label">Функциональностей</div><div class="value">${fnCount}</div></div>
         <div class="need-stat"><div class="label">Запрошено дней</div><div class="value">${totalDays}</div></div>
         <div class="need-stat"><div class="label">На согласовании</div><div class="value is-pending">${pendingCount}</div></div>
+        <div class="need-stat"><div class="label">Частично согласовано</div><div class="value is-partial">${partialCount}</div></div>
         <div class="need-stat"><div class="label">Согласовано</div><div class="value is-approved">${approvedCount}</div></div>
       </div>
       <div class="need-tree">${tree}</div>
@@ -3042,7 +3069,7 @@ function planFocusTeamId(selected: string[]): string | null {
   return selected[0] ?? null;
 }
 
-/** Confirmed (= has FIO / assignee on timeline) role days for selected assignments. */
+/** Days on timeline for placed roles (may be less than Потребность plan). */
 function agreedRolePlanDays(
   assigns: TeamAssignment[],
   ranges: SizeRanges
@@ -3052,10 +3079,19 @@ function agreedRolePlanDays(
       sum +
       planningDemandRoles(a).reduce((roleSum, role) => {
         if (!rolePlacedOnTimeline(a.teamId, role)) return roleSum;
-        return roleSum + rolePlanDays(role, ranges);
+        return roleSum + roleTimelineDays(role, ranges);
       }, 0)
     );
   }, 0);
+}
+
+function assignsHaveUnderPlan(
+  assigns: TeamAssignment[],
+  ranges: SizeRanges
+): boolean {
+  return assigns.some((a) =>
+    planningDemandRoles(a).some((role) => roleIsUnderPlan(role, ranges))
+  );
 }
 
 /** Inclusive week ranges intersect (same model as plan bars). */
@@ -3191,7 +3227,7 @@ function collectPlanPersonPlacements(
       for (const role of planningDemandRoles(a)) {
         const member = teamMemberById(a.teamId, role.assigneeId);
         if (!member) continue;
-        const days = rolePlanDays(role, ranges);
+        const days = roleTimelineDays(role, ranges);
         const startWeek = weekIndex(
           state.startDate,
           role.workStartDate || a.workStartDate
@@ -3502,6 +3538,14 @@ function planDurationWeeks(days: number): number {
   return Math.max(1, Math.ceil(days / WORKING_DAYS_PER_WEEK - 1e-9));
 }
 
+/** Duration chips for timeline placement (plan itself stays on Потребность). */
+function planScheduleDurationOptions(planDays: number): number[] {
+  const plan = Math.max(1, Math.round(planDays));
+  const opts = new Set(PLAN_DURATION_CHIPS);
+  opts.add(plan);
+  return [...opts].sort((a, b) => a - b);
+}
+
 function planChipDate(iso: string): string {
   const months = [
     "янв",
@@ -3590,21 +3634,38 @@ function planTaskFormHtml(item: WorkItem, teamId: string, roleId: string): strin
     const on = form.startWeek === w;
     return `<button type="button" class="plan-chip${on ? " is-on" : ""}" data-plan-form-week="${w}">${planChipDate(addWeeks(state.startDate, w))}</button>`;
   }).join("");
-  const durs = PLAN_DURATION_CHIPS.map((d) => {
-    const on = form.days === d;
-    return `<button type="button" class="plan-chip${on ? " is-on" : ""}" data-plan-form-days="${d}">${d}</button>`;
-  }).join("");
+  const planDays = role ? rolePlanDays(role, szRanges()) : form.days;
+  const durs = planScheduleDurationOptions(planDays)
+    .map((d) => {
+      const on = form.days === d;
+      const under = d < planDays;
+      const tip =
+        under
+          ? `Меньше плана (${planDays} дн.) — план в Потребности не меняется`
+          : d > planDays
+            ? `Больше плана (${planDays} дн.) — план в Потребности не меняется`
+            : "Полный план из Потребности";
+      return `<button type="button" class="plan-chip${on ? " is-on" : ""}${under ? " is-under" : ""}" data-plan-form-days="${d}" title="${escapeAttr(tip)}">${d}</button>`;
+    })
+    .join("");
   const title = editing
     ? `Изменить назначение на таймлайне: ${escapeHtml(item.title)}`
     : `Новая задача на таймлайн: ${escapeHtml(item.title)}`;
+  const underHint =
+    form.days < planDays
+      ? `<p class="plan-task-under-hint">На таймлайне ${form.days} дн. · план ${planDays} дн. (Потребность не меняется)</p>`
+      : form.days > planDays
+        ? `<p class="plan-task-under-hint is-muted">На таймлайне ${form.days} дн. · план ${planDays} дн. (Потребность не меняется)</p>`
+        : `<p class="plan-task-under-hint is-muted">План ${planDays} дн. — меняется только в Потребности. Можно поставить меньше или больше.</p>`;
   return `<div class="plan-task-form">
     <div class="plan-task-form-title">${title}</div>
     <div class="plan-task-label">Исполнитель</div>
     <div class="plan-chips">${people || `<span class="meta">Добавьте строки роль — ФИО на вкладке «Команды»</span>`}</div>
     <div class="plan-task-label">Дата старта</div>
     <div class="plan-chips">${starts}</div>
-    <div class="plan-task-label">Длительность, рабочих дней</div>
+    <div class="plan-task-label">На таймлайне, рабочих дней</div>
     <div class="plan-chips">${durs}</div>
+    ${underHint}
     <div class="plan-task-actions">
       <button type="button" class="btn btn-primary" data-plan-form-submit>Поставить на таймлайн</button>
       <button type="button" class="btn" data-plan-form-cancel>Отмена</button>
@@ -3728,7 +3789,7 @@ function collectGanttRoleBars(ranges = szRanges()): GanttRoleBar[] {
       for (const role of planningDemandRoles(a)) {
         const member = teamMemberById(a.teamId, role.assigneeId);
         if (!member) continue;
-        const days = rolePlanDays(role, ranges);
+        const days = roleTimelineDays(role, ranges);
         const startWeek = weekIndex(
           state.startDate,
           role.workStartDate || a.workStartDate
@@ -3858,7 +3919,9 @@ function ganttBoardHtml(view: GanttBoardView): string {
                   const roleRows = roles
                     .map((role) => {
                       const member = teamMemberById(a.teamId, role.assigneeId);
-                      const days = rolePlanDays(role, ranges);
+                      const days = member
+                        ? roleTimelineDays(role, ranges)
+                        : rolePlanDays(role, ranges);
                       const startWeek = weekIndex(
                         state.startDate,
                         role.workStartDate || a.workStartDate
@@ -4101,6 +4164,7 @@ function planningHtml(
                 selectedSet.has(s.teamId)
               );
               const agreed = agreedRolePlanDays(assigns, ranges);
+              const fnUnder = assignsHaveUnderPlan(assigns, ranges);
               const fnOpen = conflictsOnly || !ui.planCollapsedItems[item.id];
               const execRows = assigns
                 .map((a) => {
@@ -4111,7 +4175,11 @@ function planningHtml(
                     .map((role) => {
                       const member = rolePlacedOnTimeline(a.teamId, role);
                       const onTimeline = Boolean(member);
-                      const days = rolePlanDays(role, ranges);
+                      const planDays = rolePlanDays(role, ranges);
+                      const days = onTimeline
+                        ? roleTimelineDays(role, ranges)
+                        : planDays;
+                      const under = roleIsUnderPlan(role, ranges);
                       const startWeek = weekIndex(
                         state.startDate,
                         role.workStartDate || a.workStartDate
@@ -4131,8 +4199,8 @@ function planningHtml(
                         ? planPersonConflictTipHtml(placeKey, personPlacements)
                         : "";
                       const label = member
-                        ? `${shortFio(member.name)} · ${days} дн.`
-                        : `${role.name} · ${days} дн.`;
+                        ? `${shortFio(member.name)} · ${days} дн.${under ? ` (план ${planDays})` : ""}`
+                        : `${role.name} · ${planDays} дн.`;
                       const barTitle = personConflict
                         ? `${label} — ${conflictAria}`
                         : label;
@@ -4152,14 +4220,16 @@ function planningHtml(
                           )
                         : `<button type="button" class="plan-bar-empty" data-plan-task-open="${item.id}" data-team="${a.teamId}" data-role="${escapeAttr(role.id)}" title="Поставить на таймлайн"></button>`;
                       const leftLabel = planRoleLeftLabel(role, member);
-                      const roleDays = `${days}/${onTimeline ? days : "—"}`;
-                      const rowCls = personConflict
-                        ? " plan-role-row is-person-conflict"
-                        : " plan-role-row";
+                      const roleDays = `${planDays}/${onTimeline ? days : "—"}`;
+                      const rowCls = [
+                        " plan-role-row",
+                        personConflict ? " is-person-conflict" : "",
+                        under ? " is-under-plan" : "",
+                      ].join("");
                       return `${planTaskFormHtml(item, a.teamId, role.id)}<div class="plan-row${rowCls}">
                         <div class="plan-cell">
                           <span class="plan-exec-name plan-fio-name">${leftLabel}${personConflict ? planConflictMarkHtml(conflictAria, conflictTipHtml) : ""}</span>
-                          <span class="plan-fn-days plan-role-days" title="Запрошено / согласовано дней">${roleDays}</span>
+                          <span class="plan-fn-days plan-role-days${under ? " is-under-plan" : ""}" title="${under ? `На таймлайне меньше плана: ${days} из ${planDays} дн.` : "План / на таймлайне"}">${roleDays}</span>
                           ${planPlaceOpenBtnHtml(item.id, a.teamId, role.id, onTimeline)}
                         </div>
                         ${planTrackHtml(bar, weeks)}
@@ -4185,7 +4255,7 @@ function planningHtml(
                 <summary class="plan-row plan-fn-sum">
                   <div class="plan-cell">
                     <span class="plan-fn-title">${escapeHtml(item.title)}</span>
-                    <span class="plan-fn-days">${req}/${agreed || "—"}</span>
+                    <span class="plan-fn-days${fnUnder ? " is-under-plan" : ""}" title="${fnUnder ? "На таймлайне меньше плана из Потребности" : "План / на таймлайне"}">${req}/${agreed || "—"}</span>
                   </div>
                   ${planTrackHtml(fnBar, weeks)}
                 </summary>
@@ -6290,7 +6360,13 @@ function bindDemandTab() {
       const size = nearestSizeFromDays(days, szRanges());
       const team = teamById(teamId);
       if (roleId && role) {
-        patchDemandRole(itemId, teamId, roleId, (r) => ({ ...r, days, size }));
+        patchDemandRole(itemId, teamId, roleId, (r) => {
+          const next: AssignmentRole = { ...r, days, size };
+          if (next.scheduledDays != null && next.scheduledDays === days) {
+            delete next.scheduledDays;
+          }
+          return next;
+        });
         logChange(
           `Потребность «${item.title}»: ${team?.name ?? teamId} / ${role.name} — ${days} дн.`,
           "team"
@@ -6496,10 +6572,16 @@ function bindPlanningTab() {
     const assign = item?.assignments.find((a) => a.teamId === teamId);
     const role = assign?.roles?.find((r) => r.id === roleId);
     if (!item || !assign || !role) return;
-    const days = rolePlanDays(role, szRanges());
-    const nearest = PLAN_DURATION_CHIPS.reduce((best, d) =>
-      Math.abs(d - days) < Math.abs(best - days) ? d : best
-    );
+    const planDays = rolePlanDays(role, szRanges());
+    const timelineDays = role.assigneeId
+      ? roleTimelineDays(role, szRanges())
+      : planDays;
+    const options = planScheduleDurationOptions(planDays);
+    const days = options.includes(timelineDays)
+      ? timelineDays
+      : options.reduce((best, d) =>
+          Math.abs(d - timelineDays) < Math.abs(best - timelineDays) ? d : best
+        );
     const members = teamById(teamId)?.members ?? [];
     const roleKey = normalizeAssignmentRoleName(role.name);
     const byId = role.assigneeId
@@ -6517,7 +6599,7 @@ function bindPlanningTab() {
         state.startDate,
         role.workStartDate || assign.workStartDate
       ),
-      days: PLAN_DURATION_CHIPS.includes(days) ? days : nearest,
+      days,
     };
     render();
   };
@@ -6560,9 +6642,10 @@ function bindPlanningTab() {
       e.preventDefault();
       e.stopPropagation();
       if (!ui.planTaskForm) return;
+      const raw = Number(btn.dataset.planFormDays) || ui.planTaskForm.days;
       ui.planTaskForm = {
         ...ui.planTaskForm,
-        days: Number(btn.dataset.planFormDays) || ui.planTaskForm.days,
+        days: Math.max(1, Math.round(raw)),
       };
       render();
     });
@@ -6583,19 +6666,32 @@ function bindPlanningTab() {
     const form = ui.planTaskForm;
     if (!form?.memberId) return;
     const start = addWeeks(state.startDate, form.startWeek);
-    const size = nearestSizeFromDays(form.days, szRanges());
-    patchDemandRole(form.itemId, form.teamId, form.roleId, (r) => ({
-      ...r,
-      assigneeId: form.memberId || undefined,
-      demandStatus: form.memberId ? "approved" : r.demandStatus,
-      workStartDate: snapToMonday(start),
-      days: form.days,
-      size,
-    }));
     const item = state.items.find((i) => i.id === form.itemId);
+    const assign = item?.assignments.find((a) => a.teamId === form.teamId);
+    const role = assign?.roles?.find((r) => r.id === form.roleId);
+    const planDays = role ? rolePlanDays(role, szRanges()) : form.days;
+    const scheduled = Math.max(1, Math.round(form.days));
+    // Plan days/size stay on Потребность; timeline sets scheduledDays + partial/approved.
+    patchDemandRole(form.itemId, form.teamId, form.roleId, (r) => {
+      const next: AssignmentRole = {
+        ...r,
+        assigneeId: form.memberId || undefined,
+        workStartDate: snapToMonday(start),
+        demandStatus: scheduled < planDays ? "partial" : "approved",
+      };
+      if (scheduled === planDays) delete next.scheduledDays;
+      else next.scheduledDays = scheduled;
+      return next;
+    });
     const member = teamMemberById(form.teamId, form.memberId ?? undefined);
+    const deltaNote =
+      scheduled < planDays
+        ? ` (меньше плана ${planDays} дн.)`
+        : scheduled > planDays
+          ? ` (больше плана ${planDays} дн.)`
+          : "";
     logChange(
-      `Планирование «${item?.title ?? form.itemId}»: ${member ? shortFio(member.name) : "исполнитель"} — ${form.days} дн.`,
+      `Планирование «${item?.title ?? form.itemId}»: ${member ? shortFio(member.name) : "исполнитель"} — ${scheduled} дн. на таймлайне${deltaNote}`,
       "schedule"
     );
     ui.planTaskForm = null;

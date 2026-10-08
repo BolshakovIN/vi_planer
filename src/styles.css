@@ -4705,6 +4705,10 @@ body.pdf-capturing .gantt-page .plan-board {
   color: var(--warn);
 }
 
+.need-stat .value.is-partial {
+  color: var(--warn);
+}
+
 .need-stat .value.is-approved {
   color: var(--good);
 }
@@ -5000,6 +5004,12 @@ body.pdf-capturing .gantt-page .plan-board {
 .need-st-pending {
   background: var(--warn-soft);
   color: var(--warn);
+}
+
+.need-st-partial {
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-weight: 600;
 }
 
 .need-st-approved {
@@ -5394,6 +5404,58 @@ body.pdf-capturing .gantt-page .plan-board {
   flex-shrink: 0;
 }
 
+.plan-fn-days.is-under-plan,
+.plan-role-days.is-under-plan {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.plan-role-row.is-under-plan .plan-bar {
+  outline: 1px dashed color-mix(in srgb, var(--warn) 70%, transparent);
+  outline-offset: 1px;
+}
+
+.plan-chip.is-under:not(.is-on) {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
+}
+
+.plan-chip.is-under.is-on {
+  background: color-mix(in srgb, var(--warn) 18%, var(--surface));
+  border-color: var(--warn);
+  color: inherit;
+}
+
+.plan-task-under-hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--warn);
+  line-height: 1.35;
+}
+
+.plan-task-under-hint.is-muted {
+  color: var(--muted);
+}
+
+.need-row.is-under-plan {
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  border-radius: 6px;
+}
+
+.need-plan-fact {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.need-plan-fact.is-under-plan,
+.need-fn-req.need-plan-fact.is-under-plan {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.need-plan-fact .need-days-input {
+  margin-right: 2px;
+}
+
 .plan-fn-title {
   flex: 1;
   min-width: 0;
@@ -5742,6 +5804,12 @@ body.plan-dragging {
 .plan-chip:hover {
   border-color: #dadcde;
   background: var(--surface-2);
+}
+
+.plan-chip.is-locked {
+  cursor: default;
+  opacity: 0.85;
+  pointer-events: none;
 }
 
 .plan-chip.is-on {

@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 08.10.2026, 15:04 GMT+3
+Сгенерировано: 08.10.2026, 15:25 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,7 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `f6c04b5` | 2026-10-08 | ivanbolsakov | Publish Гантт/факт tab and planning role days counters. |
 | `c1b75b9` | 2026-10-08 | ivanbolsakov | Publish bugfixes and Gantt cleanup to GitHub Pages. |
 | `7329bf2` | 2026-10-08 | ivanbolsakov | Fix portfolio column resize sync and remove dead Gantt code. |
 | `22a58de` | 2026-10-08 | ivanbolsakov | Publish Gantt controls and plan-start move to GitHub Pages. |
@@ -444,7 +445,8 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `c1b75b9` | 2026-10-08 | ivanbolsakov | HEAD -> master, origin/master | Publish bugfixes and Gantt cleanup to GitHub Pages. |
+| `f6c04b5` | 2026-10-08 | ivanbolsakov | HEAD -> master, origin/master | Publish Гантт/факт tab and planning role days counters. |
+| `c1b75b9` | 2026-10-08 | ivanbolsakov |  | Publish bugfixes and Gantt cleanup to GitHub Pages. |
 | `7329bf2` | 2026-10-08 | ivanbolsakov |  | Fix portfolio column resize sync and remove dead Gantt code. |
 | `22a58de` | 2026-10-08 | ivanbolsakov |  | Publish Gantt controls and plan-start move to GitHub Pages. |
 | `d808360` | 2026-10-08 | ivanbolsakov |  | Add Gantt scale/depth/nesting controls and move plan start to schedule tabs. |
