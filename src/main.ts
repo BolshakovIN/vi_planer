@@ -673,7 +673,7 @@ function teamChipWithEstimateHtml(
   </span>`;
 }
 
-/** Compact teams + estimates for Реестр: first team + «люди +N» popup with all. */
+/** Реестр: one team → chip; several → only «люди N команд», all teams + estimates on click. */
 function teamsCellHtml(item: WorkItem): string {
   const assigns = item.assignments;
   if (!assigns.length) return `<span class="muted">—</span>`;
@@ -691,16 +691,23 @@ function teamsCellHtml(item: WorkItem): string {
     })
     .join("");
   const names = assigns.map((a) => teamById(a.teamId)?.name ?? a.teamId);
+  const n = assigns.length;
+  const n10 = n % 10;
+  const n100 = n % 100;
+  const word =
+    n10 === 1 && n100 !== 11
+      ? "команда"
+      : n10 >= 2 && n10 <= 4 && (n100 < 12 || n100 > 14)
+        ? "команды"
+        : "команд";
   const pop = teamsPopHtml({
-    count: assigns.length - 1,
+    count: n,
+    countLabel: `${n} ${word}`,
     aria: `Команды и оценки: ${names.join(", ")}`,
     head: `Команды и оценки (${assigns.length})`,
     listHtml: `<ul class="teams-pop-list teams-pop-list-est">${rows}</ul><div class="teams-pop-total"><span>Итого</span><span>~${totalWeeks} чел·нед</span></div>`,
   });
-  return `<div class="portfolio-teams has-pop">
-      <span class="portfolio-teams-preview">${teamChipWithEstimateHtml(assigns[0]!)}</span>
-      ${pop}
-    </div>`;
+  return `<div class="portfolio-teams has-pop">${pop}</div>`;
 }
 
 function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
@@ -3510,11 +3517,13 @@ function planFnTeamsMarkHtml(item: WorkItem, selectedSet: Set<string>): string {
  */
 function teamsPopHtml(o: {
   count: number;
+  /** Text next to the icon; default «+N». */
+  countLabel?: string;
   aria: string;
   head: string;
   listHtml: string;
 }): string {
-  return `<span class="teams-pop" role="button" tabindex="0" aria-haspopup="dialog" aria-expanded="false" aria-label="${escapeAttr(o.aria)}" data-stop-edit>${TEAMS_POP_SVG}<span class="teams-pop-n">+${o.count}</span><span class="plan-conflict-tip teams-pop-tip" role="dialog" data-stop-edit><span class="teams-pop-head">${escapeHtml(o.head)}</span>${o.listHtml}</span></span>`;
+  return `<span class="teams-pop" role="button" tabindex="0" aria-haspopup="dialog" aria-expanded="false" aria-label="${escapeAttr(o.aria)}" data-stop-edit>${TEAMS_POP_SVG}<span class="teams-pop-n">${escapeHtml(o.countLabel ?? `+${o.count}`)}</span><span class="plan-conflict-tip teams-pop-tip" role="dialog" data-stop-edit><span class="teams-pop-head">${escapeHtml(o.head)}</span>${o.listHtml}</span></span>`;
 }
 
 function treeExpandControlsHtml(scope: "plan" | "gantt" | "gantt-fact"): string {
