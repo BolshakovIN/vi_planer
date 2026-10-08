@@ -359,29 +359,6 @@ textarea {
   box-shadow: var(--shadow);
 }
 
-.metric-plan-start {
-  position: relative;
-  display: block;
-  cursor: pointer;
-  margin: 0;
-}
-
-.metric-plan-start:hover,
-.metric-plan-start:focus-within {
-  border-color: var(--ink);
-}
-
-.metric-plan-start-input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-  border: 0;
-  padding: 0;
-  margin: 0;
-}
 
 .metric .label {
   font-size: 10px;
@@ -2914,19 +2891,6 @@ th.jira-cell .th-label {
   color: var(--muted);
 }
 
-.gantt-weeks-ctrl-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: nowrap;
-  flex-shrink: 0;
-  padding: 5px 10px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  font-size: 12px;
-}
 
 .gantt-view-ctrls {
   display: flex;
@@ -3162,13 +3126,6 @@ th.jira-cell .th-label {
   border-right: 0;
 }
 
-.gantt-head-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
-  flex-wrap: wrap;
-}
 
 .tree-expand-controls {
   display: inline-flex;
@@ -3217,22 +3174,6 @@ th.jira-cell .th-label {
   display: block;
 }
 
-.gantt-weeks-ctrl-right label {
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.gantt-weeks-ctrl-right input[type="range"] {
-  width: min(160px, 32vw);
-  max-width: 160px;
-  height: 4px;
-}
-
-.gantt-weeks-ctrl-right .mono {
-  min-width: 52px;
-  font-weight: 600;
-  color: var(--accent);
-}
 
 .gantt-bar {
   position: absolute;
@@ -3775,13 +3716,6 @@ a.req-dl-btn {
   font-size: 10px;
 }
 
-.plan-head-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  flex-wrap: nowrap;
-}
 
 .need-project-chip .prio-mini,
 .need-project-title .prio-mini,
@@ -3939,8 +3873,6 @@ body.pdf-capturing .col-resize,
 body.pdf-capturing .gantt-label-resize,
 body.pdf-capturing .table-scroll-top,
 body.pdf-capturing .tree-expand-controls,
-body.pdf-capturing .gantt-head-actions,
-body.pdf-capturing .gantt-weeks-ctrl-right,
 body.pdf-capturing .gantt-view-ctrls,
 body.pdf-capturing .gantt-page .need-stats,
 body.pdf-capturing .gantt-page .panel-header .meta,
@@ -3996,8 +3928,6 @@ body.pdf-capturing .gantt-page .plan-board {
   .prio-pop,
   .drag-handle,
   .tree-expand-controls,
-  .gantt-head-actions,
-  .gantt-weeks-ctrl-right,
   .gantt-view-ctrls,
   .gantt-page .need-stats,
   .plan-add-btn,

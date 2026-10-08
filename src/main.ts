@@ -46,9 +46,7 @@ import {
   scheduledOverloadWeeks,
   isTeamWeekOverloaded,
   utilizationPct,
-  nearestSizeForCalendarWeeks,
   nearestSizeFromDays,
-  calendarWeeksForSize,
   SCHEDULE_CAPACITY_PW,
   assignmentPlanDays,
   assignmentPlanWeeks,
@@ -129,7 +127,6 @@ type Tab =
   | "settings";
 type SortKey = "priority" | "eta" | "cashFlow" | "roi";
 type SortDir = "asc" | "desc";
-type GanttBarDragMode = "move" | "resize-left" | "resize-right";
 type GanttScale = "week" | "month" | "quarter";
 type GanttDepthMonths = 3 | 6 | 9 | 12;
 /** Max tree level shown on Gantt (project … assignee). */
@@ -282,11 +279,9 @@ interface UiState {
   /** Реестр project card (group key); null when closed */
   editingProjectKey: string | null;
   creatingProject: boolean;
-  /** Gantt horizon in weeks (derived from ganttDepthMonths) */
-  ganttWeeks: number;
   /** Gantt axis unit: week ticks or month bands */
   ganttScale: GanttScale;
-  /** Gantt display depth: 3 / 6 / 9 months */
+  /** Gantt display depth: 3 / 6 / 9 / 12 months */
   ganttDepthMonths: GanttDepthMonths;
   /** Gantt hierarchy cutoff: project … role/assignee */
   ganttTreeLevel: GanttTreeLevel;
@@ -369,7 +364,6 @@ const ui: UiState = {
   creating: false,
   editingProjectKey: null,
   creatingProject: false,
-  ganttWeeks: 26,
   ganttScale: "week",
   ganttDepthMonths: 6,
   ganttTreeLevel: "role",
@@ -722,10 +716,6 @@ const SCHEDULE_MODE_KEY = "vi-planer-schedule-mode";
 const SCHEDULE_MODE_ENABLED_KEY = "vi-planer-schedule-mode-enabled";
 /** Legacy boolean toggle; migrated once into SCHEDULE_MODE_KEY */
 const AUTO_CAPACITY_SCHEDULE_KEY = "vi-planer-auto-capacity-schedule";
-const GANTT_LABEL_COL_KEY = "vi-planer-gantt-label-col";
-const GANTT_LABEL_COL_DEFAULT = 240;
-const GANTT_LABEL_COL_MIN = 160;
-const GANTT_LABEL_COL_MAX = 480;
 const GANTT_SCALE_KEY = "vi-planer-gantt-scale";
 const GANTT_DEPTH_KEY = "vi-planer-gantt-depth";
 const GANTT_TREE_LEVEL_KEY = "vi-planer-gantt-tree-level";
@@ -874,11 +864,8 @@ function ganttHorizonWeeks(depth: GanttDepthMonths = ui.ganttDepthMonths): numbe
   return Math.max(4, Math.min(GANTT_WEEKS_MAX, weeks));
 }
 
-function syncGanttWeeksFromDepth(): number {
-  const weeks = ganttHorizonWeeks(ui.ganttDepthMonths);
-  ui.ganttWeeks = weeks;
-  return weeks;
-}
+/** Independent horizon for Мониторинг (not tied to Gantt depth). */
+const DEMO_HORIZON_WEEKS = 16;
 
 function formatMonthShortRu(iso: string): string {
   const m = Number(iso.slice(5, 7)) - 1;
@@ -1108,41 +1095,6 @@ function resetColWidths() {
   localStorage.removeItem(COL_WIDTH_KEY);
 }
 
-function loadGanttLabelColWidth(): number {
-  try {
-    const raw = localStorage.getItem(GANTT_LABEL_COL_KEY);
-    if (!raw) return GANTT_LABEL_COL_DEFAULT;
-    const n = Math.round(Number(raw));
-    if (!Number.isFinite(n)) return GANTT_LABEL_COL_DEFAULT;
-    return Math.max(
-      GANTT_LABEL_COL_MIN,
-      Math.min(GANTT_LABEL_COL_MAX, n)
-    );
-  } catch {
-    return GANTT_LABEL_COL_DEFAULT;
-  }
-}
-
-function saveGanttLabelColWidth(width: number) {
-  const clamped = Math.max(
-    GANTT_LABEL_COL_MIN,
-    Math.min(GANTT_LABEL_COL_MAX, Math.round(width))
-  );
-  localStorage.setItem(GANTT_LABEL_COL_KEY, String(clamped));
-}
-
-function applyGanttLabelColWidth(width: number) {
-  const clamped = Math.max(
-    GANTT_LABEL_COL_MIN,
-    Math.min(GANTT_LABEL_COL_MAX, Math.round(width))
-  );
-  const px = `${clamped}px`;
-  document.documentElement.style.setProperty("--gantt-label-col", px);
-  document
-    .querySelectorAll<HTMLElement>(".gantt-layout")
-    .forEach((el) => el.style.setProperty("--gantt-label-col", px));
-}
-
 function loadHiddenCols(): HideablePortfolioCol[] {
   try {
     const raw = localStorage.getItem(COL_VISIBILITY_KEY);
@@ -1293,10 +1245,15 @@ function colWidthStyle(col: PortfolioCol): string {
   return `width:${width}px;min-width:${min}px`;
 }
 
-/** Sum of visible column widths — keep thead/body tables the same pixel width. */
-function portfolioTablePixelWidth(): number {
+/**
+ * Sum of visible column widths — keep thead/body tables the same pixel width.
+ * `override` supplies live drag widths not yet written to localStorage.
+ */
+function portfolioTablePixelWidth(
+  override?: Partial<Record<PortfolioCol, number>>
+): number {
   return ALL_PORTFOLIO_COLS.filter((col) => isColVisible(col)).reduce(
-    (sum, col) => sum + colPixelWidth(col),
+    (sum, col) => sum + (override?.[col] ?? colPixelWidth(col)),
     0
   );
 }
@@ -1306,8 +1263,10 @@ function portfolioTableWidthStyle(): string {
   return `width:${w}px;min-width:${w}px`;
 }
 
-function syncPortfolioTableWidths(): void {
-  const w = portfolioTablePixelWidth();
+function syncPortfolioTableWidths(
+  override?: Partial<Record<PortfolioCol, number>>
+): void {
+  const w = portfolioTablePixelWidth(override);
   document
     .querySelectorAll<HTMLTableElement>(
       ".portfolio-thead-table, .portfolio-body-table"
@@ -1808,167 +1767,6 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
   `;
 }
 
-/**
- * Elegant FS curve: always exit RIGHT of pred bar first, then soft S/C into
- * succ from the left. Never doubles back through the source bar. Tight /
- * reverse (dx ≤ 0) still leaves eastward via a short stub, then elbows down.
- * routeBias fans sibling queue links.
- */
-function ganttDepPathD(
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-  routeBias = 0,
-  xMax = 52
-): string {
-  const clampX = (x: number) =>
-    Math.min(xMax - 0.04, Math.max(0.04, x));
-  const x1c = clampX(x1);
-  const x2c = clampX(x2);
-  const dy = y2 - y1;
-  const dx = x2c - x1c;
-  const absDy = Math.abs(dy);
-  const fan = Math.max(-0.55, Math.min(0.55, routeBias * 0.14));
-
-  // Same row: straight or a soft horizontal bow
-  if (absDy < 0.02) {
-    if (Math.abs(fan) < 0.03) {
-      return `M ${x1c} ${y1} H ${x2c}`;
-    }
-    const midX = (x1c + x2c) / 2;
-    return `M ${x1c} ${y1} Q ${midX} ${y1 + fan * 0.55}, ${x2c} ${y2}`;
-  }
-
-  // Short rightward exit clears the source bar without a balloon loop.
-  // Scale slightly with |dy| so tall spans stay graceful, but stay modest.
-  const exitStub = Math.max(0.32, Math.min(0.72, 0.28 + absDy * 0.1));
-  const entryStub = Math.max(0.32, Math.min(0.9, 0.28 + absDy * 0.14));
-
-  let c1x: number;
-  let c2x: number;
-
-  if (dx > exitStub + entryStub + 0.45) {
-    // Forward in time: balanced S with long horizontal tangents
-    const r = Math.min(Math.max(exitStub, absDy * 0.5 + 0.35), dx * 0.42);
-    c1x = x1c + r + fan;
-    c2x = x2c - r + fan;
-  } else {
-    // Overlap / reverse / tight: stub east of source, then elbow down-left
-    // into the successor (western approach). Keep exit short to avoid the
-    // exaggerated rightward loop that large elegance pulls produced.
-    c1x = x1c + exitStub + fan * 0.3;
-    const reverseSpan = Math.max(0, x1c - x2c);
-    const entryPull =
-      entryStub + Math.min(0.85, reverseSpan * 0.18 + absDy * 0.12);
-    c2x = x2c - entryPull + fan * 0.3;
-  }
-
-  // Hard guarantees: first control east of start, second west of end.
-  // (clampX alone can collapse a stub near the chart edge.)
-  if (c1x < x1c + 0.28) c1x = x1c + 0.28;
-  if (c2x > x2c - 0.28) c2x = x2c - 0.28;
-
-  // Preserve eastward exit after clamp (clamp alone can pin c1 on x1 near
-  // the right chart edge). Fall back to an explicit L-stub when no room.
-  const roomRight = xMax - 0.04 - x1c;
-  const c1Out = Math.min(xMax - 0.04, Math.max(x1c + 0.28, clampX(c1x)));
-  const c2Out = clampX(Math.min(x2c - 0.28, c2x));
-
-  if (c1Out <= x1c + 0.05 || roomRight < 0.22) {
-    const stubX = Math.min(
-      xMax - 0.04,
-      x1c + Math.max(0.12, Math.min(exitStub, roomRight * 0.9))
-    );
-    return `M ${x1c} ${y1} L ${stubX} ${y1} C ${stubX} ${y1}, ${c2Out} ${y2}, ${x2c} ${y2}`;
-  }
-
-  return `M ${x1c} ${y1} C ${c1Out} ${y1}, ${c2Out} ${y2}, ${x2c} ${y2}`;
-}
-
-function clientPointToSvg(
-  svg: SVGSVGElement,
-  clientX: number,
-  clientY: number
-): { x: number; y: number } | null {
-  const ctm = svg.getScreenCTM();
-  if (!ctm) return null;
-  const pt = svg.createSVGPoint();
-  pt.x = clientX;
-  pt.y = clientY;
-  const p = pt.matrixTransform(ctm.inverse());
-  return { x: p.x, y: p.y };
-}
-
-/**
- * Snap queue FS arrows to real bar edges (right of pred → left of succ),
- * using DOM rects mapped into the stretched SVG viewBox. Arrowheads are
- * drawn in user space sized by screen pixels so preserveAspectRatio=none
- * does not distort marker tips away from the bar.
- */
-function layoutGanttDepArrows() {
-  const svg = document.querySelector<SVGSVGElement>(".gantt-dep-layer");
-  if (!svg) return;
-  const vb = svg.viewBox.baseVal;
-  const weeks = vb.width || 1;
-  const rows = vb.height || 1;
-  const svgRect = svg.getBoundingClientRect();
-  if (svgRect.width < 2 || svgRect.height < 2) return;
-
-  const tipW = Math.min(0.55, Math.max(0.12, 7 / (svgRect.width / weeks)));
-  const tipH = Math.min(0.55, Math.max(0.1, 8 / (svgRect.height / rows)));
-  const heads = svg.querySelector(".gantt-dep-heads");
-  if (heads) heads.replaceChildren();
-
-  svg.querySelectorAll<SVGPathElement>("path.gantt-dep-link").forEach((path) => {
-    const fromItem = path.dataset.fromItem;
-    const fromTeam = path.dataset.fromTeam;
-    const toItem = path.dataset.toItem;
-    const toTeam = path.dataset.toTeam;
-    const bias = Number(path.dataset.bias || 0);
-    if (!fromItem || !fromTeam || !toItem || !toTeam) return;
-
-    const fromBar = document.querySelector<HTMLElement>(
-      `.gantt-bar[data-item-id="${fromItem}"][data-team-id="${fromTeam}"]`
-    );
-    const toBar = document.querySelector<HTMLElement>(
-      `.gantt-bar[data-item-id="${toItem}"][data-team-id="${toTeam}"]`
-    );
-    if (!fromBar || !toBar) {
-      path.setAttribute("visibility", "hidden");
-      return;
-    }
-    path.removeAttribute("visibility");
-
-    const fr = fromBar.getBoundingClientRect();
-    const tr = toBar.getBoundingClientRect();
-    if (fr.width < 1 || tr.width < 1) return;
-
-    const p1 = clientPointToSvg(svg, fr.right, fr.top + fr.height / 2);
-    const p2 = clientPointToSvg(svg, tr.left, tr.top + tr.height / 2);
-    if (!p1 || !p2) return;
-
-    // Path ends just before the tip apex so the head sits on the bar's left edge
-    const endX = p2.x - tipW * 0.95;
-    path.setAttribute("d", ganttDepPathD(p1.x, p1.y, endX, p2.y, bias, weeks));
-
-    if (!heads) return;
-    const color = path.getAttribute("stroke") || "#64748b";
-    const poly = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "polygon"
-    );
-    const half = tipH / 2;
-    poly.setAttribute(
-      "points",
-      `${p2.x},${p2.y} ${p2.x - tipW},${p2.y - half} ${p2.x - tipW},${p2.y + half}`
-    );
-    poly.setAttribute("fill", color);
-    poly.setAttribute("fill-opacity", "0.92");
-    heads.appendChild(poly);
-  });
-}
-
 function syncPlanStartInputs(value: string) {
   document
     .querySelectorAll<HTMLInputElement>(".plan-start-date-input")
@@ -1997,7 +1795,7 @@ function bindPlanStartDate() {
             state.startDate = next;
             logChange(
               `Старт планирования: ${formatDate(prev)} → ${formatDate(next)}`,
-              "settings"
+              "schedule"
             );
             persist();
           },
@@ -2014,398 +1812,24 @@ function bindPlanStartDate() {
     });
 }
 
-function bindGanttDepArrowLayout() {
-  const rows = document.querySelector<HTMLElement>(".gantt-rows");
-  if (!rows) return;
+let ganttTreePickerOutsideBound = false;
 
-  const snap = () => layoutGanttDepArrows();
-  requestAnimationFrame(() => requestAnimationFrame(snap));
-
-  const ro = new ResizeObserver(() => snap());
-  ro.observe(rows);
-  const svg = rows.querySelector(".gantt-dep-layer");
-  if (svg) ro.observe(svg);
-}
-
-function bindGanttLabelResize() {
-  const handle = document.querySelector<HTMLElement>("[data-gantt-label-resize]");
-  const layout = document.querySelector<HTMLElement>(".gantt-layout");
-  if (!handle || !layout) return;
-
-  applyGanttLabelColWidth(loadGanttLabelColWidth());
-
-  handle.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const startX = e.clientX;
-    const startW =
-      parseFloat(
-        getComputedStyle(layout).getPropertyValue("--gantt-label-col")
-      ) || loadGanttLabelColWidth();
-    const pointerId = e.pointerId;
-    handle.setPointerCapture(pointerId);
-    document.body.classList.add("col-resizing");
-    layout.classList.add("gantt-label-resizing");
-
-    const onMove = (ev: PointerEvent) => {
-      applyGanttLabelColWidth(startW + (ev.clientX - startX));
-    };
-
-    const onUp = (ev: PointerEvent) => {
-      handle.releasePointerCapture(pointerId);
-      handle.removeEventListener("pointermove", onMove);
-      handle.removeEventListener("pointerup", onUp);
-      handle.removeEventListener("pointercancel", onUp);
-      document.body.classList.remove("col-resizing");
-      layout.classList.remove("gantt-label-resizing");
-
-      const finalW =
-        parseFloat(
-          getComputedStyle(layout).getPropertyValue("--gantt-label-col")
-        ) || loadGanttLabelColWidth();
-      saveGanttLabelColWidth(finalW);
-      applyGanttLabelColWidth(finalW);
-      layoutGanttDepArrows();
-      void ev;
-    };
-
-    handle.addEventListener("pointermove", onMove);
-    handle.addEventListener("pointerup", onUp);
-    handle.addEventListener("pointercancel", onUp);
-  });
-}
-
-let ganttLabelTipTimer: number | null = null;
-let ganttLabelTipCleanup: (() => void) | null = null;
-
-function closeGanttLabelTip() {
-  if (ganttLabelTipTimer != null) {
-    window.clearTimeout(ganttLabelTipTimer);
-    ganttLabelTipTimer = null;
-  }
-  if (ganttLabelTipCleanup) {
-    ganttLabelTipCleanup();
-    ganttLabelTipCleanup = null;
-  }
-  document.querySelector("#ganttLabelTip")?.remove();
-  document
-    .querySelectorAll(".gantt-label-tip-open")
-    .forEach((el) => el.classList.remove("gantt-label-tip-open"));
-}
-
-function placeGanttLabelTip(anchor: HTMLElement, pop: HTMLElement) {
-  const rect = anchor.getBoundingClientRect();
-  const popRect = pop.getBoundingClientRect();
-  let left = rect.left;
-  let top = rect.bottom + 8;
-  if (left + popRect.width > window.innerWidth - 8) {
-    left = Math.max(8, window.innerWidth - popRect.width - 8);
-  }
-  if (top + popRect.height > window.innerHeight - 8) {
-    top = Math.max(8, rect.top - popRect.height - 8);
-  }
-  pop.style.left = `${left}px`;
-  pop.style.top = `${top}px`;
-}
-
-function showGanttLabelTip(anchor: HTMLElement) {
-  const title = anchor.dataset.tipTitle?.trim() || "";
-  if (!title) return;
-
-  closeGanttLabelTip();
-  anchor.classList.add("gantt-label-tip-open");
-
-  const product = anchor.dataset.tipProduct?.trim() || "";
-  const eta = anchor.dataset.tipEta?.trim() || "";
-  const owner = anchor.dataset.tipOwner?.trim() || "";
-  const assignee = anchor.dataset.tipAssignee?.trim() || "";
-  const note = anchor.dataset.tipNote?.trim() || "";
-
-  const metaBits: string[] = [];
-  if (product) metaBits.push(escapeHtml(product));
-  if (eta) metaBits.push(`Дата завершения ${escapeHtml(eta)}`);
-
-  const peopleBits: string[] = [];
-  if (owner) peopleBits.push(`Заказчик: ${escapeHtml(owner)}`);
-  if (assignee) peopleBits.push(`Исполнитель: ${escapeHtml(assignee)}`);
-
-  const pop = document.createElement("div");
-  pop.id = "ganttLabelTip";
-  pop.className = "gantt-label-tip";
-  pop.setAttribute("role", "tooltip");
-  pop.innerHTML = `
-    <div class="gantt-label-tip-title">${escapeHtml(title)}</div>
-    ${
-      metaBits.length
-        ? `<div class="gantt-label-tip-meta">${metaBits.join(" · ")}</div>`
-        : ""
-    }
-    ${
-      peopleBits.length
-        ? `<div class="gantt-label-tip-owner">${peopleBits.join(" · ")}</div>`
-        : ""
-    }
-    ${
-      note
-        ? `<div class="gantt-label-tip-note">${escapeHtml(note)}</div>`
-        : ""
-    }
-  `;
-  document.body.appendChild(pop);
-  placeGanttLabelTip(anchor, pop);
-
-  const onScroll = () => placeGanttLabelTip(anchor, pop);
-  window.addEventListener("scroll", onScroll, true);
-  window.addEventListener("resize", onScroll);
-  ganttLabelTipCleanup = () => {
-    window.removeEventListener("scroll", onScroll, true);
-    window.removeEventListener("resize", onScroll);
-  };
-}
-
-function bindGanttLabelTips() {
-  closeGanttLabelTip();
-  document
-    .querySelectorAll<HTMLElement>("[data-gantt-label-tip]")
-    .forEach((label) => {
-      label.addEventListener("pointerenter", () => {
-        if (ganttLabelTipTimer != null) {
-          window.clearTimeout(ganttLabelTipTimer);
-          ganttLabelTipTimer = null;
-        }
-        ganttLabelTipTimer = window.setTimeout(() => {
-          ganttLabelTipTimer = null;
-          showGanttLabelTip(label);
-        }, 300);
-      });
-      label.addEventListener("pointerleave", () => {
-        if (ganttLabelTipTimer != null) {
-          window.clearTimeout(ganttLabelTipTimer);
-          ganttLabelTipTimer = null;
-        }
-        closeGanttLabelTip();
-      });
-    });
-}
-
-function applyGanttBarPreview(
-  bar: HTMLElement,
-  startWeek: number,
-  endWeek: number,
-  weeks: number
-) {
-  const span = Math.max(1, endWeek - startWeek + 1);
-  const left = (startWeek / weeks) * 100;
-  const width = (span / weeks) * 100;
-  bar.style.left = `${left}%`;
-  bar.style.width = `${Math.max(width, 2.5)}%`;
-  bar.dataset.startWeek = String(startWeek);
-  bar.dataset.endWeek = String(endWeek);
-}
-
-function bindGanttBarEdit() {
-  if (!currentCan("gantt.edit")) return;
-  const weeks = syncGanttWeeksFromDepth();
-
-  document.querySelectorAll<HTMLElement>(".gantt-bar").forEach((bar) => {
-    bar.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0) return;
-      const itemId = bar.dataset.itemId;
-      const teamId = bar.dataset.teamId;
-      if (!itemId || !teamId) return;
-
-      const track = bar.closest<HTMLElement>(".gantt-track");
-      if (!track) return;
-
-      const handle = (e.target as HTMLElement).closest<HTMLElement>(
-        "[data-gantt-handle]"
-      );
-      const mode: GanttBarDragMode =
-        handle?.dataset.ganttHandle === "left"
-          ? "resize-left"
-          : handle?.dataset.ganttHandle === "right"
-            ? "resize-right"
-            : "move";
-
-      const originStart = Number(bar.dataset.startWeek);
-      const originEnd = Number(bar.dataset.endWeek);
-      if (!Number.isFinite(originStart) || !Number.isFinite(originEnd)) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-      closeAppPop();
-      closeOverloadPop();
-
-      const startClientX = e.clientX;
-      const trackRect0 = track.getBoundingClientRect();
-      const weekWidth = trackRect0.width / weeks;
-      let previewStart = originStart;
-      let previewEnd = originEnd;
-      let moved = false;
-
-      bar.classList.add("gantt-bar-dragging");
-      document.body.classList.add("gantt-dragging");
-      try {
-        bar.setPointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
-      }
-
-      const onMove = (ev: PointerEvent) => {
-        if (ev.pointerId !== e.pointerId) return;
-        const delta = Math.round((ev.clientX - startClientX) / weekWidth);
-        if (delta !== 0) moved = true;
-
-        const duration = originEnd - originStart + 1;
-        if (mode === "move") {
-          previewStart = Math.max(
-            0,
-            Math.min(weeks - duration, originStart + delta)
-          );
-          previewEnd = previewStart + duration - 1;
-        } else if (mode === "resize-right") {
-          previewStart = originStart;
-          previewEnd = Math.max(
-            originStart,
-            Math.min(weeks - 1, originEnd + delta)
-          );
-        } else {
-          previewEnd = originEnd;
-          previewStart = Math.max(
-            0,
-            Math.min(originEnd, originStart + delta)
-          );
-        }
-        applyGanttBarPreview(bar, previewStart, previewEnd, weeks);
-        layoutGanttDepArrows();
-      };
-
-      const cleanupDrag = () => {
-        bar.classList.remove("gantt-bar-dragging");
-        document.body.classList.remove("gantt-dragging");
-        bar.removeEventListener("pointermove", onMove);
-        bar.removeEventListener("pointerup", onUp);
-        bar.removeEventListener("pointercancel", onUp);
-        try {
-          bar.releasePointerCapture(e.pointerId);
-        } catch {
-          /* ignore */
-        }
-      };
-
-      const restoreVisual = () => {
-        applyGanttBarPreview(bar, originStart, originEnd, weeks);
-        layoutGanttDepArrows();
-      };
-
-      const onUp = (ev: PointerEvent) => {
-        if (ev.pointerId !== e.pointerId) return;
-        cleanupDrag();
-
-        if (
-          !moved ||
-          (previewStart === originStart && previewEnd === originEnd)
-        ) {
-          restoreVisual();
-          return;
-        }
-
-        const item = state.items.find((i) => i.id === itemId);
-        const assign = item?.assignments.find((a) => a.teamId === teamId);
-        const team = teamById(teamId);
-        if (!item || !assign || !team) {
-          restoreVisual();
-          return;
-        }
-
-        const oldStart = addWeeks(state.startDate, originStart);
-        const oldEnd = addWeeks(state.startDate, originEnd);
-        const newStart = addWeeks(state.startDate, previewStart);
-        const newEnd = addWeeks(state.startDate, previewEnd);
-        const newSpan = previewEnd - previewStart + 1;
-        const oldSize = assign.size;
-        const newSize =
-          mode === "move"
-            ? oldSize
-            : nearestSizeForCalendarWeeks(newSpan, szRanges());
-        const scheduledSpan = calendarWeeksForSize(newSize, szRanges());
-        const sizeChanged = newSize !== oldSize;
-
-        // Keep preview at the snapped edit; cancel restores.
-        applyGanttBarPreview(bar, previewStart, previewEnd, weeks);
-        bar.classList.add("gantt-bar-confirm");
-
-        const actionLabel =
-          mode === "move"
-            ? "Переместить"
-            : "Изменить длительность";
-        const sizeLine = sizeChanged
-          ? `Оценка: <span class="accent">${oldSize}</span> (${sizePlanWeeks(oldSize, szRanges())} чел·нед) → <span class="accent">${newSize}</span> (${sizePlanWeeks(newSize, szRanges())} чел·нед)${
-              scheduledSpan !== newSpan
-                ? `<br/><span class="meta">после сохранения полоска ≈ ${scheduledSpan} нед. по маечной оценке ${newSize}</span>`
-                : ""
-            }`
-          : `Оценка: <span class="accent">${oldSize}</span> (без изменений)`;
-        const autoNote = isCapacityScheduleMode(activeScheduleMode())
-          ? `<br/><span class="meta">Режим переключится на «Как задано», чтобы даты сохранились.</span>`
-          : "";
-
-        const text = `${actionLabel} «<strong>${escapeHtml(team.name)}</strong>» — ${escapeHtml(item.title)}?<br/>
-Период: <span class="accent">${formatDate(oldStart)}–${formatDate(oldEnd)}</span> → <span class="accent">${formatDate(newStart)}–${formatDate(newEnd)}</span><br/>
-${sizeLine}${autoNote}`;
-
-        askAppConfirm(
-          bar,
-          text,
-          () => {
-            state.items = state.items.map((it) => {
-              if (it.id !== itemId) return it;
-              return {
-                ...it,
-                assignments: it.assignments.map((a) => {
-                  if (a.teamId !== teamId) return a;
-                  return {
-                    ...a,
-                    workStartDate: snapToMonday(newStart),
-                    size: newSize,
-                    ...(a.days != null
-                      ? { days: Math.round(sizePlanDays(newSize, szRanges())) }
-                      : {}),
-                  };
-                }),
-              };
-            });
-            if (isCapacityScheduleMode(activeScheduleMode())) {
-              setScheduleMode("manual");
-            }
-            const sizePart = sizeChanged
-              ? `, оценка ${oldSize}→${newSize}`
-              : "";
-            logChange(
-              `Gantt «${item.title}» / ${team.name}: ${formatDate(oldStart)}–${formatDate(oldEnd)} → ${formatDate(newStart)}–${formatDate(newEnd)}${sizePart}`,
-              "schedule"
-            );
-            persist();
-          },
-          () => {
-            restoreVisual();
-            bar.classList.remove("gantt-bar-confirm");
-          },
-          {
-            wide: true,
-            anchorClass: "gantt-bar-confirm",
-            yesLabel: "ОК",
-            noLabel: "Отмена",
-          }
-        );
-      };
-
-      bar.addEventListener("pointermove", onMove);
-      bar.addEventListener("pointerup", onUp);
-      bar.addEventListener("pointercancel", onUp);
-    });
-  });
+/** Close «Вложенность» details when clicking outside. */
+function bindGanttTreePickerOutsideClose() {
+  if (ganttTreePickerOutsideBound) return;
+  ganttTreePickerOutsideBound = true;
+  document.addEventListener(
+    "pointerdown",
+    (e) => {
+      const t = e.target as Node | null;
+      document
+        .querySelectorAll<HTMLDetailsElement>(".gantt-tree-picker[open]")
+        .forEach((el) => {
+          if (t && !el.contains(t)) el.open = false;
+        });
+    },
+    true
+  );
 }
 
 const TEAM_COLORS = [
@@ -2838,7 +2262,7 @@ function demoMedian(nums: number[]): number {
 }
 
 function demoHorizonWeeks(): number {
-  return syncGanttWeeksFromDepth();
+  return DEMO_HORIZON_WEEKS;
 }
 
 interface DemoCompletenessRow {
@@ -4229,7 +3653,7 @@ function ganttPlanHtml(): string {
   const showFn = treeLevel !== "project";
   const showTeam = treeLevel === "team" || treeLevel === "role";
   const showRole = treeLevel === "role";
-  const weeks = syncGanttWeeksFromDepth();
+  const weeks = ganttHorizonWeeks();
   const ranges = szRanges();
   const bars = collectGanttRoleBars(ranges);
   const prioMap = projectPrioMap();
@@ -7833,11 +7257,8 @@ function bindUiRest() {
   bindPortfolioColResize();
   bindPortfolioTableScroll();
   bindStickyTabsOffset();
-  bindGanttDepArrowLayout();
-  bindGanttLabelResize();
-  bindGanttLabelTips();
-  bindGanttBarEdit();
   bindPlanStartDate();
+  bindGanttTreePickerOutsideClose();
 
   const close = () => {
     ui.creating = false;
@@ -8012,7 +7433,6 @@ function bindUiRest() {
       if (next === ui.ganttDepthMonths) return;
       ui.ganttDepthMonths = next;
       saveGanttDepth(next);
-      syncGanttWeeksFromDepth();
       render();
     });
   });
@@ -8483,7 +7903,7 @@ function applyPortfolioColWidth(col: PortfolioCol, width: number, min: number) {
       el.style.width = `${width}px`;
       el.style.minWidth = `${min}px`;
     });
-  syncPortfolioTableWidths();
+  syncPortfolioTableWidths({ [col]: width });
 }
 
 function bindPortfolioTableScroll() {
@@ -8714,7 +8134,7 @@ function buildGanttPdfData(): GanttPdfData {
       : Math.max(...bars.map((b) => b.endWeek)) + 1;
   const weeks = Math.max(
     4,
-    Math.min(GANTT_WEEKS_MAX, Math.max(syncGanttWeeksFromDepth(), contentWeeks))
+    Math.min(GANTT_WEEKS_MAX, Math.max(ganttHorizonWeeks(), contentWeeks))
   );
   const prioMap = projectPrioMap();
   const step = ganttPdfWeekLabelStep(weeks);
@@ -8839,7 +8259,6 @@ async function bootstrap() {
   ui.ganttScale = loadGanttScale();
   ui.ganttDepthMonths = loadGanttDepth();
   ui.ganttTreeLevel = loadGanttTreeLevel();
-  syncGanttWeeksFromDepth();
   ui.tab = readStoredUiTab();
   ensureVisibleTab();
   const ranked = ensureUniquePriorities(state.items, szRanges());
