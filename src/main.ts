@@ -3489,7 +3489,7 @@ function planFnTeamsMarkHtml(item: WorkItem, selectedSet: Set<string>): string {
     })
     .join("");
   const aria = `Команды функциональности: ${teams.map((x) => x.team.name).join(", ")}`;
-  return `<span class="plan-fn-teams" role="button" tabindex="0" aria-haspopup="dialog" aria-expanded="false" aria-label="${escapeAttr(aria)}" title="Показать все команды">${PLAN_FN_TEAMS_SVG}<span class="plan-fn-teams-n">+${others.length}</span><span class="plan-conflict-tip plan-fn-teams-tip" role="dialog"><span class="plan-fn-teams-head">Команды в функциональности (${teams.length})</span><ul class="plan-fn-teams-list">${rows}</ul></span></span>`;
+  return `<span class="plan-fn-teams" role="button" tabindex="0" aria-haspopup="dialog" aria-expanded="false" aria-label="${escapeAttr(aria)}">${PLAN_FN_TEAMS_SVG}<span class="plan-fn-teams-n">+${others.length}</span><span class="plan-conflict-tip plan-fn-teams-tip" role="dialog"><span class="plan-fn-teams-head">Команды в функциональности (${teams.length})</span><ul class="plan-fn-teams-list">${rows}</ul></span></span>`;
 }
 
 function treeExpandControlsHtml(scope: "plan" | "gantt" | "gantt-fact"): string {
