@@ -5409,12 +5409,18 @@ function bindTeamsPopups() {
   });
   if (teamsPopOutsideBound) return;
   teamsPopOutsideBound = true;
-  document.addEventListener("click", (e) => {
-    const open = planConflictTipOpen;
-    if (!open || !open.mark.classList.contains("teams-pop")) return;
-    if (open.mark.contains(e.target as Node)) return;
-    hideOpenPlanConflictTip();
-  });
+  // pointerdown (capture), not click: table rows swallow their click events,
+  // so a click on another row would never reach a document click listener.
+  document.addEventListener(
+    "pointerdown",
+    (e) => {
+      const open = planConflictTipOpen;
+      if (!open || !open.mark.classList.contains("teams-pop")) return;
+      if (open.mark.contains(e.target as Node)) return;
+      hideOpenPlanConflictTip();
+    },
+    true
+  );
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     const open = planConflictTipOpen;
