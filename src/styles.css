@@ -4427,6 +4427,19 @@ body.pdf-capturing .gantt-page .plan-board {
 
 .prio-log-toolbar select {
   max-width: 320px;
+  font-size: 13px;
+}
+
+.prio-log-toolbar .meta,
+.change-log-panel .panel-header p.meta {
+  font-size: 12px;
+}
+
+.change-log-panel .panel-header .toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .prio-log-scroll {
