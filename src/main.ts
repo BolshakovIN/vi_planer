@@ -39,6 +39,8 @@ import {
   reorderVisiblePriority,
   orderedProjectGroups,
   moveProjectGroupToPriority,
+  moveFunctionalityWithinProject,
+  functionalityPriorityMap,
   projectGroupKey,
   functionalityItems,
   TeamLoadWeek,
@@ -1757,14 +1759,18 @@ function portfolioHtml(rollups: ItemSchedule[], _slices: ScheduledSlice[]): stri
       `;
       if (!expanded) return projectRow;
 
+      const fnPrio = functionalityPriorityMap(state.items, ranges);
       const childRows = sortByPriority(fnItems, ranges)
         .map((it) => {
+          const itPrio = fnPrio.get(it.id) ?? 1;
           const itStart = itemStartDate(it, state.startDate, ranges) ?? null;
           const itFinish = itemFinishDate(it, state.startDate, ranges);
           const itWait = itFinish ? weekIndex(state.startDate, itFinish) : 0;
           return `
         <tr class="portfolio-row-fn" data-fn-parent="${escapeAttr(g.key)}" data-edit="${escapeAttr(it.id)}" title="Открыть функциональность">
-          <td${tdAttrs("priority", "prio-cell portfolio-fn-spacer")}></td>
+          <td${tdAttrs("priority", "prio-cell portfolio-fn-prio")} data-stop-edit>
+            <input class="prio-input prio-input-fn" type="number" min="1" max="${Math.max(1, fnCount)}" step="1" value="${itPrio}" data-fn-prio="${escapeAttr(it.id)}" data-fn-prio-now="${itPrio}" data-stop-edit aria-label="Приоритет функциональности в проекте" title="Приоритет функциональности в проекте" />
+          </td>
           <td${tdAttrs("title", "title-cell portfolio-fn-title")}>
             <div class="name">${escapeHtml(it.title)}</div>
           </td>
@@ -2858,7 +2864,7 @@ function withDemandTeams(
   return { ...rest, assignments: nextAssignments };
 }
 
-function demandFnHtml(item: WorkItem): string {
+function demandFnHtml(item: WorkItem, fnPrio?: Map<string, number>): string {
   const days = totalEstimateDays(item, szRanges());
   const open = !ui.needCollapsedItems[item.id];
   const used = new Set(item.assignments.map((a) => a.teamId));
@@ -2887,7 +2893,7 @@ function demandFnHtml(item: WorkItem): string {
   return `<details class="need-fn" data-need-fn="${item.id}"${open ? " open" : ""}>
     <summary class="need-fn-sum">
         <span class="need-fn-left">
-        <span class="need-fn-title">${prioBadgeHtml(item.manualRank, "Приоритет функциональности")}${escapeHtml(item.title)}</span>
+        <span class="need-fn-title">${prioBadgeHtml(fnPrio?.get(item.id), "Приоритет функциональности (меняется в Реестре)")}${escapeHtml(item.title)}</span>
       </span>
       <span class="need-fn-actions">
         <span class="need-fn-req">запрошено ${days} дн.</span>
@@ -2966,7 +2972,8 @@ function demandHtml(): string {
         : resolveAssignmentDemandStatus(x.a, x.it) === "approved"
     ).length;
     const open = !ui.needCollapsedProjects[selectedGroup.key];
-    const fns = items.map((it) => demandFnHtml(it)).join("");
+    const fnPrio = functionalityPriorityMap(state.items, szRanges());
+    const fns = items.map((it) => demandFnHtml(it, fnPrio)).join("");
     const tree = `<details class="need-project" data-need-project="${escapeAttr(selectedGroup.key)}"${open ? " open" : ""}>
       <summary class="need-project-sum">
         <span class="need-project-title">${prioBadgeHtml(prioMap.get(selectedGroup.key))}${escapeHtml(selectedGroup.title)}</span>
@@ -7342,6 +7349,69 @@ function bindUiRest() {
           );
           logChange(
             `Приоритет проекта «${title}»: #${now} → #${priority}`,
+            "priority"
+          );
+          persist();
+        },
+        () => {
+          confirming = false;
+          revert();
+        }
+      );
+    };
+    input.addEventListener("click", (e) => e.stopPropagation());
+    input.addEventListener("mousedown", (e) => e.stopPropagation());
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        commit();
+      }
+      if (e.key === "Escape") {
+        confirming = false;
+        closePrioPop();
+        revert();
+        input.blur();
+      }
+    });
+    input.addEventListener("change", commit);
+  });
+
+  document.querySelectorAll<HTMLInputElement>("[data-fn-prio]").forEach((input) => {
+    const itemId = input.dataset.fnPrio ?? "";
+    let confirming = false;
+    const revert = () => {
+      input.value = input.dataset.fnPrioNow ?? "1";
+    };
+    const commit = () => {
+      if (confirming) return;
+      const raw = Number(input.value);
+      const now = Number(input.dataset.fnPrioNow);
+      if (!Number.isFinite(raw) || raw < 1) {
+        revert();
+        return;
+      }
+      const max = Number(input.max) || 1;
+      const priority = Math.min(max, Math.round(raw));
+      input.value = String(priority);
+      if (priority === now) return;
+      armSuppressPortfolioRowEdit();
+      const item = state.items.find((i) => i.id === itemId);
+      if (!item) return;
+      const project = projectGroupKey(item);
+      confirming = true;
+      askPrioConfirm(
+        input,
+        `Сменить приоритет функциональности «${escapeHtml(item.title)}» в проекте «${escapeHtml(project)}» на <span class="accent">${priority}</span>?`,
+        () => {
+          confirming = false;
+          state.items = moveFunctionalityWithinProject(
+            state.items,
+            itemId,
+            priority,
+            szRanges()
+          );
+          logChange(
+            `Приоритет функциональности «${item.title}» (${project}): #${now} → #${priority}`,
             "priority"
           );
           persist();

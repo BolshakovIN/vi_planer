@@ -2161,6 +2161,62 @@ export function orderedProjectGroups(
 }
 
 /**
+ * Functionality priority inside its project: 1..N by global rank order.
+ * Project-card anchors are not functionalities and get no number.
+ */
+export function functionalityPriorityMap(
+  items: WorkItem[],
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const g of orderedProjectGroups(items, ranges)) {
+    functionalityItems(g.items).forEach((it, i) => out.set(it.id, i + 1));
+  }
+  return out;
+}
+
+/**
+ * Move a functionality to position 1..N inside its own project.
+ * Project order and other projects stay as they are; global ranks are
+ * reindexed 1..n group by group (like moveProjectGroupToPriority).
+ */
+export function moveFunctionalityWithinProject(
+  items: WorkItem[],
+  itemId: string,
+  newPriority: number,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): WorkItem[] {
+  const groups = orderedProjectGroups(items, ranges);
+  const rankById = new Map<string, number>();
+  let rank = 1;
+  let found = false;
+  for (const g of groups) {
+    const fns = functionalityItems(g.items);
+    const anchors = g.items.filter((it) => isProjectAnchor(it));
+    const from = fns.findIndex((it) => it.id === itemId);
+    if (from >= 0) {
+      found = true;
+      const [moved] = fns.splice(from, 1);
+      const target = Math.max(
+        0,
+        Math.min(fns.length, Math.round(newPriority) - 1)
+      );
+      fns.splice(target, 0, moved!);
+    }
+    // Anchors first keep the project's min rank (= its position) stable.
+    for (const it of from >= 0 ? [...anchors, ...fns] : g.items) {
+      rankById.set(it.id, rank++);
+    }
+  }
+  if (!found) return items;
+  return items.map((it) => {
+    const r = rankById.get(it.id);
+    if (r == null || it.manualRank === r) return it;
+    return { ...it, manualRank: r };
+  });
+}
+
+/**
  * Move a whole project to display priority 1..N.
  * Items inside the group keep their relative order; other groups shift.
  */

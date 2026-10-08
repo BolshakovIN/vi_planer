@@ -770,6 +770,17 @@ table {
   background: var(--surface-2);
 }
 
+.portfolio-fn-prio {
+  background: var(--surface-2);
+  padding-left: 14px !important;
+}
+
+.portfolio-table .prio-input.prio-input-fn {
+  height: 24px;
+  width: 36px;
+  font-size: 12px;
+}
+
 .portfolio-fn-title {
   padding-left: 28px !important;
 }
