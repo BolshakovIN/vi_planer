@@ -55,6 +55,14 @@
   --font-ui: 12px;
   --font-meta: 11px;
   --font-tiny: 10px;
+  /* Table column headers — match Планирование (.plan-board-head / .plan-head-label) */
+  --table-head-fs: 10px;
+  --table-head-fw: 500;
+  --table-head-ls: 0.02em;
+  --table-head-pad-y: 4px;
+  --table-head-pad-x: 8px;
+  --table-head-min-h: 32px;
+  --table-head-shadow: 0 1px 0 var(--line);
   font-family: ViSans, Arial, sans-serif;
   color: var(--ink);
   background: var(--bg);
@@ -558,8 +566,10 @@ textarea {
 .portfolio-thead-scroll {
   overflow-x: auto;
   overflow-y: hidden;
+  min-height: var(--table-head-min-h);
   background: var(--surface-2);
-  border-bottom: 1px solid var(--line);
+  border-bottom: none;
+  box-shadow: var(--table-head-shadow);
   scrollbar-width: none;
 }
 
@@ -574,7 +584,12 @@ textarea {
 .portfolio-thead-table thead th {
   background: var(--surface-2);
   box-shadow: none;
-  padding: 4px 8px;
+  border-bottom: none;
+  padding: var(--table-head-pad-y) var(--table-head-pad-x);
+  font-size: var(--table-head-fs);
+  font-weight: var(--table-head-fw);
+  letter-spacing: var(--table-head-ls);
+  vertical-align: middle;
 }
 
 .panel-header {
@@ -673,9 +688,7 @@ table {
   vertical-align: middle;
 }
 
-/* Единый кегль колонок правее «Проект» — как у команд (11px). */
-.portfolio-table th[data-col]:not([data-col="priority"]):not([data-col="title"]),
-.portfolio-table th[data-col]:not([data-col="priority"]):not([data-col="title"]) .th-label,
+/* Единый кегль ячеек правее «Проект» — как у команд (11px). Шапка — --table-head-*. */
 .portfolio-table td[data-col]:not([data-col="priority"]):not([data-col="title"]),
 .portfolio-table
   td[data-col]:not([data-col="priority"]):not([data-col="title"])
@@ -1169,20 +1182,27 @@ body.col-resizing * {
 th,
 td {
   text-align: left;
-  padding: 11px 12px;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
+}
+
+td {
+  padding: 11px 12px;
   font-size: 13px;
 }
 
+/* Column headers: same look as Планирование */
 th {
-  font-size: 11px;
+  padding: var(--table-head-pad-y) var(--table-head-pad-x);
+  font-size: var(--table-head-fs);
+  font-weight: var(--table-head-fw);
+  line-height: 1.2;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--table-head-ls);
   color: var(--muted);
   background: var(--surface-2);
-  font-weight: 600;
   white-space: nowrap;
+  vertical-align: middle;
 }
 
 th.sortable {
@@ -4333,16 +4353,26 @@ body.pdf-capturing .gantt-page .plan-board {
 .api-endpoint-table th,
 .api-endpoint-table td {
   text-align: left;
-  padding: 8px 18px;
   border-top: 1px solid var(--line);
   vertical-align: top;
 }
 
+.api-endpoint-table td {
+  padding: 8px 18px;
+}
+
 .api-endpoint-table th {
-  font-size: 11px;
-  font-weight: 600;
+  padding: var(--table-head-pad-y) 18px;
+  font-size: var(--table-head-fs);
+  font-weight: var(--table-head-fw);
+  letter-spacing: var(--table-head-ls);
+  text-transform: uppercase;
   color: var(--muted);
+  background: var(--surface-2);
   border-top: none;
+  border-bottom: none;
+  box-shadow: var(--table-head-shadow);
+  vertical-align: middle;
 }
 
 .api-page .settings-help {
@@ -4527,16 +4557,19 @@ body.pdf-capturing .gantt-page .plan-board {
 }
 
 .prio-log-table th {
-  padding: 8px 12px;
+  padding: var(--table-head-pad-y) 12px;
+  min-height: var(--table-head-min-h);
   text-align: left;
-  font-size: var(--font-tiny);
-  font-weight: 600;
+  font-size: var(--table-head-fs);
+  font-weight: var(--table-head-fw);
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.02em;
-  border-bottom: 1px solid var(--line);
+  letter-spacing: var(--table-head-ls);
+  border-bottom: none;
+  box-shadow: var(--table-head-shadow);
   white-space: nowrap;
   background: var(--surface-2);
+  vertical-align: middle;
 }
 
 .prio-log-table td {
@@ -4827,17 +4860,26 @@ body.pdf-capturing .gantt-page .plan-board {
 
 .demo-heat-table th,
 .demo-heat-table td {
-  padding: 5px 8px;
   border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: middle;
 }
 
+.demo-heat-table td {
+  padding: 5px 8px;
+}
+
 .demo-heat-table th {
-  font-size: 10px;
-  font-weight: 600;
+  padding: var(--table-head-pad-y) var(--table-head-pad-x);
+  font-size: var(--table-head-fs);
+  font-weight: var(--table-head-fw);
+  letter-spacing: var(--table-head-ls);
+  text-transform: uppercase;
   color: var(--muted);
+  background: var(--surface-2);
   white-space: nowrap;
+  border-bottom: none;
+  box-shadow: var(--table-head-shadow);
 }
 
 .demo-heat-table .num {
@@ -4868,16 +4910,26 @@ body.pdf-capturing .gantt-page .plan-board {
 
 .demo-combo-table th,
 .demo-combo-table td {
-  padding: 6px 10px;
   border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: top;
 }
 
+.demo-combo-table td {
+  padding: 6px 10px;
+}
+
 .demo-combo-table th {
-  font-size: 10px;
-  font-weight: 600;
+  padding: var(--table-head-pad-y) 10px;
+  font-size: var(--table-head-fs);
+  font-weight: var(--table-head-fw);
+  letter-spacing: var(--table-head-ls);
+  text-transform: uppercase;
   color: var(--muted);
+  background: var(--surface-2);
+  vertical-align: middle;
+  border-bottom: none;
+  box-shadow: var(--table-head-shadow);
 }
 
 .demo-combo-table .num {
@@ -5549,10 +5601,10 @@ body.pdf-capturing .gantt-page .plan-board {
   position: sticky;
   top: var(--tabs-sticky-h, 42px);
   z-index: 30;
-  min-height: 32px;
+  min-height: var(--table-head-min-h);
   background: var(--surface-2);
   border-bottom-color: var(--line);
-  box-shadow: 0 1px 0 var(--line);
+  box-shadow: var(--table-head-shadow);
 }
 
 .plan-cell {
@@ -5564,11 +5616,11 @@ body.pdf-capturing .gantt-page .plan-board {
 }
 
 .plan-head-label {
-  font-size: 10px;
-  font-weight: 500;
+  font-size: var(--table-head-fs);
+  font-weight: var(--table-head-fw);
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--table-head-ls);
 }
 
 .plan-axis {
@@ -6317,9 +6369,18 @@ body.plan-dragging {
   display: grid;
   grid-template-columns: minmax(120px, 0.85fr) minmax(140px, 1.2fr) 32px;
   gap: 6px;
-  font-size: 11px;
+  align-items: center;
+  min-height: var(--table-head-min-h);
+  margin: 0 -2px 2px;
+  padding: var(--table-head-pad-y) 8px;
+  font-size: var(--table-head-fs);
+  font-weight: var(--table-head-fw);
+  letter-spacing: var(--table-head-ls);
+  text-transform: uppercase;
   color: var(--muted);
-  padding: 0 2px;
+  background: var(--surface-2);
+  border-radius: var(--control-radius) var(--control-radius) 0 0;
+  box-shadow: var(--table-head-shadow);
 }
 
 .team-roster-row {
