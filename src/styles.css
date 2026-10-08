@@ -5506,7 +5506,7 @@ body.pdf-capturing .gantt-page .plan-board {
   margin-right: 2px;
 }
 
-.plan-fn-teams {
+.teams-pop {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -5522,51 +5522,105 @@ body.pdf-capturing .gantt-page .plan-board {
   outline: none;
 }
 
-.plan-fn-teams:hover,
-.plan-fn-teams.is-tip-open {
+.teams-pop:hover,
+.teams-pop.is-tip-open {
   background: color-mix(in srgb, var(--accent) 14%, var(--neutral-soft));
   color: var(--accent);
 }
 
-.plan-fn-teams:focus-visible {
+.teams-pop:focus-visible {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
-.plan-fn-teams-ico {
+.teams-pop-ico {
   display: block;
   pointer-events: none;
 }
 
-.plan-fn-teams-n {
+.teams-pop-n {
   font-size: 10px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
-.plan-cell:has(.plan-fn-teams) {
+.plan-cell:has(.teams-pop) {
   overflow: visible;
 }
 
-.plan-row:has(.plan-fn-teams.is-tip-open) {
+.plan-row:has(.teams-pop.is-tip-open) {
   position: relative;
   z-index: 40;
 }
 
-.plan-fn-teams.is-tip-open .plan-fn-teams-tip {
+.teams-pop.is-tip-open .teams-pop-tip {
   opacity: 1;
   visibility: visible;
 }
 
-.plan-fn-teams-tip {
+.portfolio-teams.has-pop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.portfolio-teams.has-pop .portfolio-teams-preview {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+.teams-cell:has(.teams-pop) {
+  overflow: visible;
+}
+
+.teams-pop-list-est .teams-pop-li-est {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto auto;
+  column-gap: 8px;
+  align-items: center;
+}
+
+.teams-pop-li-est .team-dot {
+  margin-right: 0;
+}
+
+.teams-pop-size {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--neutral-soft);
+  color: var(--neutral-ink);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.teams-pop-weeks,
+.teams-pop-total {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.teams-pop-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  font-weight: 600;
+}
+
+.teams-pop-tip {
   cursor: default;
   user-select: text;
 }
 
-.plan-fn-teams.is-tip-open .plan-fn-teams-tip {
+.teams-pop.is-tip-open .teams-pop-tip {
   pointer-events: auto;
 }
 
-.plan-fn-teams-head {
+.teams-pop-head {
   display: block;
   margin-bottom: 6px;
   font-size: 11px;
@@ -5574,7 +5628,7 @@ body.pdf-capturing .gantt-page .plan-board {
   color: var(--muted);
 }
 
-.plan-fn-teams-list {
+.teams-pop-list {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -5582,7 +5636,7 @@ body.pdf-capturing .gantt-page .plan-board {
   gap: 4px;
 }
 
-.plan-fn-teams-li {
+.teams-pop-li {
   display: flex;
   align-items: center;
   gap: 0;
@@ -5590,11 +5644,11 @@ body.pdf-capturing .gantt-page .plan-board {
   color: var(--ink);
 }
 
-.plan-fn-teams-li.is-mine {
+.teams-pop-li.is-mine {
   font-weight: 600;
 }
 
-.plan-fn-teams-tag {
+.teams-pop-tag {
   margin-left: 8px;
   padding: 0 5px;
   border-radius: 4px;

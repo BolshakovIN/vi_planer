@@ -662,7 +662,7 @@ function teamChipWithEstimateHtml(
     moreCount > 0
       ? `<span class="portfolio-teams-more">+${moreCount}</span>`
       : "";
-  return `<span class="team-chip team-chip-with-est" title="${escapeAttr(tip)}">
+  return `<span class="team-chip team-chip-with-est" aria-label="${escapeAttr(tip)}">
     <span class="team-chip-name">
       <span class="team-dot" style="background:${t?.color ?? "#94a3b8"}"></span>
       <span class="team-chip-text">${escapeHtml(name)}</span>
@@ -673,26 +673,34 @@ function teamChipWithEstimateHtml(
   </span>`;
 }
 
-/** Compact teams + estimates for Реестр: one line + expand. */
+/** Compact teams + estimates for Реестр: first team + «люди +N» popup with all. */
 function teamsCellHtml(item: WorkItem): string {
   const assigns = item.assignments;
   if (!assigns.length) return `<span class="muted">—</span>`;
   if (assigns.length === 1) {
     return `<div class="portfolio-teams is-single">${teamChipWithEstimateHtml(assigns[0]!)}</div>`;
   }
-  const rest = assigns.length - 1;
-  const full = assigns.map((a) => teamChipWithEstimateHtml(a)).join("");
-  return `
-    <details class="portfolio-teams" data-stop-edit>
-      <summary class="portfolio-teams-sum" data-stop-edit title="Показать все команды и оценки">
-        <span class="portfolio-teams-preview">
-          ${teamChipWithEstimateHtml(assigns[0]!, rest)}
-        </span>
-        <span class="portfolio-teams-collapse">Свернуть</span>
-      </summary>
-      <div class="teams-stack portfolio-teams-full">${full}</div>
-    </details>
-  `;
+  const ranges = szRanges();
+  let totalWeeks = 0;
+  const rows = assigns
+    .map((a) => {
+      const t = teamById(a.teamId);
+      const weeks = assignmentPlanWeeks(a, ranges);
+      totalWeeks += weeks;
+      return `<li class="teams-pop-li teams-pop-li-est"><span class="team-dot" style="background:${t?.color ?? "#94a3b8"}"></span><span class="teams-pop-name">${escapeHtml(t?.name ?? a.teamId)}</span><span class="teams-pop-size">${escapeHtml(a.size)}</span><span class="teams-pop-weeks">~${weeks} чел·нед</span></li>`;
+    })
+    .join("");
+  const names = assigns.map((a) => teamById(a.teamId)?.name ?? a.teamId);
+  const pop = teamsPopHtml({
+    count: assigns.length - 1,
+    aria: `Команды и оценки: ${names.join(", ")}`,
+    head: `Команды и оценки (${assigns.length})`,
+    listHtml: `<ul class="teams-pop-list teams-pop-list-est">${rows}</ul><div class="teams-pop-total"><span>Итого</span><span>~${totalWeeks} чел·нед</span></div>`,
+  });
+  return `<div class="portfolio-teams has-pop">
+      <span class="portfolio-teams-preview">${teamChipWithEstimateHtml(assigns[0]!)}</span>
+      ${pop}
+    </div>`;
 }
 
 function filteredItems(rollups: ItemSchedule[]): WorkItem[] {
@@ -3470,7 +3478,7 @@ function planConflictMarkHtml(
   return `<span class="plan-conflict-mark" tabindex="0" aria-label="${label}">${PLAN_CONFLICT_MARK_SVG}<span class="plan-conflict-tip" role="tooltip">${tip}</span></span>`;
 }
 
-const PLAN_FN_TEAMS_SVG = `<svg class="plan-fn-teams-ico" viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="6.1" cy="5.1" r="2"/><path d="M2.6 12.4c.2-2.5 1.6-3.6 3.5-3.6s3.3 1.1 3.5 3.6"/><circle cx="11.1" cy="5.6" r="1.55"/><path d="M9.3 12.4c.15-1.7 1.1-2.5 2.2-2.5 1.15 0 2.05.8 2.2 2.5"/></svg>`;
+const TEAMS_POP_SVG = `<svg class="teams-pop-ico" viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="6.1" cy="5.1" r="2"/><path d="M2.6 12.4c.2-2.5 1.6-3.6 3.5-3.6s3.3 1.1 3.5 3.6"/><circle cx="11.1" cy="5.6" r="1.55"/><path d="M9.3 12.4c.15-1.7 1.1-2.5 2.2-2.5 1.15 0 2.05.8 2.2 2.5"/></svg>`;
 
 /**
  * Планирование: icon on a functionality when teams outside the current
@@ -3485,11 +3493,28 @@ function planFnTeamsMarkHtml(item: WorkItem, selectedSet: Set<string>): string {
   const rows = teams
     .map(({ team, id }) => {
       const mine = selectedSet.has(id);
-      return `<li class="plan-fn-teams-li${mine ? " is-mine" : ""}"><span class="team-dot" style="background:${team.color}"></span><span>${escapeHtml(team.name)}</span>${mine ? `<span class="plan-fn-teams-tag">в фильтре</span>` : ""}</li>`;
+      return `<li class="teams-pop-li${mine ? " is-mine" : ""}"><span class="team-dot" style="background:${team.color}"></span><span>${escapeHtml(team.name)}</span>${mine ? `<span class="teams-pop-tag">в фильтре</span>` : ""}</li>`;
     })
     .join("");
-  const aria = `Команды функциональности: ${teams.map((x) => x.team.name).join(", ")}`;
-  return `<span class="plan-fn-teams" role="button" tabindex="0" aria-haspopup="dialog" aria-expanded="false" aria-label="${escapeAttr(aria)}">${PLAN_FN_TEAMS_SVG}<span class="plan-fn-teams-n">+${others.length}</span><span class="plan-conflict-tip plan-fn-teams-tip" role="dialog"><span class="plan-fn-teams-head">Команды в функциональности (${teams.length})</span><ul class="plan-fn-teams-list">${rows}</ul></span></span>`;
+  return teamsPopHtml({
+    count: others.length,
+    aria: `Команды функциональности: ${teams.map((x) => x.team.name).join(", ")}`,
+    head: `Команды в функциональности (${teams.length})`,
+    listHtml: `<ul class="teams-pop-list">${rows}</ul>`,
+  });
+}
+
+/**
+ * Icon «люди +N»; click opens a popup (fixed-positioned like conflict tips).
+ * Behaviour is bound in bindTeamsPopups().
+ */
+function teamsPopHtml(o: {
+  count: number;
+  aria: string;
+  head: string;
+  listHtml: string;
+}): string {
+  return `<span class="teams-pop" role="button" tabindex="0" aria-haspopup="dialog" aria-expanded="false" aria-label="${escapeAttr(o.aria)}" data-stop-edit>${TEAMS_POP_SVG}<span class="teams-pop-n">+${o.count}</span><span class="plan-conflict-tip teams-pop-tip" role="dialog" data-stop-edit><span class="teams-pop-head">${escapeHtml(o.head)}</span>${o.listHtml}</span></span>`;
 }
 
 function treeExpandControlsHtml(scope: "plan" | "gantt" | "gantt-fact"): string {
@@ -5350,11 +5375,11 @@ function bindPlanConflictTips() {
     });
 }
 
-let planFnTeamsOutsideBound = false;
+let teamsPopOutsideBound = false;
 
 /** Планирование: team list opens on click (not hover); one at a time. */
-function bindPlanFnTeamsPopups() {
-  document.querySelectorAll<HTMLElement>(".plan-fn-teams").forEach((mark) => {
+function bindTeamsPopups() {
+  document.querySelectorAll<HTMLElement>(".teams-pop").forEach((mark) => {
     const tip = mark.querySelector<HTMLElement>(".plan-conflict-tip");
     if (!tip) return;
     const toggle = () => {
@@ -5382,18 +5407,18 @@ function bindPlanFnTeamsPopups() {
       }
     });
   });
-  if (planFnTeamsOutsideBound) return;
-  planFnTeamsOutsideBound = true;
+  if (teamsPopOutsideBound) return;
+  teamsPopOutsideBound = true;
   document.addEventListener("click", (e) => {
     const open = planConflictTipOpen;
-    if (!open || !open.mark.classList.contains("plan-fn-teams")) return;
+    if (!open || !open.mark.classList.contains("teams-pop")) return;
     if (open.mark.contains(e.target as Node)) return;
     hideOpenPlanConflictTip();
   });
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     const open = planConflictTipOpen;
-    if (open?.mark.classList.contains("plan-fn-teams")) hideOpenPlanConflictTip();
+    if (open?.mark.classList.contains("teams-pop")) hideOpenPlanConflictTip();
   });
 }
 
@@ -7333,7 +7358,7 @@ function bindUiRest() {
 
   bindOverloadExplain();
   bindPlanConflictTips();
-  bindPlanFnTeamsPopups();
+  bindTeamsPopups();
 
   document.querySelector("#resetFilters")?.addEventListener("click", () => {
     ui.typeFilter = "all";
