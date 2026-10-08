@@ -2371,15 +2371,18 @@ function priorityJournalHtml(): string {
       }</p>`;
   return `
     <div class="prio-log-toolbar">
-      <select id="journalProject" aria-label="Фильтр по проекту">
-        <option value="">Все проекты</option>
-        ${projects
-          .map(
-            (p) =>
-              `<option value="${escapeAttr(p)}"${p === filter ? " selected" : ""}>${escapeHtml(p)}</option>`
-          )
-          .join("")}
-      </select>
+      <div class="gantt-seg prio-log-filter" role="group" aria-label="Фильтр по проекту">
+        <span class="gantt-seg-label">Проект</span>
+        <select id="journalProject" class="prio-log-filter-select" aria-label="Фильтр по проекту">
+          <option value="">Все проекты</option>
+          ${projects
+            .map(
+              (p) =>
+                `<option value="${escapeAttr(p)}"${p === filter ? " selected" : ""}>${escapeHtml(p)}</option>`
+            )
+            .join("")}
+        </select>
+      </div>
       <span class="meta">${entries.length} ${entries.length === 1 ? "запись" : entries.length >= 2 && entries.length <= 4 ? "записи" : "записей"}</span>
     </div>
     ${table}`;
@@ -2436,12 +2439,7 @@ function changeLogHtml(switcher = ""): string {
               Последние действия с портфелем (до ${CHANGE_LOG_MAX} записей). Синхронизируется вместе с данными.
             </p>
           </div>
-          <div class="toolbar">
-            ${switcher}
-            <button type="button" class="btn" id="clearChangeLogBtn" ${
-              entries.length && currentCan("changelog.clear") ? "" : "disabled"
-            } ${currentCan("changelog.clear") ? "" : 'title="Очистить журнал"'}>Очистить</button>
-          </div>
+          <div class="toolbar">${switcher}</div>
         </div>
       </div>
       <ol class="change-log-list">${rows}</ol>
@@ -8680,20 +8678,6 @@ function bindUiRest() {
       ui.journalProject = (e.currentTarget as HTMLSelectElement).value;
       render();
     });
-
-  document.querySelector("#clearChangeLogBtn")?.addEventListener("click", (e) => {
-    if (!currentCan("changelog.clear")) return;
-    const btn = e.currentTarget as HTMLElement;
-    askAppConfirm(
-      btn,
-      "Очистить журнал изменений?",
-      () => {
-        state.changeLog = [];
-        persist();
-      },
-      () => undefined
-    );
-  });
 }
 
 function bindStickyTabsOffset() {
