@@ -674,7 +674,7 @@ function teamChipWithEstimateHtml(
       : "";
   return `<span class="team-chip team-chip-with-est" aria-label="${escapeAttr(tip)}">
     <span class="team-chip-name">
-      <span class="team-dot" style="background:${t?.color ?? "#94a3b8"}"></span>
+      <span class="team-dot" style="background:${t?.color ?? "#93999e"}"></span>
       <span class="team-chip-text">${escapeHtml(name)}</span>
     </span>
     <span class="team-chip-estimate">
@@ -697,7 +697,7 @@ function teamsCellHtml(item: WorkItem): string {
       const t = teamById(a.teamId);
       const weeks = assignmentPlanWeeks(a, ranges);
       totalWeeks += weeks;
-      return `<li class="teams-pop-li teams-pop-li-est"><span class="team-dot" style="background:${t?.color ?? "#94a3b8"}"></span><span class="teams-pop-name">${escapeHtml(t?.name ?? a.teamId)}</span><span class="teams-pop-size">${escapeHtml(a.size)}</span><span class="teams-pop-weeks">~${weeks} чел·нед</span></li>`;
+      return `<li class="teams-pop-li teams-pop-li-est"><span class="team-dot" style="background:${t?.color ?? "#93999e"}"></span><span class="teams-pop-name">${escapeHtml(t?.name ?? a.teamId)}</span><span class="teams-pop-size">${escapeHtml(a.size)}</span><span class="teams-pop-weeks">~${weeks} чел·нед</span></li>`;
     })
     .join("");
   const names = assigns.map((a) => teamById(a.teamId)?.name ?? a.teamId);
@@ -2402,7 +2402,7 @@ function journalHtml(): string {
         <div class="panel-header">
           <div>
             <h2>Журнал</h2>
-            <p class="meta" style="margin:4px 0 0">
+            <p class="panel-desc meta">
               Изменения приоритета проектов: дата, причина и материалы. Синхронизируется вместе с данными.
             </p>
           </div>
@@ -2435,7 +2435,7 @@ function changeLogHtml(switcher = ""): string {
         <div class="panel-header">
           <div>
             <h2>Журнал</h2>
-            <p class="meta" style="margin:4px 0 0">
+            <p class="panel-desc meta">
               Последние действия с портфелем (до ${CHANGE_LOG_MAX} записей). Синхронизируется вместе с данными.
             </p>
           </div>

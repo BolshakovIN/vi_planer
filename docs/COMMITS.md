@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 08.10.2026, 23:54 GMT+3
+Сгенерировано: 08.10.2026, 23:59 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,7 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `3ed2dd9` | 2026-10-08 | ivanbolsakov | Publish priority journal, menu order, and team popovers to GitHub Pages. |
 | `0160649` | 2026-10-08 | ivanbolsakov | Journal: drop clear button and style project filter like toolbar. |
 | `7e1e5e9` | 2026-10-08 | MSupreme1990 | Журнал: нормальный размер шрифта описания и фильтра |
 | `1aae8c6` | 2026-10-08 | MSupreme1990 | Журнал приоритетов: причина изменения приоритета проекта |
@@ -461,8 +462,9 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `0160649` | 2026-10-08 | ivanbolsakov | HEAD -> master, priority-journal | Journal: drop clear button and style project filter like toolbar. |
-| `7e1e5e9` | 2026-10-08 | MSupreme1990 | origin/priority-journal | Журнал: нормальный размер шрифта описания и фильтра |
+| `3ed2dd9` | 2026-10-08 | ivanbolsakov | HEAD -> master, origin/master | Publish priority journal, menu order, and team popovers to GitHub Pages. |
+| `0160649` | 2026-10-08 | ivanbolsakov | origin/priority-journal, priority-journal | Journal: drop clear button and style project filter like toolbar. |
+| `7e1e5e9` | 2026-10-08 | MSupreme1990 |  | Журнал: нормальный размер шрифта описания и фильтра |
 | `1aae8c6` | 2026-10-08 | MSupreme1990 |  | Журнал приоритетов: причина изменения приоритета проекта |
 | `98b8870` | 2026-10-08 | MSupreme1990 | origin/menu-order-plan-teams | Реестр: при нескольких командах в колонке только значок «N команд» |
 | `4a3daa9` | 2026-10-08 | MSupreme1990 |  | Окно команд: закрывать при нажатии мыши мимо (pointerdown) |
@@ -471,7 +473,7 @@
 | `c76763c` | 2026-10-08 | MSupreme1990 |  | Планирование: список команд функциональности открывается по клику |
 | `398e442` | 2026-10-08 | MSupreme1990 |  | Планирование: значок команд функциональности со всплывающим списком |
 | `374e290` | 2026-10-08 | MSupreme1990 |  | Меню в новом порядке; на Планировании видно другие команды функциональности |
-| `07b736f` | 2026-10-08 | ivanbolsakov | origin/master | Publish functionality priority editing and chip styling to GitHub Pages. |
+| `07b736f` | 2026-10-08 | ivanbolsakov |  | Publish functionality priority editing and chip styling to GitHub Pages. |
 | `bf9f8fb` | 2026-10-08 | ivanbolsakov | origin/need-fn-priority-badge, need-fn-priority-badge | Merge master into need-fn-priority-badge for deploy. |
 | `b396c81` | 2026-10-08 | ivanbolsakov |  | Style functionality priority chips to stand out from italic titles. |
 | `26de98e` | 2026-10-08 | ivanbolsakov |  | Publish plan/timeline days split and partial demand status. |
