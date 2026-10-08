@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 09.10.2026, 00:02 GMT+3
+Сгенерировано: 09.10.2026, 00:09 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,7 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `2bb5870` | 2026-10-09 | ivanbolsakov | Publish render optimizations: skip schedule on light tabs, cache priority maps. |
 | `b0d342d` | 2026-10-08 | ivanbolsakov | Publish UI token unification across controls and popovers. |
 | `3ed2dd9` | 2026-10-08 | ivanbolsakov | Publish priority journal, menu order, and team popovers to GitHub Pages. |
 | `0160649` | 2026-10-08 | ivanbolsakov | Journal: drop clear button and style project filter like toolbar. |
@@ -463,7 +464,8 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `b0d342d` | 2026-10-08 | ivanbolsakov | HEAD -> master, origin/master | Publish UI token unification across controls and popovers. |
+| `2bb5870` | 2026-10-09 | ivanbolsakov | HEAD -> master, origin/master | Publish render optimizations: skip schedule on light tabs, cache priority maps. |
+| `b0d342d` | 2026-10-08 | ivanbolsakov |  | Publish UI token unification across controls and popovers. |
 | `3ed2dd9` | 2026-10-08 | ivanbolsakov |  | Publish priority journal, menu order, and team popovers to GitHub Pages. |
 | `0160649` | 2026-10-08 | ivanbolsakov | origin/priority-journal, priority-journal | Journal: drop clear button and style project filter like toolbar. |
 | `7e1e5e9` | 2026-10-08 | MSupreme1990 |  | Журнал: нормальный размер шрифта описания и фильтра |

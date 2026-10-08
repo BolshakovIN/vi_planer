@@ -121,7 +121,7 @@ import {
 } from "./pdfExport";
 
 /** Release / deploy stamp in the header (DD.MM.YYYY) */
-const RELEASE_UPDATED = "08.10.2026";
+const RELEASE_UPDATED = "09.10.2026";
 
 type Tab =
   | "portfolio"
@@ -150,7 +150,7 @@ const TAB_LABELS: Record<Tab, string> = {
   demoA: "Мониторинг",
   demoB: "Мониторинг",
   capacity: "Команды",
-  changelog: "Журнал",
+  changelog: "Журнал изменений",
   settings: "Настройки",
 };
 
@@ -2347,6 +2347,7 @@ function priorityJournalHtml(): string {
       return `<tr>
         <td class="mono prio-log-date">${escapeHtml(formatDate(e.date))}</td>
         <td class="prio-log-project">${escapeHtml(e.projectTitle)}</td>
+        <td class="prio-log-initiator">${escapeHtml(e.initiator) || `<span class="muted">—</span>`}</td>
         <td class="prio-log-move">
           <span class="prio-mini">${e.from}</span><span class="prio-log-arrow">→</span><span class="prio-mini prio-mini-to">${e.to}</span>
           ${dir ? `<span class="prio-log-dir ${up ? "is-up" : "is-down"}">${dir}</span>` : ""}
@@ -2360,14 +2361,14 @@ function priorityJournalHtml(): string {
   const table = entries.length
     ? `<div class="prio-log-scroll"><table class="prio-log-table">
         <thead><tr>
-          <th>Дата изменения</th><th>Проект</th><th>Приоритет</th><th>Причина</th><th>Материалы</th><th>Записано</th>
+          <th>Дата изменения</th><th>Проект</th><th>Инициатор</th><th>Приоритет</th><th>Причина</th><th>Материалы</th><th>Записано</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table></div>`
     : `<p class="change-log-empty meta">${
         all.length
           ? "Нет изменений по выбранному проекту."
-          : "Пока нет записей. Когда в Реестре меняется приоритет проекта, здесь появится запись с датой, причиной и ссылками."
+          : "Пока нет записей. Когда в Реестре меняется приоритет проекта, здесь появится запись с датой, инициатором, причиной и ссылками."
       }</p>`;
   return `
     <div class="prio-log-toolbar">
@@ -2401,7 +2402,7 @@ function journalHtml(): string {
       <div class="panel-sticky">
         <div class="panel-header">
           <div>
-            <h2>Журнал</h2>
+            <h2>Журнал изменений</h2>
             <p class="panel-desc meta">
               Изменения приоритета проектов: дата, причина и материалы. Синхронизируется вместе с данными.
             </p>
@@ -2434,7 +2435,7 @@ function changeLogHtml(switcher = ""): string {
       <div class="panel-sticky">
         <div class="panel-header">
           <div>
-            <h2>Журнал</h2>
+            <h2>Журнал изменений</h2>
             <p class="panel-desc meta">
               Последние действия с портфелем (до ${CHANGE_LOG_MAX} записей). Синхронизируется вместе с данными.
             </p>
@@ -5607,10 +5608,33 @@ function todayIsoLocal(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-type PriorityReason = { date: string; comment: string; links: string[] };
+type PriorityReason = {
+  date: string;
+  initiator: string;
+  comment: string;
+  links: string[];
+};
+
+const LAST_PRIO_INITIATOR_KEY = "vi-planer-v2-prio-initiator";
+
+function lastPrioInitiator(): string {
+  try {
+    return String(localStorage.getItem(LAST_PRIO_INITIATOR_KEY) ?? "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function rememberPrioInitiator(name: string) {
+  try {
+    localStorage.setItem(LAST_PRIO_INITIATOR_KEY, name);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
 
 /**
- * Окно «Причина изменения приоритета проекта»: дата, комментарий, ссылки.
+ * Окно «Причина изменения приоритета проекта»: дата, инициатор, комментарий, ссылки.
  * Built on document.body (outside render()) so it can sit over the project card.
  */
 function openPriorityReasonModal(o: {
@@ -5626,6 +5650,7 @@ function openPriorityReasonModal(o: {
   wrap.className = "modal-backdrop prio-reason-backdrop";
   wrap.id = "prioReasonModal";
   wrap.setAttribute("data-stop-edit", "");
+  const initiatorPrefill = escapeAttr(lastPrioInitiator());
   wrap.innerHTML = `
     <div class="modal prio-reason-modal" role="dialog" aria-modal="true" aria-labelledby="prioReasonTitle">
       <div class="modal-head">
@@ -5639,6 +5664,10 @@ function openPriorityReasonModal(o: {
         <div class="field">
           <label for="prioReasonDate">Дата изменения</label>
           <input id="prioReasonDate" type="date" value="${todayIsoLocal()}" required />
+        </div>
+        <div class="field">
+          <label for="prioReasonInitiator">Инициатор <span class="prio-reason-req">*</span></label>
+          <input id="prioReasonInitiator" type="text" value="${initiatorPrefill}" placeholder="ФИО или роль" autocomplete="name" required />
         </div>
         <div class="field">
           <label for="prioReasonComment">Причина изменения <span class="prio-reason-req">*</span></label>
@@ -5659,6 +5688,7 @@ function openPriorityReasonModal(o: {
   document.body.appendChild(wrap);
   const $ = <T extends HTMLElement>(id: string) => wrap.querySelector<T>(`#${id}`)!;
   const dateEl = $<HTMLInputElement>("prioReasonDate");
+  const initiatorEl = $<HTMLInputElement>("prioReasonInitiator");
   const commentEl = $<HTMLTextAreaElement>("prioReasonComment");
   const linksEl = $<HTMLTextAreaElement>("prioReasonLinks");
   const errEl = $<HTMLDivElement>("prioReasonError");
@@ -5685,6 +5715,11 @@ function openPriorityReasonModal(o: {
       showErr("Укажите дату изменения.", dateEl);
       return;
     }
+    const initiator = initiatorEl.value.trim();
+    if (!initiator) {
+      showErr("Укажите инициатора изменения приоритета.", initiatorEl);
+      return;
+    }
     const comment = commentEl.value.trim();
     if (!comment) {
       showErr("Опишите причину изменения приоритета.", commentEl);
@@ -5703,9 +5738,10 @@ function openPriorityReasonModal(o: {
       );
       return;
     }
+    rememberPrioInitiator(initiator);
     done = true;
     close();
-    o.onSave({ date, comment, links });
+    o.onSave({ date, initiator, comment, links });
   };
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
@@ -5721,7 +5757,8 @@ function openPriorityReasonModal(o: {
     if (e.target === wrap) cancel();
   });
   wrap.addEventListener("pointerdown", (e) => e.stopPropagation());
-  commentEl.focus();
+  if (initiatorEl.value.trim()) commentEl.focus();
+  else initiatorEl.focus();
 }
 
 function recordPriorityChange(
@@ -5739,6 +5776,7 @@ function recordPriorityChange(
     projectTitle,
     from,
     to,
+    initiator: r.initiator,
     comment: r.comment,
     links: r.links,
   };
@@ -7432,7 +7470,9 @@ function saveProjectCard() {
       }
       logChange(
         `Приоритет проекта «${draft.name}»: #${prevPrio} → #${nowPrio}${
-          opts.reason ? `. Причина: ${opts.reason.comment}` : ""
+          opts.reason
+            ? `. Инициатор: ${opts.reason.initiator}. Причина: ${opts.reason.comment}`
+            : ""
         }`,
         "priority"
       );
@@ -7846,7 +7886,7 @@ function bindUiRest() {
           );
           recordPriorityChange(key, title, now, target, reason);
           logChange(
-            `Приоритет проекта «${title}»: #${now} → #${target}. Причина: ${reason.comment}`,
+            `Приоритет проекта «${title}»: #${now} → #${target}. Инициатор: ${reason.initiator}. Причина: ${reason.comment}`,
             "priority"
           );
           persist();

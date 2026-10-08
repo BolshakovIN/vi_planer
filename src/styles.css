@@ -4560,6 +4560,11 @@ body.pdf-capturing .gantt-page .plan-board {
   min-width: 160px;
 }
 
+.prio-log-initiator {
+  min-width: 120px;
+  white-space: nowrap;
+}
+
 .prio-log-move {
   white-space: nowrap;
 }

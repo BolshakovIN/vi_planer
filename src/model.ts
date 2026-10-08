@@ -1182,6 +1182,8 @@ export interface PriorityLogEntry {
   projectTitle: string;
   from: number;
   to: number;
+  /** Кто инициировал смену приоритета */
+  initiator: string;
   /** Причина изменения */
   comment: string;
   /** Ссылки на материалы (http/https only) */
@@ -1231,6 +1233,7 @@ export function parsePriorityLog(raw: unknown): PriorityLogEntry[] {
       projectTitle,
       from: Math.round(from),
       to: Math.round(to),
+      initiator: String(r.initiator ?? "").trim(),
       comment: String(r.comment ?? "").trim(),
       links: sanitizeLinks(r.links),
     });
