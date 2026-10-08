@@ -254,18 +254,24 @@ export function parseOptionalDays(raw: unknown): number | undefined {
 /** Legacy item-level flag after «Отправить». Prefer assignment `demandStatus`. */
 export type DemandStatus = "submitted";
 
-/** Per-assignment потребность status (Черновик / На согласовании / Согласовано). */
-export type AssignmentDemandStatus = "draft" | "pending" | "approved";
+/** Per-assignment потребность status (Черновик / На согласовании / Частично / Согласовано). */
+export type AssignmentDemandStatus =
+  | "draft"
+  | "pending"
+  | "partial"
+  | "approved";
 
 export const ASSIGNMENT_DEMAND_STATUSES: AssignmentDemandStatus[] = [
   "draft",
   "pending",
+  "partial",
   "approved",
 ];
 
 export const ASSIGNMENT_DEMAND_LABELS: Record<AssignmentDemandStatus, string> = {
   draft: "Черновик",
   pending: "На согласовании",
+  partial: "Частично согласовано",
   approved: "Согласовано",
 };
 
@@ -294,6 +300,14 @@ export function parseAssignmentDemandStatus(
     s === "на согласовании"
   ) {
     return "pending";
+  }
+  if (
+    s === "partial" ||
+    s === "partially_approved" ||
+    s === "частично согласовано" ||
+    s === "частично"
+  ) {
+    return "partial";
   }
   if (s === "approved" || s === "согласовано") return "approved";
   if (s === "draft" || s === "черновик") return "draft";
@@ -597,11 +611,18 @@ export interface AssignmentRole {
   id: string;
   name: string;
   size?: TShirtSize;
+  /** Plan days from Потребность (immutable from Планирование). */
   days?: number;
   demandStatus?: AssignmentDemandStatus;
   workStartDate?: string;
   /** Team member id (Планирование исполнитель). */
   assigneeId?: string;
+  /**
+   * Days placed on the timeline (Планирование). May differ from plan days
+   * (less → partial; more allowed, no highlight). Omit / equal plan = full plan.
+   * Plan `days` never changes from Планирование.
+   */
+  scheduledDays?: number;
 }
 
 export function normalizeAssignmentRoleName(name: string): string {
@@ -776,6 +797,7 @@ function parseAssignmentRoleRow(row: unknown): AssignmentRole | null {
   let id = "";
   let size: TShirtSize | undefined;
   let days: number | undefined;
+  let scheduledDays: number | undefined;
   let demandStatus: AssignmentDemandStatus | undefined;
   let workStartDate: string | undefined;
   let extraAssigneeId = "";
@@ -786,6 +808,7 @@ function parseAssignmentRoleRow(row: unknown): AssignmentRole | null {
     name = String(rec.name ?? rec.title ?? rec.role ?? "").trim();
     id = String(rec.id ?? "").trim();
     days = parseOptionalDays(rec.days);
+    scheduledDays = parseOptionalDays(rec.scheduledDays);
     if (rec.size != null) size = parseSize(rec.size);
     else if (days != null) size = nearestSizeFromDays(days);
     demandStatus = parseAssignmentDemandStatus(rec.demandStatus);
@@ -802,6 +825,7 @@ function parseAssignmentRoleRow(row: unknown): AssignmentRole | null {
     name,
     ...(size ? { size } : {}),
     ...(days != null ? { days } : {}),
+    ...(scheduledDays != null ? { scheduledDays } : {}),
     ...(demandStatus ? { demandStatus } : {}),
     ...(workStartDate ? { workStartDate } : {}),
     ...(extraAssigneeId ? { assigneeId: extraAssigneeId } : {}),
@@ -860,13 +884,41 @@ export function rolePlanDays(
   return sizePlanDays(role.size ?? "M", ranges);
 }
 
+/** Days on the timeline bar. Full plan when scheduledDays unset. */
+export function roleTimelineDays(
+  role: AssignmentRole,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): number {
+  const plan = rolePlanDays(role, ranges);
+  const scheduled = parseOptionalDays(role.scheduledDays);
+  if (scheduled == null) return plan;
+  return Math.max(1, Math.round(scheduled));
+}
+
+/** Placed on timeline with fewer days than Потребность plan. */
+export function roleIsUnderPlan(
+  role: AssignmentRole,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
+): boolean {
+  if (!role.assigneeId) return false;
+  const plan = rolePlanDays(role, ranges);
+  const scheduled = parseOptionalDays(role.scheduledDays);
+  if (scheduled == null) return false;
+  return Math.round(scheduled) < plan;
+}
+
 export function resolveRoleDemandStatus(
   role: AssignmentRole,
   assignment?: TeamAssignment,
-  item?: WorkItem
+  item?: WorkItem,
+  ranges: SizeRanges = DEFAULT_SIZE_RANGES
 ): AssignmentDemandStatus {
+  // Timeline shorter than plan → always «частично согласовано»
+  if (roleIsUnderPlan(role, ranges)) return "partial";
   const own = parseAssignmentDemandStatus(role.demandStatus);
-  if (own) return own;
+  if (own && own !== "partial") return own;
+  // Stored partial but no longer under-plan (full timeline) → treat as approved
+  if (own === "partial") return "approved";
   if (assignment) return resolveAssignmentDemandStatus(assignment, item);
   return "draft";
 }
@@ -911,12 +963,14 @@ export function syncAssignmentFromRoles(
   const workStartDate = starts.length
     ? starts.reduce((min, s) => (s < min ? s : min))
     : a.workStartDate;
-  const statuses = a.roles.map((r) => resolveRoleDemandStatus(r, a));
+  const statuses = a.roles.map((r) => resolveRoleDemandStatus(r, a, undefined, ranges));
   const demandStatus = statuses.some((s) => s === "pending")
     ? "pending"
-    : statuses.length && statuses.every((s) => s === "approved")
-      ? "approved"
-      : "draft";
+    : statuses.some((s) => s === "partial")
+      ? "partial"
+      : statuses.length && statuses.every((s) => s === "approved")
+        ? "approved"
+        : "draft";
   return { ...a, days, size, workStartDate, demandStatus };
 }
 
@@ -1840,7 +1894,10 @@ export function assignmentFinishDate(
     let latest: string | undefined;
     for (const role of a.roles) {
       const start = role.workStartDate || a.workStartDate || planStart;
-      const end = trackFinishDate(start, rolePlanDays(role, ranges));
+      const days = role.assigneeId
+        ? roleTimelineDays(role, ranges)
+        : rolePlanDays(role, ranges);
+      const end = trackFinishDate(start, days);
       if (!latest || end > latest) latest = end;
     }
     return latest;
