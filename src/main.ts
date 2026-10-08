@@ -3470,6 +3470,28 @@ function planConflictMarkHtml(
   return `<span class="plan-conflict-mark" tabindex="0" aria-label="${label}">${PLAN_CONFLICT_MARK_SVG}<span class="plan-conflict-tip" role="tooltip">${tip}</span></span>`;
 }
 
+const PLAN_FN_TEAMS_SVG = `<svg class="plan-fn-teams-ico" viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="6.1" cy="5.1" r="2"/><path d="M2.6 12.4c.2-2.5 1.6-3.6 3.5-3.6s3.3 1.1 3.5 3.6"/><circle cx="11.1" cy="5.6" r="1.55"/><path d="M9.3 12.4c.15-1.7 1.1-2.5 2.2-2.5 1.15 0 2.05.8 2.2 2.5"/></svg>`;
+
+/**
+ * Планирование: icon on a functionality when teams outside the current
+ * filter also work on it; hover/focus shows every involved team.
+ */
+function planFnTeamsMarkHtml(item: WorkItem, selectedSet: Set<string>): string {
+  const teams = item.assignments
+    .map((a) => ({ team: teamById(a.teamId), id: a.teamId }))
+    .filter((x): x is { team: Team; id: string } => Boolean(x.team));
+  const others = teams.filter((x) => !selectedSet.has(x.id));
+  if (!others.length) return "";
+  const rows = teams
+    .map(({ team, id }) => {
+      const mine = selectedSet.has(id);
+      return `<li class="plan-fn-teams-li${mine ? " is-mine" : ""}"><span class="team-dot" style="background:${team.color}"></span><span>${escapeHtml(team.name)}</span>${mine ? `<span class="plan-fn-teams-tag">в фильтре</span>` : ""}</li>`;
+    })
+    .join("");
+  const aria = `Команды функциональности: ${teams.map((x) => x.team.name).join(", ")}`;
+  return `<span class="plan-fn-teams" tabindex="0" aria-label="${escapeAttr(aria)}">${PLAN_FN_TEAMS_SVG}<span class="plan-fn-teams-n">+${others.length}</span><span class="plan-conflict-tip plan-fn-teams-tip" role="tooltip"><span class="plan-fn-teams-head">Команды в функциональности (${teams.length})</span><ul class="plan-fn-teams-list">${rows}</ul></span></span>`;
+}
+
 function treeExpandControlsHtml(scope: "plan" | "gantt" | "gantt-fact"): string {
   return `<div class="tree-expand-controls" role="group" aria-label="Свернуть или развернуть дерево">
     <button type="button" class="tree-expand-btn" data-tree-expand="${scope}" title="Развернуть все" aria-label="Развернуть все">${TREE_EXPAND_SVG}</button>
@@ -4263,22 +4285,7 @@ function planningHtml(
                 itemSlices.length === 0
                   ? `<div class="plan-bar-empty"></div>`
                   : "";
-              const otherTeams = item.assignments
-                .filter((a) => !selectedSet.has(a.teamId))
-                .map((a) => teamById(a.teamId))
-                .filter((t): t is Team => Boolean(t));
-              const otherTeamsHtml = otherTeams.length
-                ? (() => {
-                    const names = otherTeams.map((t) => t.name).join(", ");
-                    const tip = `Также участвуют: ${names}`;
-                    return `<span class="plan-fn-others" title="${escapeAttr(tip)}" aria-label="${escapeAttr(tip)}">${otherTeams
-                      .map(
-                        (t) =>
-                          `<span class="team-dot" style="background:${t.color}"></span>`
-                      )
-                      .join("")}<span class="plan-fn-others-n">+${otherTeams.length}</span></span>`;
-                  })()
-                : "";
+              const otherTeamsHtml = planFnTeamsMarkHtml(item, selectedSet);
               return `<details class="plan-fn" data-plan-fn="${item.id}"${fnOpen ? " open" : ""}>
                 <summary class="plan-row plan-fn-sum">
                   <div class="plan-cell">
@@ -5328,11 +5335,18 @@ function bindPlanConflictTips() {
   hideOpenPlanConflictTip();
   document
     .querySelectorAll<HTMLElement>(
-      ".plan-conflict-mark, .plan-axis-tick.is-conflict-week"
+      ".plan-conflict-mark, .plan-axis-tick.is-conflict-week, .plan-fn-teams"
     )
     .forEach((mark) => {
       const tip = mark.querySelector<HTMLElement>(".plan-conflict-tip");
       if (!tip) return;
+      if (mark.classList.contains("plan-fn-teams")) {
+        // Icon sits inside <summary>: don't toggle the row on click.
+        mark.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+      }
       const show = () => placePlanConflictTip(mark, tip);
       const hide = () => clearPlanConflictTip(mark, tip);
       mark.addEventListener("mouseenter", show);

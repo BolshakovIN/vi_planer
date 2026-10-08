@@ -5506,29 +5506,94 @@ body.pdf-capturing .gantt-page .plan-board {
   margin-right: 2px;
 }
 
-.plan-fn-others {
+.plan-fn-teams {
+  position: relative;
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 2px;
-  padding: 1px 5px;
+  gap: 3px;
+  padding: 1px 6px 1px 5px;
   border-radius: 999px;
   background: var(--neutral-soft);
+  color: var(--neutral-ink);
+  line-height: 1;
   cursor: help;
+  outline: none;
 }
 
-.plan-fn-others .team-dot {
-  width: 7px;
-  height: 7px;
-  margin-right: 0;
+.plan-fn-teams:hover,
+.plan-fn-teams.is-tip-open {
+  background: color-mix(in srgb, var(--accent) 14%, var(--neutral-soft));
+  color: var(--accent);
 }
 
-.plan-fn-others-n {
-  margin-left: 2px;
+.plan-fn-teams:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.plan-fn-teams-ico {
+  display: block;
+  pointer-events: none;
+}
+
+.plan-fn-teams-n {
   font-size: 10px;
   font-weight: 600;
-  color: var(--neutral-ink);
   font-variant-numeric: tabular-nums;
+}
+
+.plan-cell:has(.plan-fn-teams) {
+  overflow: visible;
+}
+
+.plan-row:has(.plan-fn-teams.is-tip-open) {
+  position: relative;
+  z-index: 40;
+}
+
+.plan-fn-teams:hover .plan-fn-teams-tip,
+.plan-fn-teams:focus-visible .plan-fn-teams-tip,
+.plan-fn-teams.is-tip-open .plan-fn-teams-tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.plan-fn-teams-head {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.plan-fn-teams-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.plan-fn-teams-li {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.plan-fn-teams-li.is-mine {
+  font-weight: 600;
+}
+
+.plan-fn-teams-tag {
+  margin-left: 8px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--neutral-soft);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
 }
 
 .plan-fn-title {
