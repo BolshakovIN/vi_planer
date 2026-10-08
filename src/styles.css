@@ -5506,6 +5506,31 @@ body.pdf-capturing .gantt-page .plan-board {
   margin-right: 2px;
 }
 
+.plan-fn-others {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 2px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--neutral-soft);
+  cursor: help;
+}
+
+.plan-fn-others .team-dot {
+  width: 7px;
+  height: 7px;
+  margin-right: 0;
+}
+
+.plan-fn-others-n {
+  margin-left: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--neutral-ink);
+  font-variant-numeric: tabular-nums;
+}
+
 .plan-fn-title {
   flex: 1;
   min-width: 0;

@@ -139,8 +139,8 @@ type GanttTreeLevel = "project" | "fn" | "team" | "role";
 
 const TAB_LABELS: Record<Tab, string> = {
   portfolio: "Реестр",
-  timeline: "Гантт",
-  timelineFact: "Гантт/факт",
+  timeline: "Гантт (План)",
+  timelineFact: "Гантт (Факт)",
   demand: "Потребность",
   planning: "Планирование",
   demoA: "Мониторинг",
@@ -4263,10 +4263,27 @@ function planningHtml(
                 itemSlices.length === 0
                   ? `<div class="plan-bar-empty"></div>`
                   : "";
+              const otherTeams = item.assignments
+                .filter((a) => !selectedSet.has(a.teamId))
+                .map((a) => teamById(a.teamId))
+                .filter((t): t is Team => Boolean(t));
+              const otherTeamsHtml = otherTeams.length
+                ? (() => {
+                    const names = otherTeams.map((t) => t.name).join(", ");
+                    const tip = `Также участвуют: ${names}`;
+                    return `<span class="plan-fn-others" title="${escapeAttr(tip)}" aria-label="${escapeAttr(tip)}">${otherTeams
+                      .map(
+                        (t) =>
+                          `<span class="team-dot" style="background:${t.color}"></span>`
+                      )
+                      .join("")}<span class="plan-fn-others-n">+${otherTeams.length}</span></span>`;
+                  })()
+                : "";
               return `<details class="plan-fn" data-plan-fn="${item.id}"${fnOpen ? " open" : ""}>
                 <summary class="plan-row plan-fn-sum">
                   <div class="plan-cell">
                     <span class="plan-fn-title">${escapeHtml(item.title)}</span>
+                    ${otherTeamsHtml}
                     <span class="plan-fn-days${fnUnder ? " is-under-plan" : ""}" title="${fnUnder ? "На таймлайне меньше плана из Потребности" : "План / на таймлайне"}">${req}/${agreed || "—"}</span>
                   </div>
                   ${planTrackHtml(fnBar, weeks)}
@@ -5786,10 +5803,10 @@ function render() {
       </div>
       <div class="tabs no-print">
         ${tabButtonHtml("portfolio")}
-        ${tabButtonHtml("timeline")}
-        ${tabButtonHtml("timelineFact")}
         ${tabButtonHtml("demand")}
         ${tabButtonHtml("planning")}
+        ${tabButtonHtml("timeline")}
+        ${tabButtonHtml("timelineFact")}
         ${tabButtonHtml("demoA")}
         ${tabButtonHtml("capacity", "tab-end")}
         ${tabButtonHtml("changelog")}
