@@ -57,7 +57,7 @@
   --font-tiny: 10px;
   /* Table column headers — match Планирование (.plan-board-head / .plan-head-label) */
   --table-head-fs: 10px;
-  --table-head-fw: 500;
+  --table-head-fw: 600;
   --table-head-ls: 0.02em;
   --table-head-pad-y: 4px;
   --table-head-pad-x: 8px;

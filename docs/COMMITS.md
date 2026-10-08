@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 09.10.2026, 00:16 GMT+3
+Сгенерировано: 09.10.2026, 00:18 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,7 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `f821114` | 2026-10-09 | ivanbolsakov | Darken table header and axis label text for better contrast. |
 | `53893bf` | 2026-10-09 | ivanbolsakov | Unify table column headers to match Planning sticky head style. |
 | `356e487` | 2026-10-09 | ivanbolsakov | Publish priority journal initiator and rename tab to Журнал изменений. |
 | `2bb5870` | 2026-10-09 | ivanbolsakov | Publish render optimizations: skip schedule on light tabs, cache priority maps. |
@@ -466,7 +467,8 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `53893bf` | 2026-10-09 | ivanbolsakov | HEAD -> master, origin/master | Unify table column headers to match Planning sticky head style. |
+| `f821114` | 2026-10-09 | ivanbolsakov | HEAD -> master, origin/master | Darken table header and axis label text for better contrast. |
+| `53893bf` | 2026-10-09 | ivanbolsakov |  | Unify table column headers to match Planning sticky head style. |
 | `356e487` | 2026-10-09 | ivanbolsakov |  | Publish priority journal initiator and rename tab to Журнал изменений. |
 | `2bb5870` | 2026-10-09 | ivanbolsakov |  | Publish render optimizations: skip schedule on light tabs, cache priority maps. |
 | `b0d342d` | 2026-10-08 | ivanbolsakov |  | Publish UI token unification across controls and popovers. |
