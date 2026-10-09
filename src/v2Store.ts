@@ -3,8 +3,6 @@
  * Single cloud row (`v2`) and localStorage key (`vi-planer-v2`).
  */
 
-export const APP_EDITION = "v2" as const;
-
 /** Browser snapshot. */
 export const V2_LOCAL_STATE_KEY = "vi-planer-v2";
 
