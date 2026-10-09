@@ -15,3 +15,6 @@ data/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+# Local dumps ignored by default; force-add a snapshot if needed: git add -f backups/...
+backups/
+supabase/.temp/
