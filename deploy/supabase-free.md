@@ -9,9 +9,7 @@
 
 Код уже в проекте (`src/storage.ts`, `supabase/schema.sql`).
 
-Состояние: localStorage `vi-planer-v2`, облако `app_state.id = 'v2'`.
-
-После удаления v1 выполните в SQL Editor актуальный [`supabase/schema.sql`](../supabase/schema.sql) — он удалит legacy-строку `main` и добавит policy `public delete`.
+Состояние: localStorage `vi-planer-v2`, облако `app_state.id = 'v2'`. Схема: [`supabase/schema.sql`](../supabase/schema.sql).
 
 ## 1. Supabase (5 минут)
 

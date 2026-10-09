@@ -579,8 +579,15 @@ function szRanges(): SizeRanges {
   return state.sizeRanges;
 }
 
+let teamsByIdCache: Map<string, Team> | null = null;
+let teamsByIdRef: Team[] | null = null;
+
 function teamById(id: string) {
-  return state.teams.find((t) => t.id === id);
+  if (teamsByIdRef !== state.teams || !teamsByIdCache) {
+    teamsByIdCache = new Map(state.teams.map((t) => [t.id, t]));
+    teamsByIdRef = state.teams;
+  }
+  return teamsByIdCache.get(id);
 }
 
 function teamAssignmentRoles(team: Team | undefined): AssignmentRole[] {
@@ -1663,10 +1670,25 @@ function formatDurationDaysCell(
   return days == null ? "—" : String(days);
 }
 
+let projectPrioCache: Map<string, number> | null = null;
+let projectPrioItemsRef: WorkItem[] | null = null;
+let projectPrioRangesRef: SizeRanges | null = null;
+
 function projectPrioMap(): Map<string, number> {
-  return new Map(
-    orderedProjectGroups(state.items, szRanges()).map((g, i) => [g.key, i + 1])
+  const ranges = szRanges();
+  if (
+    projectPrioCache &&
+    projectPrioItemsRef === state.items &&
+    projectPrioRangesRef === ranges
+  ) {
+    return projectPrioCache;
+  }
+  projectPrioCache = new Map(
+    orderedProjectGroups(state.items, ranges).map((g, i) => [g.key, i + 1])
   );
+  projectPrioItemsRef = state.items;
+  projectPrioRangesRef = ranges;
+  return projectPrioCache;
 }
 
 function prioBadgeHtml(
@@ -4638,11 +4660,10 @@ function jiraApiHtml(): string {
   `;
 }
 
-function settingsHtml(rollups: ItemSchedule[]): string {
+function settingsHtml(_rollups: ItemSchedule[]): string {
   const r = state.sizeRanges;
   const active = state.items.filter((i) => i.status !== "done");
-  const ends = rollups.map((s) => s.endWeek);
-  const horizon = ends.length ? Math.max(...ends) + 1 : 0;
+  const horizon = settingsHorizonWeeks(r);
   const canSizes = currentCan("settings.sizes");
   const canPack = currentCan("settings.portfolioPack");
 
@@ -4774,7 +4795,17 @@ function readSizeRangesFromInputs(): SizeRanges | null {
   return normalizeSizeRanges(draft);
 }
 
-function patchSettingsPreview(rollups: ItemSchedule[]) {
+function settingsHorizonWeeks(ranges = szRanges()): number {
+  const finishes = state.items
+    .filter((i) => i.status !== "done")
+    .map((item) => itemFinishDate(item, state.startDate, ranges))
+    .filter((iso): iso is string => Boolean(iso));
+  return finishes.length
+    ? Math.max(...finishes.map((iso) => weekIndex(state.startDate, iso))) + 1
+    : 0;
+}
+
+function patchSettingsPreview() {
   const r = state.sizeRanges;
   for (const sz of TSHIRT_SIZES) {
     document
@@ -4785,10 +4816,8 @@ function patchSettingsPreview(rollups: ItemSchedule[]) {
         )
       );
   }
-  const ends = rollups.map((s) => s.endWeek);
-  const horizon = ends.length ? Math.max(...ends) + 1 : 0;
   const horizonEl = document.querySelector("#settingsHorizon");
-  if (horizonEl) horizonEl.textContent = `${horizon} нед.`;
+  if (horizonEl) horizonEl.textContent = `${settingsHorizonWeeks(r)} нед.`;
   const summaryEl = document.querySelector("#settingsSchedPreview #settingsRangesSummary");
   if (summaryEl) summaryEl.textContent = sizeRangesSummary(r);
 }
@@ -4800,8 +4829,7 @@ function applySizeRangesFromInputs() {
   if (!next) return;
   state.sizeRanges = next;
   saveState(state);
-  const { rollups } = scheduleState();
-  patchSettingsPreview(rollups);
+  patchSettingsPreview();
 
   const focused = document.activeElement as HTMLInputElement | null;
   const focusId = focused?.classList.contains("set-range") ? focused.id : null;
@@ -6127,13 +6155,7 @@ function brandMarkSrc(): string {
 
 /** Full portfolio schedule is heavy — skip on tabs that don't display it. */
 function tabNeedsSchedule(tab: Tab): boolean {
-  return (
-    tab === "portfolio" ||
-    tab === "planning" ||
-    tab === "demoA" ||
-    tab === "demoB" ||
-    tab === "settings"
-  );
+  return tab === "portfolio" || tab === "planning" || tab === "demoA";
 }
 
 function render() {

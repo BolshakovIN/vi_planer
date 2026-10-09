@@ -1,0 +1,15 @@
+{
+  "source": "supabase-rest",
+  "project_url": "https://rseooebttkgpofouuoqo.supabase.co",
+  "project_ref": "rseooebttkgpofouuoqo",
+  "table": "public.app_state",
+  "exported_at": "2026-10-09T19:09:38.488192+00:00",
+  "row_count": 1,
+  "rows": [
+    {
+      "id": "v2",
+      "updated_at": "2026-10-09T19:04:21.086+00:00",
+      "payload_bytes": 81896
+    }
+  ]
+}

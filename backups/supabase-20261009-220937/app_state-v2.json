@@ -245,13 +245,14 @@
               "days": 15,
               "name": "бизнес-аналитик",
               "size": "M",
-              "demandStatus": "pending",
-              "workStartDate": "2026-09-21"
+              "assigneeId": "p_tbd_0",
+              "demandStatus": "approved",
+              "workStartDate": "2026-10-19"
             }
           ],
           "teamId": "tbd",
-          "demandStatus": "pending",
-          "workStartDate": "2026-09-21"
+          "demandStatus": "approved",
+          "workStartDate": "2026-10-19"
         },
         {
           "days": 60,
@@ -325,10 +326,8 @@
               "days": 15,
               "name": "аналитик",
               "size": "M",
-              "assigneeId": "p_sayt-lk_0",
-              "demandStatus": "partial",
-              "scheduledDays": 10,
-              "workStartDate": "2026-10-05"
+              "demandStatus": "pending",
+              "workStartDate": "2026-09-21"
             },
             {
               "id": "role_xboktkj",
@@ -902,7 +901,7 @@
       "backlog": "ДКБ",
       "assignee": "",
       "startDate": null,
-      "manualRank": 25,
+      "manualRank": 19,
       "assignments": [
         {
           "days": 45,
@@ -949,7 +948,7 @@
       "backlog": "ДКБ",
       "assignee": "",
       "startDate": null,
-      "manualRank": 26,
+      "manualRank": 20,
       "assignments": [],
       "cashFlow12m": null,
       "cashFlow24m": null,
@@ -968,7 +967,7 @@
       "backlog": "ДКБ",
       "assignee": "",
       "startDate": null,
-      "manualRank": 27,
+      "manualRank": 21,
       "assignments": [],
       "cashFlow12m": null,
       "cashFlow24m": null,
@@ -987,7 +986,7 @@
       "backlog": "Новый проект",
       "assignee": "",
       "startDate": null,
-      "manualRank": 28,
+      "manualRank": 22,
       "assignments": [],
       "cashFlow12m": 100000,
       "cashFlow24m": null,
@@ -1006,7 +1005,7 @@
       "backlog": "B2b онлайн платформа",
       "assignee": "",
       "startDate": null,
-      "manualRank": 29,
+      "manualRank": 23,
       "assignments": [
         {
           "days": 20,
@@ -1068,7 +1067,7 @@
       "backlog": "B2b онлайн платформа",
       "assignee": "",
       "startDate": null,
-      "manualRank": 30,
+      "manualRank": 24,
       "assignments": [
         {
           "days": 50,
@@ -1151,7 +1150,7 @@
       "backlog": "B2b онлайн платформа",
       "assignee": "",
       "startDate": null,
-      "manualRank": 31,
+      "manualRank": 25,
       "assignments": [
         {
           "days": 160,
@@ -1229,7 +1228,7 @@
       "backlog": "B2b онлайн платформа",
       "assignee": "",
       "startDate": null,
-      "manualRank": 19,
+      "manualRank": 26,
       "assignments": [
         {
           "days": 74,
@@ -1324,7 +1323,7 @@
       "backlog": "B2b онлайн платформа",
       "assignee": "",
       "startDate": null,
-      "manualRank": 20,
+      "manualRank": 27,
       "assignments": [
         {
           "days": 30,
@@ -1369,7 +1368,7 @@
       "backlog": "B2b онлайн платформа",
       "assignee": "",
       "startDate": null,
-      "manualRank": 21,
+      "manualRank": 28,
       "assignments": [
         {
           "days": 30,
@@ -1414,7 +1413,7 @@
       "backlog": "B2b онлайн платформа",
       "assignee": "",
       "startDate": null,
-      "manualRank": 22,
+      "manualRank": 29,
       "assignments": [
         {
           "days": 30,
@@ -1459,7 +1458,7 @@
       "backlog": "B2b онлайн платформа",
       "assignee": "",
       "startDate": null,
-      "manualRank": 23,
+      "manualRank": 30,
       "assignments": [
         {
           "days": 30,
@@ -1504,7 +1503,7 @@
       "backlog": "B2b онлайн платформа",
       "assignee": "",
       "startDate": null,
-      "manualRank": 24,
+      "manualRank": 31,
       "assignments": [
         {
           "days": 30,
@@ -2065,7 +2064,7 @@
       ]
     }
   ],
-  "savedAt": "2026-10-09T13:19:44.383Z",
+  "savedAt": "2026-10-09T19:04:20.731Z",
   "version": 3,
   "products": [],
   "projects": [

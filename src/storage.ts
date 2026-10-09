@@ -24,7 +24,6 @@ import {
   PORTFOLIO_PACK_ROLLED_BACK,
 } from "./seed";
 import {
-  APP_EDITION,
   assertV2CloudRow,
   assertV2LocalKey,
   MIGRATION_CLEARED_DEMAND_TEAMS,
@@ -412,8 +411,7 @@ export async function loadState(): Promise<AppState> {
   setSyncStatus("loading");
 
   const local = loadLocal();
-  // API then Supabase — both scoped to APP_EDITION /v2 only.
-  void APP_EDITION;
+  // API then Supabase — both scoped to cloud row / path `v2` only.
   const remote = (await loadFromApi()) ?? (await loadFromSupabase());
   const state = hydrateV2State(local, remote);
   if (v2StateWouldShrink(state, local)) {

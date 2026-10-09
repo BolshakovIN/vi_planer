@@ -5,6 +5,7 @@ import {
   SEEDED_TEAM_ROSTER_V1,
 } from "./v2Store";
 
+/** Re-export migration stamps (incl. deprecated *_V1 aliases for seed scripts). */
 export {
   CLEARED_DEMAND_TEAMS_V1,
   MIGRATION_CLEARED_DEMAND_TEAMS,
@@ -1852,63 +1853,6 @@ export function scheduledOverloadWeeks(
 export type ConcurrentDemandItem = LoadDemandItem;
 
 /** @deprecated alias — use TeamLoadWeek */
-export type ConcurrentLoadWeek = TeamLoadWeek;
-
-/**
- * Parallel planned load by team/week: each assignment from its workStartDate
- * consumes SCHEDULE_CAPACITY_PW week-by-week without waiting for the queue.
- * Kept for diagnostics; UI load strips use schedulePortfolio load instead.
- */
-export function concurrentTeamLoad(
-  state: AppState,
-  maxWeeks = 52
-): Record<string, TeamLoadWeek[]> {
-  const ranges = state.sizeRanges ?? DEFAULT_SIZE_RANGES;
-  const result: Record<string, TeamLoadWeek[]> = {};
-  const cap = SCHEDULE_CAPACITY_PW;
-
-  for (const team of state.teams) {
-    const weeks: TeamLoadWeek[] = Array.from({ length: maxWeeks }, (_, w) => ({
-      week: w,
-      weekStart: addWeeks(state.startDate, w),
-      usedPw: 0,
-      capacityPw: cap,
-      items: [],
-    }));
-
-    for (const item of state.items) {
-      if (item.status === "done") continue;
-      for (const a of item.assignments) {
-        if (a.teamId !== team.id) continue;
-        const pw = assignmentPlanWeeks(a, ranges);
-        let rem = pw;
-        let w = weekIndex(state.startDate, a.workStartDate);
-        while (rem > 0.001 && w < maxWeeks) {
-          const take = Math.min(cap, rem);
-          addLoadContribution(weeks[w], item, take);
-          rem -= take;
-          w += 1;
-        }
-      }
-    }
-
-    finalizeLoadWeeks(weeks);
-    result[team.id] = weeks;
-  }
-  return result;
-}
-
-/**
- * Weeks where parallel planned work (each assignment from its workStartDate)
- * would exceed SCHEDULE_CAPACITY_PW before the queue merges slots.
- */
-export function concurrentOverloadWeeks(
-  state: AppState,
-  maxWeeks = 52
-): Record<string, Set<number>> {
-  return scheduledOverloadWeeks(concurrentTeamLoad(state, maxWeeks));
-}
-
 /** Optional finance number; missing / empty / invalid → null. */
 export function optionalRubFromRaw(raw: unknown): number | null {
   if (raw == null || raw === "") return null;
@@ -2639,6 +2583,8 @@ export function schedulePortfolio(
     return { endWeek, endDate, startDate };
   };
 
+  const teamsById = new Map(state.teams.map((t) => [t.id, t]));
+
   if (mode === "maxUtilization") {
     for (const team of state.teams) {
       load[team.id] = emptyWeeks();
@@ -2647,7 +2593,7 @@ export function schedulePortfolio(
     ordered.forEach((item, itemIdx) => {
       const tracks = item.assignments
         .map((a) => {
-          const team = state.teams.find((t) => t.id === a.teamId);
+          const team = teamsById.get(a.teamId);
           if (!team) return null;
           return {
             team,
@@ -2980,10 +2926,11 @@ export function normalizeState(raw: unknown): AppState | null {
       }));
 
   const parsedRanges = normalizeSizeRanges(data.sizeRanges);
+  const teamsById = new Map(teams.map((t) => [t.id, t]));
   const filledItems = migratedItems.map((item) => ({
     ...item,
     assignments: item.assignments.map((a) => {
-      const team = teams.find((t) => t.id === a.teamId);
+      const team = teamsById.get(a.teamId);
       const teamRoles = team ? resolveTeamRoleNames(team) : undefined;
       return fillAssignmentRoles(
         a,
