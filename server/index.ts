@@ -76,15 +76,8 @@ async function writeStateHandler(
 
 app.get("/api/state", readStateHandler);
 app.put("/api/state", writeStateHandler);
-/** SPA path — same single store (was edition-scoped when v1 existed). */
 app.get("/api/state/v2", readStateHandler);
 app.put("/api/state/v2", writeStateHandler);
-app.get("/api/state/:edition", (_req, res) => {
-  res.status(404).json({ error: "Unknown edition" });
-});
-app.put("/api/state/:edition", (_req, res) => {
-  res.status(404).json({ error: "Unknown edition" });
-});
 
 /** Jira read-only integration (stubs until PAT session + REST are wired). */
 app.get("/api/jira/status", (_req, res) => {

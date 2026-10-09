@@ -334,7 +334,7 @@ def write_seed_ts(team_rows: list[dict], items: list[dict]) -> None:
     items_joined = ",\n".join(item_blocks)
     body = f"""import {{
   AppState,
-  CLEARED_DEMAND_TEAMS_V1,
+  MIGRATION_CLEARED_DEMAND_TEAMS,
   ensureUniquePriorities,
   uniqCatalogNames,
   containerNameFromBacklog,
@@ -347,8 +347,6 @@ export const PORTFOLIO_START = "2026-10-01";
 export const PORTFOLIO_PACK_ID = "xlsx-prio-2026-10-v4";
 /** Previous packs — load path fully replaces seed (not a status-only patch). */
 export const PORTFOLIO_PACK_PREV = "xlsx-prio-2026-10-v3";
-export const PORTFOLIO_PACK_V2 = "xlsx-prio-2026-10-v2";
-export const PORTFOLIO_PACK_V1 = "xlsx-prio-2026-10";
 export const PORTFOLIO_PACK_ROLLED_BACK = "xlsx-prio-2026-10-rolled-back";
 
 const START = PORTFOLIO_START;
@@ -362,7 +360,7 @@ const SEED_RAW: AppState = {{
   portfolioNotes: "",
   changeLog: [],
   portfolioPack: PORTFOLIO_PACK_ID,
-  clearedDemandTeams: CLEARED_DEMAND_TEAMS_V1,
+  clearedDemandTeams: MIGRATION_CLEARED_DEMAND_TEAMS,
   teams: [
 {teams_joined},
   ],

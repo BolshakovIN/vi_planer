@@ -218,16 +218,6 @@ async def write_state_v2(request: Request):
     return await _write_state_payload(request)
 
 
-@app.get("/api/state/{edition}")
-async def read_state_edition(edition: str):
-    return JSONResponse(status_code=404, content={"error": "Unknown edition"})
-
-
-@app.put("/api/state/{edition}")
-async def write_state_edition(edition: str, request: Request):
-    return JSONResponse(status_code=404, content={"error": "Unknown edition"})
-
-
 if DIST_DIR.is_dir():
     # html=True → missing paths fall back to index.html (SPA), like Express.
     app.mount(

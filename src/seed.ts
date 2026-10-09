@@ -18,8 +18,6 @@ export const PORTFOLIO_START = "2026-10-01";
 export const PORTFOLIO_PACK_ID = "xlsx-prio-2026-10-v4";
 /** Previous packs — load path fully replaces seed (not a status-only patch). */
 export const PORTFOLIO_PACK_PREV = "xlsx-prio-2026-10-v3";
-export const PORTFOLIO_PACK_V2 = "xlsx-prio-2026-10-v2";
-export const PORTFOLIO_PACK_V1 = "xlsx-prio-2026-10";
 export const PORTFOLIO_PACK_ROLLED_BACK = "xlsx-prio-2026-10-rolled-back";
 
 const START = PORTFOLIO_START;

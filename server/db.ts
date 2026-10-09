@@ -6,7 +6,7 @@ import { normalizeState, type AppState } from "../src/model.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/** Only live edition — cloud / file row id. */
+/** Cloud / file row id for the live planner store. */
 export const CLOUD_ROW_ID = "v2";
 
 const dataDir = process.env.DATA_DIR ?? path.join(__dirname, "..", "data");
@@ -64,8 +64,6 @@ export async function initDb(): Promise<void> {
      ON CONFLICT (id) DO NOTHING`,
     [CLOUD_ROW_ID],
   );
-  // Drop legacy v1 row if present (was app_state.id = 'main').
-  await pool.query(`DELETE FROM app_state WHERE id = 'main'`);
 
   storageMode = "postgres";
   console.log("Storage: PostgreSQL");

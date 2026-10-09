@@ -90,8 +90,6 @@ async def init_db() -> None:
             """,
             CLOUD_ROW_ID,
         )
-        # Drop legacy v1 row if present (was app_state.id = 'main').
-        await conn.execute("DELETE FROM app_state WHERE id = 'main'")
 
     _storage_mode = "postgres"
     print("Storage: PostgreSQL")

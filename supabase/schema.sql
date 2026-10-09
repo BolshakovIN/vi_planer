@@ -11,9 +11,6 @@ insert into public.app_state (id, payload)
 values ('v2', '{}'::jsonb)
 on conflict (id) do nothing;
 
--- Legacy v1 row (removed with the edition).
-delete from public.app_state where id = 'main';
-
 alter table public.app_state enable row level security;
 
 drop policy if exists "public read" on public.app_state;

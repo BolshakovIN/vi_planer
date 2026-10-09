@@ -147,8 +147,6 @@ assert(persisted, "persist snapshot failed to normalize");
 expectUserData(persisted, "persist→normalize");
 
 store.set(V2_LOCAL_STATE_KEY, JSON.stringify(persisted));
-const v1Poison = "__v1_poison__";
-store.set("vi-planer-v3", v1Poison); // poison v1 key — must stay untouched
 saveState({
   ...persisted,
   items: persisted.items.map((item) => ({
@@ -161,17 +159,12 @@ saveState({
     })),
   })),
 });
-assert(store.has(V2_LOCAL_STATE_KEY), "saveState must write v2 key");
-assert(
-  store.get("vi-planer-v3") === v1Poison,
-  "saveState must not write or clear the frozen v1 local key"
-);
+assert(store.has(V2_LOCAL_STATE_KEY), "saveState must write local key");
 const afterSave = JSON.parse(store.get(V2_LOCAL_STATE_KEY)!);
 const approvedRole = afterSave.items[0].assignments[0].roles.find(
   (r: { id: string }) => r.id === "r1"
 );
 assert(approvedRole?.demandStatus === "approved", "approved status not saved");
-assert(!JSON.stringify(afterSave).includes("vi-planer-v3"), "payload ok");
 
 const staleRemote = structuredClone(SEED);
 staleRemote.savedAt = "2026-09-01T00:00:00.000Z";
@@ -220,12 +213,9 @@ assert(
   "tombstone x002 must not resurrect from seed"
 );
 
-// loadState with only v2 local — must ignore poisoned v1 key
 store.clear();
 store.set(V2_LOCAL_STATE_KEY, JSON.stringify(persisted));
-store.set("vi-planer-v3", v1Poison);
 const booted = await loadState();
-expectUserData(booted, "loadState ignores v1 local key");
-assert(store.get("vi-planer-v3") === v1Poison, "loadState must leave the v1 key alone");
+expectUserData(booted, "loadState from local");
 
-console.log("ok: v2 persist keeps assignments, ranks, teams, roles; isolated from v1");
+console.log("ok: persist keeps assignments, ranks, teams, roles");

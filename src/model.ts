@@ -1,17 +1,21 @@
 import {
-  CLEARED_DEMAND_TEAMS_V1,
   MIGRATION_CLEARED_DEMAND_TEAMS,
   MIGRATION_SEEDED_TEAM_ROSTER,
-  SEEDED_TEAM_ROSTER_V1,
 } from "./v2Store";
 
-/** Re-export migration stamps (incl. deprecated *_V1 aliases for seed scripts). */
 export {
-  CLEARED_DEMAND_TEAMS_V1,
   MIGRATION_CLEARED_DEMAND_TEAMS,
   MIGRATION_SEEDED_TEAM_ROSTER,
-  SEEDED_TEAM_ROSTER_V1,
-};
+  migrationStampDone,
+} from "./v2Store";
+
+function rewriteMigrationStamp(
+  value: string | undefined,
+  stamp: string
+): { next: string; applied: boolean } {
+  if (value === stamp) return { next: stamp, applied: false };
+  return { next: stamp, applied: true };
+}
 
 export type ItemType = "project" | "product";
 /**
@@ -1291,12 +1295,12 @@ export interface AppState {
   portfolioPack?: string;
   /**
    * One-shot: unlink team assignments from all functionalities so they can be
-   * re-assigned on Потребность. `"v1"` after apply (`clearedDemandTeams-v1`).
+   * re-assigned on Потребность. `"done"` after apply.
    */
   clearedDemandTeams?: string;
   /**
    * One-shot: demo роль—ФИО rows were written onto teams that had no roster.
-   * After `"v1"`, missing members stay empty — never re-seed on load.
+   * After `"done"`, missing members stay empty — never re-seed on load.
    */
   teamRosterSeeded?: string;
   /**
@@ -1400,13 +1404,12 @@ export function applySeededTeamRoster(current: AppState): {
   state: AppState;
   applied: boolean;
 } {
-  if (current.teamRosterSeeded === MIGRATION_SEEDED_TEAM_ROSTER) {
-    return { state: current, applied: false };
-  }
-  return {
-    state: { ...current, teamRosterSeeded: MIGRATION_SEEDED_TEAM_ROSTER },
-    applied: true,
-  };
+  const { next, applied } = rewriteMigrationStamp(
+    current.teamRosterSeeded,
+    MIGRATION_SEEDED_TEAM_ROSTER
+  );
+  if (!applied) return { state: current, applied: false };
+  return { state: { ...current, teamRosterSeeded: next }, applied: true };
 }
 
 /** Rewrite persisted «архитектура/аналитика/разработка/тестирование» to person titles. */
@@ -1510,13 +1513,12 @@ export function applyClearedDemandTeams(current: AppState): {
   state: AppState;
   applied: boolean;
 } {
-  if (current.clearedDemandTeams === MIGRATION_CLEARED_DEMAND_TEAMS) {
-    return { state: current, applied: false };
-  }
-  return {
-    state: { ...current, clearedDemandTeams: MIGRATION_CLEARED_DEMAND_TEAMS },
-    applied: true,
-  };
+  const { next, applied } = rewriteMigrationStamp(
+    current.clearedDemandTeams,
+    MIGRATION_CLEARED_DEMAND_TEAMS
+  );
+  if (!applied) return { state: current, applied: false };
+  return { state: { ...current, clearedDemandTeams: next }, applied: true };
 }
 
 export interface V2StateFootprint {

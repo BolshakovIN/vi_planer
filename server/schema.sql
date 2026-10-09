@@ -10,6 +10,3 @@ CREATE TABLE IF NOT EXISTS app_state (
 INSERT INTO app_state (id, payload, updated_at)
 VALUES ('v2', '{}'::jsonb, 0)
 ON CONFLICT (id) DO NOTHING;
-
--- Legacy v1 row (removed with the edition).
-DELETE FROM app_state WHERE id = 'main';

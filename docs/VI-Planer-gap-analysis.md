@@ -2,7 +2,7 @@
 
 **Дата:** 15.09.2026  
 **База сравнения:** текущий VI Planer (SPA + Supabase/API, master) vs целевое ТЗ (Jira + сессии + роли PMO/продукт).  
-**Важно:** интеграция с Jira **не реализована** и в v1 явно out of scope.
+**Важно:** интеграция с Jira **не реализована** и явно out of scope текущего прототипа.
 
 **Live:** https://bolshakovin.github.io/vi_planer/  
 **PDF:** [VI-Planer-gap-analysis.pdf](./VI-Planer-gap-analysis.pdf)
@@ -71,7 +71,7 @@ VI Planer закрывает **портфельное планирование �
 | Безопасность | Нет пользователей/ролей | RBAC + запрет чужого folder |
 | Аудит | Нет истории изменений | Полная история + Jira comments |
 | Фокус продукта | «Когда закончим» (capacity/Gantt) | «Кто/когда может менять приоритет» (governance) |
-| Roadmap v1 | Jira, auth, audit — **out of scope** | Это **ядро** целевого решения |
+| Roadmap | Jira, auth, audit — **out of scope** | Это **ядро** целевого решения |
 
 **Вывод по стратегии:** доработки «поверх SPA» не закроют Jira-native vision без смены платформы или глубокого sync-слоя. Имеет смысл явно выбрать: (A) эволюция VI Planer как planning twin, (B) новый Jira-модуль governance, (C) гибрид (VI Planer читает Jira, пишет приоритеты обратно только из сессии).
 
