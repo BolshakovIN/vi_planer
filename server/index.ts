@@ -8,7 +8,6 @@ import {
   initDb,
   pingDb,
   setState,
-  type StateEdition,
 } from "./db.ts";
 import { getJiraStatus, getSyncPreviewStub } from "./jira.ts";
 import { normalizeState } from "../src/model.ts";
@@ -43,73 +42,48 @@ app.get("/api/health", async (_req, res) => {
   });
 });
 
-function parseEdition(value: string | undefined): StateEdition | null {
-  if (!value || value === "v1") return "v1";
-  if (value === "v2") return "v2";
-  return null;
-}
-
-/** Legacy unscoped path kept for frozen v1 API clients only — never used by v2 SPA. */
-app.get("/api/state", async (_req, res) => {
+async function readStateHandler(
+  _req: express.Request,
+  res: express.Response
+) {
   try {
-    const state = await getState("v1");
-    const updatedAt = await getUpdatedAt("v1");
+    const state = await getState();
+    const updatedAt = await getUpdatedAt();
     res.json({ state, updatedAt });
   } catch (err) {
     console.error("GET /api/state failed:", err);
     res.status(500).json({ error: "Failed to load state" });
   }
-});
+}
 
-app.put("/api/state", async (req, res) => {
+async function writeStateHandler(
+  req: express.Request,
+  res: express.Response
+) {
   const normalized = normalizeState(req.body);
   if (!normalized) {
     res.status(400).json({ error: "Invalid state payload" });
     return;
   }
   try {
-    const updatedAt = await setState(normalized, "v1");
+    const updatedAt = await setState(normalized);
     res.json({ ok: true, updatedAt });
   } catch (err) {
     console.error("PUT /api/state failed:", err);
     res.status(500).json({ error: "Failed to save state" });
   }
-});
+}
 
-app.get("/api/state/:edition", async (req, res) => {
-  const edition = parseEdition(req.params.edition);
-  if (!edition) {
-    res.status(404).json({ error: "Unknown edition" });
-    return;
-  }
-  try {
-    const state = await getState(edition);
-    const updatedAt = await getUpdatedAt(edition);
-    res.json({ state, updatedAt });
-  } catch (err) {
-    console.error(`GET /api/state/${edition} failed:`, err);
-    res.status(500).json({ error: "Failed to load state" });
-  }
+app.get("/api/state", readStateHandler);
+app.put("/api/state", writeStateHandler);
+/** SPA path — same single store (was edition-scoped when v1 existed). */
+app.get("/api/state/v2", readStateHandler);
+app.put("/api/state/v2", writeStateHandler);
+app.get("/api/state/:edition", (_req, res) => {
+  res.status(404).json({ error: "Unknown edition" });
 });
-
-app.put("/api/state/:edition", async (req, res) => {
-  const edition = parseEdition(req.params.edition);
-  if (!edition) {
-    res.status(404).json({ error: "Unknown edition" });
-    return;
-  }
-  const normalized = normalizeState(req.body);
-  if (!normalized) {
-    res.status(400).json({ error: "Invalid state payload" });
-    return;
-  }
-  try {
-    const updatedAt = await setState(normalized, edition);
-    res.json({ ok: true, updatedAt });
-  } catch (err) {
-    console.error(`PUT /api/state/${edition} failed:`, err);
-    res.status(500).json({ error: "Failed to save state" });
-  }
+app.put("/api/state/:edition", (_req, res) => {
+  res.status(404).json({ error: "Unknown edition" });
 });
 
 /** Jira read-only integration (stubs until PAT session + REST are wired). */

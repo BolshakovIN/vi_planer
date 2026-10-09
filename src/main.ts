@@ -6125,20 +6125,6 @@ function brandMarkSrc(): string {
   return new URL("vi-mark.png", new URL(base, window.location.href)).href;
 }
 
-/**
- * Navigation only — this bundle is always v2 and never shares localStorage
- * or cloud rows with the frozen `/v1/` build.
- */
-function editionSwitcherHtml(): string {
-  const base = import.meta.env.BASE_URL || "./";
-  const v1Href = new URL("v1/", new URL(base, window.location.href)).pathname;
-  const v2Href = base.endsWith("/") ? base : `${base}/`;
-  return `<nav class="edition-switch no-print" aria-label="Версия интерфейса">
-    <a class="edition-switch-btn" href="${v1Href}" data-edition="v1">v1</a>
-    <a class="edition-switch-btn is-on" href="${v2Href}" data-edition="v2" aria-current="page">v2</a>
-  </nav>`;
-}
-
 /** Full portfolio schedule is heavy — skip on tabs that don't display it. */
 function tabNeedsSchedule(tab: Tab): boolean {
   return (
@@ -6186,7 +6172,6 @@ function render() {
           </button>
         </div>
         <div class="top-actions">
-          ${editionSwitcherHtml()}
           <span class="release-stamp" title="Дата релиза">updated ${RELEASE_UPDATED}</span>
           <span class="sync-badge" id="syncStatus" data-status="${getSyncStatus()}">${syncStatusLabel(getSyncStatus())}</span>
           <button class="btn" id="exportPdfBtn">${ui.tab === "timeline" || ui.tab === "timelineFact" ? "Экспорт Гантта" : "Экспорт PDF"}</button>

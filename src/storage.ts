@@ -341,8 +341,8 @@ export function rollbackPortfolioPack(): AppState | null {
 }
 
 /**
- * First empty v2 load: never read the frozen v1 cloud row (`main`) or
- * `vi-planer-v3`. Restore only the v2 teams backup when present.
+ * First empty load: restore only the teams backup when present.
+ * Does not read any other localStorage / cloud keys.
  */
 function bootstrapV2State(local: AppState | null, remote: AppState | null): {
   base: AppState;
@@ -476,7 +476,7 @@ async function flushPendingSave() {
   }
 }
 
-/** Persist user actions to v2 local + cloud. Never writes the v1 store. */
+/** Persist user actions to local + cloud (`vi-planer-v2` / `app_state.id = v2`). */
 export function saveState(state: AppState) {
   const payload = ensureStateAssignmentRoles({
     ...state,

@@ -2,28 +2,21 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { SEED } from "../src/seed.ts";
 import { normalizeState, type AppState } from "../src/model.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export type StateEdition = "v1" | "v2";
-
-const ROW_IDS: Record<StateEdition, string> = {
-  v1: "main",
-  v2: "v2",
-};
+/** Only live edition — cloud / file row id. */
+export const CLOUD_ROW_ID = "v2";
 
 const dataDir = process.env.DATA_DIR ?? path.join(__dirname, "..", "data");
 
-function stateFileFor(edition: StateEdition): string {
-  if (edition === "v2") {
-    return (
-      process.env.STATE_FILE_V2 ??
-      path.join(dataDir, "vi-planer-state-v2.json")
-    );
-  }
-  return process.env.STATE_FILE ?? path.join(dataDir, "vi-planer-state.json");
+function stateFile(): string {
+  return (
+    process.env.STATE_FILE_V2 ??
+    process.env.STATE_FILE ??
+    path.join(dataDir, "vi-planer-state-v2.json")
+  );
 }
 
 interface StoredState {
@@ -46,7 +39,7 @@ export async function initDb(): Promise<void> {
   if (!usePostgres()) {
     fs.mkdirSync(dataDir, { recursive: true });
     storageMode = "file";
-    console.log(`Storage: file (${stateFileFor("v1")}, ${stateFileFor("v2")})`);
+    console.log(`Storage: file (${stateFile()})`);
     return;
   }
 
@@ -60,51 +53,51 @@ export async function initDb(): Promise<void> {
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_state (
-      id TEXT PRIMARY KEY DEFAULT 'main',
+      id TEXT PRIMARY KEY DEFAULT 'v2',
       payload JSONB NOT NULL,
       updated_at BIGINT NOT NULL
     )
   `);
-  for (const id of Object.values(ROW_IDS)) {
-    await pool.query(
-      `INSERT INTO app_state (id, payload, updated_at)
-       VALUES ($1, '{}'::jsonb, 0)
-       ON CONFLICT (id) DO NOTHING`,
-      [id],
-    );
-  }
+  await pool.query(
+    `INSERT INTO app_state (id, payload, updated_at)
+     VALUES ($1, '{}'::jsonb, 0)
+     ON CONFLICT (id) DO NOTHING`,
+    [CLOUD_ROW_ID],
+  );
+  // Drop legacy v1 row if present (was app_state.id = 'main').
+  await pool.query(`DELETE FROM app_state WHERE id = 'main'`);
 
   storageMode = "postgres";
   console.log("Storage: PostgreSQL");
 }
 
-function readFile(edition: StateEdition): StoredState | null {
-  const stateFile = stateFileFor(edition);
-  if (!fs.existsSync(stateFile)) return null;
+function readFile(): StoredState | null {
+  const file = stateFile();
+  if (!fs.existsSync(file)) return null;
   try {
-    return JSON.parse(fs.readFileSync(stateFile, "utf8")) as StoredState;
+    return JSON.parse(fs.readFileSync(file, "utf8")) as StoredState;
   } catch {
     return null;
   }
 }
 
-function writeFile(edition: StateEdition, state: AppState, updatedAt: number) {
-  const stateFile = stateFileFor(edition);
-  fs.mkdirSync(path.dirname(stateFile), { recursive: true });
-  const tmp = `${stateFile}.tmp`;
+function writeFile(state: AppState, updatedAt: number) {
+  const file = stateFile();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp`;
   fs.writeFileSync(
     tmp,
     JSON.stringify({ state, updatedAt } satisfies StoredState, null, 2),
     "utf8",
   );
-  fs.renameSync(tmp, stateFile);
+  fs.renameSync(tmp, file);
 }
 
-async function readPostgres(edition: StateEdition): Promise<StoredState | null> {
+async function readPostgres(): Promise<StoredState | null> {
   if (!pool) return null;
   const { rows } = await pool.query<{ payload: unknown; updated_at: string }>(
     "SELECT payload, updated_at FROM app_state WHERE id = $1",
-    [ROW_IDS[edition]],
+    [CLOUD_ROW_ID],
   );
   const row = rows[0];
   if (!row) return null;
@@ -114,76 +107,44 @@ async function readPostgres(edition: StateEdition): Promise<StoredState | null> 
   };
 }
 
-async function writePostgres(
-  edition: StateEdition,
-  state: AppState,
-  updatedAt: number,
-) {
+async function writePostgres(state: AppState, updatedAt: number) {
   if (!pool) throw new Error("PostgreSQL pool not initialized");
   await pool.query(
     `INSERT INTO app_state (id, payload, updated_at)
      VALUES ($1, $2::jsonb, $3)
      ON CONFLICT (id) DO UPDATE
      SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at`,
-    [ROW_IDS[edition], JSON.stringify(state), updatedAt],
+    [CLOUD_ROW_ID, JSON.stringify(state), updatedAt],
   );
 }
 
-async function readStored(edition: StateEdition): Promise<StoredState | null> {
-  if (storageMode === "postgres") return readPostgres(edition);
-  return readFile(edition);
+async function readStored(): Promise<StoredState | null> {
+  if (storageMode === "postgres") return readPostgres();
+  return readFile();
 }
 
-async function writeStored(
-  edition: StateEdition,
-  state: AppState,
-  updatedAt: number,
-) {
+async function writeStored(state: AppState, updatedAt: number) {
   if (storageMode === "postgres") {
-    await writePostgres(edition, state, updatedAt);
+    await writePostgres(state, updatedAt);
     return;
   }
-  writeFile(edition, state, updatedAt);
+  writeFile(state, updatedAt);
 }
 
-function seedState(): AppState {
-  return structuredClone(SEED);
+export async function getState(): Promise<AppState | null> {
+  const stored = await readStored();
+  if (!stored) return null;
+  return normalizeState(stored.state);
 }
 
-/** Default edition is v2 — the live SPA. Frozen v1 uses `/api/state/v1` or `/api/state`. */
-export async function getState(
-  edition: StateEdition = "v2",
-): Promise<AppState | null> {
-  const stored = await readStored(edition);
-  if (!stored) {
-    if (edition === "v2") return null;
-    const seed = seedState();
-    await setState(seed, edition);
-    return seed;
-  }
-  const normalized = normalizeState(stored.state);
-  if (!normalized) {
-    if (edition === "v2") return null;
-    const seed = seedState();
-    await setState(seed, edition);
-    return seed;
-  }
-  return normalized;
-}
-
-export async function setState(
-  state: AppState,
-  edition: StateEdition = "v2",
-): Promise<number> {
+export async function setState(state: AppState): Promise<number> {
   const updatedAt = Date.now();
-  await writeStored(edition, state, updatedAt);
+  await writeStored(state, updatedAt);
   return updatedAt;
 }
 
-export async function getUpdatedAt(
-  edition: StateEdition = "v2",
-): Promise<number> {
-  const stored = await readStored(edition);
+export async function getUpdatedAt(): Promise<number> {
+  const stored = await readStored();
   return stored?.updatedAt ?? 0;
 }
 

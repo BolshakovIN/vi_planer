@@ -6,30 +6,26 @@ import json
 import os
 import ssl
 import time
-from copy import deepcopy
 from pathlib import Path
 from typing import Any, Literal, Optional
 
 import asyncpg
 
 from .normalize import normalize_state
-from .seed import SEED
 
-StateEdition = Literal["v1", "v2"]
-ROW_IDS: dict[StateEdition, str] = {"v1": "main", "v2": "v2"}
+CLOUD_ROW_ID = "v2"
 ROOT = Path(__file__).resolve().parent.parent
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", str(ROOT / "data")))
 
 
-def state_file_for(edition: StateEdition) -> Path:
-    if edition == "v2":
-        return Path(
-            os.environ.get(
-                "STATE_FILE_V2", str(DATA_DIR / "vi-planer-state-v2.json")
-            )
+def state_file() -> Path:
+    return Path(
+        os.environ.get(
+            "STATE_FILE_V2",
+            os.environ.get("STATE_FILE", str(DATA_DIR / "vi-planer-state-v2.json")),
         )
-    return Path(os.environ.get("STATE_FILE", str(DATA_DIR / "vi-planer-state.json")))
+    )
 
 
 StorageMode = Literal["postgres", "file"]
@@ -62,7 +58,7 @@ async def init_db() -> None:
     if not use_postgres():
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         _storage_mode = "file"
-        print(f"Storage: file ({state_file_for('v1')}, {state_file_for('v2')})")
+        print(f"Storage: file ({state_file()})")
         return
 
     database_url = os.environ["DATABASE_URL"]
@@ -80,28 +76,29 @@ async def init_db() -> None:
         await conn.execute(
             """
             CREATE TABLE IF NOT EXISTS app_state (
-              id TEXT PRIMARY KEY DEFAULT 'main',
+              id TEXT PRIMARY KEY DEFAULT 'v2',
               payload JSONB NOT NULL,
               updated_at BIGINT NOT NULL
             )
             """
         )
-        for row_id in ROW_IDS.values():
-            await conn.execute(
-                """
-                INSERT INTO app_state (id, payload, updated_at)
-                VALUES ($1, '{}'::jsonb, 0)
-                ON CONFLICT (id) DO NOTHING
-                """,
-                row_id,
-            )
+        await conn.execute(
+            """
+            INSERT INTO app_state (id, payload, updated_at)
+            VALUES ($1, '{}'::jsonb, 0)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            CLOUD_ROW_ID,
+        )
+        # Drop legacy v1 row if present (was app_state.id = 'main').
+        await conn.execute("DELETE FROM app_state WHERE id = 'main'")
 
     _storage_mode = "postgres"
     print("Storage: PostgreSQL")
 
 
-def _read_file(edition: StateEdition) -> Optional[dict[str, Any]]:
-    path = state_file_for(edition)
+def _read_file() -> Optional[dict[str, Any]]:
+    path = state_file()
     if not path.exists():
         return None
     try:
@@ -113,8 +110,8 @@ def _read_file(edition: StateEdition) -> Optional[dict[str, Any]]:
         return None
 
 
-def _write_file(edition: StateEdition, state: dict[str, Any], updated_at: int) -> None:
-    path = state_file_for(edition)
+def _write_file(state: dict[str, Any], updated_at: int) -> None:
+    path = state_file()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = Path(str(path) + ".tmp")
     payload = {"state": state, "updatedAt": updated_at}
@@ -122,13 +119,13 @@ def _write_file(edition: StateEdition, state: dict[str, Any], updated_at: int) -
     tmp.replace(path)
 
 
-async def _read_postgres(edition: StateEdition) -> Optional[dict[str, Any]]:
+async def _read_postgres() -> Optional[dict[str, Any]]:
     if _pool is None:
         return None
     async with _pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT payload, updated_at FROM app_state WHERE id = $1",
-            ROW_IDS[edition],
+            CLOUD_ROW_ID,
         )
     if not row:
         return None
@@ -138,9 +135,7 @@ async def _read_postgres(edition: StateEdition) -> Optional[dict[str, Any]]:
     return {"state": payload, "updatedAt": int(row["updated_at"])}
 
 
-async def _write_postgres(
-    edition: StateEdition, state: dict[str, Any], updated_at: int
-) -> None:
+async def _write_postgres(state: dict[str, Any], updated_at: int) -> None:
     if _pool is None:
         raise RuntimeError("PostgreSQL pool not initialized")
     async with _pool.acquire() as conn:
@@ -151,57 +146,40 @@ async def _write_postgres(
             ON CONFLICT (id) DO UPDATE
             SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at
             """,
-            ROW_IDS[edition],
+            CLOUD_ROW_ID,
             json.dumps(state),
             updated_at,
         )
 
 
-async def _read_stored(edition: StateEdition) -> Optional[dict[str, Any]]:
+async def _read_stored() -> Optional[dict[str, Any]]:
     if _storage_mode == "postgres":
-        return await _read_postgres(edition)
-    return _read_file(edition)
+        return await _read_postgres()
+    return _read_file()
 
 
-async def _write_stored(
-    edition: StateEdition, state: dict[str, Any], updated_at: int
-) -> None:
+async def _write_stored(state: dict[str, Any], updated_at: int) -> None:
     if _storage_mode == "postgres":
-        await _write_postgres(edition, state, updated_at)
+        await _write_postgres(state, updated_at)
         return
-    _write_file(edition, state, updated_at)
+    _write_file(state, updated_at)
 
 
-def _seed_state() -> dict[str, Any]:
-    return deepcopy(SEED)
-
-
-async def get_state(edition: StateEdition = "v2") -> Optional[dict[str, Any]]:
-    stored = await _read_stored(edition)
+async def get_state() -> Optional[dict[str, Any]]:
+    stored = await _read_stored()
     if not stored:
-        if edition == "v2":
-            return None
-        seed = _seed_state()
-        await set_state(seed, edition)
-        return seed
-    normalized = normalize_state(stored.get("state"))
-    if not normalized:
-        if edition == "v2":
-            return None
-        seed = _seed_state()
-        await set_state(seed, edition)
-        return seed
-    return normalized
+        return None
+    return normalize_state(stored.get("state"))
 
 
-async def set_state(state: dict[str, Any], edition: StateEdition = "v2") -> int:
+async def set_state(state: dict[str, Any]) -> int:
     updated_at = int(time.time() * 1000)
-    await _write_stored(edition, state, updated_at)
+    await _write_stored(state, updated_at)
     return updated_at
 
 
-async def get_updated_at(edition: StateEdition = "v2") -> int:
-    stored = await _read_stored(edition)
+async def get_updated_at() -> int:
+    stored = await _read_stored()
     if not stored:
         return 0
     return int(stored.get("updatedAt") or 0)

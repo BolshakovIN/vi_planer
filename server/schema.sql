@@ -2,11 +2,14 @@
 -- Applied automatically on server startup; kept here for reference.
 
 CREATE TABLE IF NOT EXISTS app_state (
-  id TEXT PRIMARY KEY DEFAULT 'main',
+  id TEXT PRIMARY KEY DEFAULT 'v2',
   payload JSONB NOT NULL,
   updated_at BIGINT NOT NULL
 );
 
 INSERT INTO app_state (id, payload, updated_at)
-VALUES ('main', '{}'::jsonb, 0)
+VALUES ('v2', '{}'::jsonb, 0)
 ON CONFLICT (id) DO NOTHING;
+
+-- Legacy v1 row (removed with the edition).
+DELETE FROM app_state WHERE id = 'main';

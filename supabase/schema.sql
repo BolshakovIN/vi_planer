@@ -8,14 +8,18 @@ create table if not exists public.app_state (
 );
 
 insert into public.app_state (id, payload)
-values ('main', '{}'::jsonb), ('v2', '{}'::jsonb)
+values ('v2', '{}'::jsonb)
 on conflict (id) do nothing;
+
+-- Legacy v1 row (removed with the edition).
+delete from public.app_state where id = 'main';
 
 alter table public.app_state enable row level security;
 
 drop policy if exists "public read" on public.app_state;
 drop policy if exists "public insert" on public.app_state;
 drop policy if exists "public update" on public.app_state;
+drop policy if exists "public delete" on public.app_state;
 
 create policy "public read"
   on public.app_state for select
@@ -27,4 +31,8 @@ create policy "public insert"
 
 create policy "public update"
   on public.app_state for update
+  using (true);
+
+create policy "public delete"
+  on public.app_state for delete
   using (true);
