@@ -1,6 +1,6 @@
 # История коммитов VI Planer
 
-Сгенерировано: 09.10.2026, 22:01 GMT+3
+Сгенерировано: 09.10.2026, 22:11 GMT+3
 
 Обновляется скриптом `npm run docs:commits` (также в конце `deploy:pages` / `deploy:pages:shared`).
 
@@ -8,6 +8,10 @@
 
 | Hash | Дата | Автор | Сообщение |
 |------|------|-------|-----------|
+| `1d1bde5` | 2026-10-09 | ivanbolsakov | Drop unused APP_EDITION constant after v1 removal. |
+| `b628778` | 2026-10-09 | ivanbolsakov | Refresh Supabase dump (v2 only) and cache hot-path maps. |
+| `d7cb92f` | 2026-10-09 | ivanbolsakov | Update Supabase app_state dump snapshot. |
+| `c22926e` | 2026-10-09 | ivanbolsakov | Удаление V1 |
 | `c605e7c` | 2026-10-09 | ivanbolsakov | Add Supabase app_state dump snapshot from 2026-10-09. |
 | `ace24c6` | 2026-10-09 | ivanbolsakov | Slightly bolden table header labels. |
 | `f821114` | 2026-10-09 | ivanbolsakov | Darken table header and axis label text for better contrast. |
@@ -305,7 +309,11 @@
 
 | Hash | Дата | Автор | Ветки/теги | Сообщение |
 |------|------|-------|------------|-----------|
-| `c605e7c` | 2026-10-09 | ivanbolsakov | HEAD -> master, origin/master | Add Supabase app_state dump snapshot from 2026-10-09. |
+| `1d1bde5` | 2026-10-09 | ivanbolsakov | HEAD -> master, origin/master | Drop unused APP_EDITION constant after v1 removal. |
+| `b628778` | 2026-10-09 | ivanbolsakov |  | Refresh Supabase dump (v2 only) and cache hot-path maps. |
+| `d7cb92f` | 2026-10-09 | ivanbolsakov |  | Update Supabase app_state dump snapshot. |
+| `c22926e` | 2026-10-09 | ivanbolsakov |  | Удаление V1 |
+| `c605e7c` | 2026-10-09 | ivanbolsakov |  | Add Supabase app_state dump snapshot from 2026-10-09. |
 | `ace24c6` | 2026-10-09 | ivanbolsakov |  | Slightly bolden table header labels. |
 | `f821114` | 2026-10-09 | ivanbolsakov |  | Darken table header and axis label text for better contrast. |
 | `53893bf` | 2026-10-09 | ivanbolsakov |  | Unify table column headers to match Planning sticky head style. |
